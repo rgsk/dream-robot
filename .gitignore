@@ -5,6 +5,8 @@ __pycache__/
 venv*/
 *.egg-info/
 .ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
 
 # --- jupytext ---
 # .py is the committed source of truth; .ipynb is a disposable build artifact
@@ -34,6 +36,8 @@ outputs/
 .isaac/
 *.usd~
 logs/
+# MuJoCo writes this into whatever the cwd happens to be
+MUJOCO_LOG.TXT
 
 # --- editor / OS ---
 .DS_Store

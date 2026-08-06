@@ -1,0 +1,76 @@
+[project]
+name = "dream-robot"
+version = "0.1.0"
+description = "A modular bench for manipulation policies: any policy x any sim x any task, seamed by a dataset on disk"
+readme = "README.md"
+requires-python = ">=3.14,<3.15"
+
+dependencies = [
+    # --- the sim, for cell 1 ---
+    # Floor is 1.5.0: the env ported from ../rl-prac calls
+    # load_composite_controller_config(), which is the 1.5 composite-controller
+    # API -- 1.4 used a flat controller dict and will not run that code.
+    # Ceiling excludes 1.5.2, which *pins* mink==0.0.5 -> numpy<2.0, while
+    # lerobot requires numpy>=2.0. 1.5.1 leaves mink unpinned and resolves it to
+    # 1.2.0, which is numpy-2 clean. Lift the ceiling if a later robosuite drops
+    # the ==0.0.5 pin; until then 1.5.2+ means splitting the venv.
+    "robosuite>=1.5.0,<1.5.2",
+    # Ceiling at 3.10. robosuite 1.5.1 calls mj_fullM(model, dst, data.qM);
+    # 3.10 reordered that signature to (model, data, dst) and 3.11 additionally
+    # removed MjData.qM. Verified by running robosuite's exact call against each
+    # release: 3.8.0 OK, 3.9.0 OK, 3.10.0 TypeError. robosuite declares no upper
+    # bound of its own, so without this it floats straight into the break.
+    "mujoco>=3.9,<3.10",
+
+    # --- the seam ---
+    # LeRobotDataset is the one thing a sim and a policy both agree on.
+    # Pinned <0.6 because 0.5.1 is what ../so101-bottlefill and ../robot-vla
+    # already resolve against on this machine, including alongside robosuite.
+    "lerobot>=0.5.1,<0.6",
+
+    # --- the policies ---
+    # Declared even though lerobot drags torch in anyway. Rule 1 says policies
+    # depend on torch + core and nothing else, so torch is a first-class
+    # dependency of this project, not an accident of someone else's metadata.
+    "torch>=2.10",
+    "numpy",
+    # task.yaml is the task; env.py only reads it. Declared because we import
+    # it directly, even though lerobot already drags it in transitively.
+    "pyyaml>=6",
+
+    # --- rule 5: every run writes results.json and a video ---
+    "imageio[ffmpeg]>=2.34",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "pytest>=8",
+    # walkthroughs are jupytext-paired: the .py is the committed source of
+    # truth, the .ipynb is a disposable build artifact (see .gitignore)
+    "jupytext>=1.16",
+    "ipykernel>=6.29",
+    "matplotlib>=3.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["dream_robot"]
+
+[tool.ruff]
+target-version = "py314"
+# 88 is Black's default, not a law. This code carries its reasoning inline and
+# 88 forces wrapping that hurts more than it helps.
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# "slow" = builds a MuJoCo scene and renders offscreen. `-m "not slow"`
+# keeps the core schema/protocol suite instant.
+markers = ["slow: needs a simulator and offscreen rendering"]
