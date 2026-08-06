@@ -1,0 +1,95 @@
+# pick_place_cube -- robosuite / Panda
+#
+# Every number the task depends on lives here. Not in argparse defaults spread
+# across scripts, and not copied into a per-run metadata dict by each of them.
+# This file is the task; env.py is only the machinery that reads it.
+
+name: pick_place_cube
+sim: robosuite
+robot: Panda
+
+control:
+  hz: 30                    # spec.md, frozen. Changing it invalidates every
+                            # cycle-time number in the results matrix.
+  horizon_seconds: 20.0
+
+cameras:
+  height: 128
+  width: 128
+  # backend name -> canonical name. Normalising here, in the adapter, is the
+  # single quietest way cross-sim comparability breaks if it is done anywhere
+  # else (spec.md).
+  mapping:
+    agentview: top
+    robot0_eye_in_hand: wrist
+
+# Video only. Deliberately not the dataset resolution: coupling them forces a
+# choice between an ugly video and a dataset resized to look good.
+render:
+  camera: agentview
+  height: 256
+  width: 256
+
+scene:
+  # Cube spawn randomisation, +/- metres about the table centre. robosuite's
+  # Lift default; widen for the noisy-expert work, not before.
+  cube_xy_range: [0.03, 0.03]
+
+  bin:
+    offset_xy: [0.0, 0.20]      # from table centre
+    inner_half: 0.060           # cube is ~0.02 half-extent, so ample clearance
+    wall_half_thickness: 0.006
+    # 5 cm walls. Shallow on purpose: deep walls add insertion precision, which
+    # is T3's failure axis. T1 is the comparability baseline and must not
+    # smuggle in a second difficulty.
+    wall_half_height: 0.025
+
+success:
+  # Cube counts as placed when it is inside the footprint AND resting low --
+  # not merely held above the bin by the gripper.
+  resting_z_margin: 0.05
+
+# The scripted expert. Waypoint geometry seeded from ../rl-prac's tuned
+# constants and re-tuned against this scene.
+#
+# Note what is absent: per-phase step counts. Phases advance on predicates, so
+# episode length varies and "how far through the episode am I" carries no
+# information -- which is what makes spec.md's ban on time features cheap to
+# honour rather than a discipline to maintain.
+expert:
+  approach_height: 0.10       # hover this far above the cube before descending
+  grasp_dz: 0.005             # grip-site target relative to cube centre
+  lift_height: 0.25           # above the grasp point
+  drop_height: 0.085          # must clear the bin walls before releasing
+
+  reach_tolerance: 0.015      # coarse waypoints
+  fine_tolerance: 0.010       # descend-to-grasp
+  carry_tolerance: 0.020      # above the bin
+  lift_clearance: 0.03        # how close to the lift target counts as lifted
+  release_opening: 0.85       # normalised opening that counts as released
+
+  # "The fingers stopped closing" -- a predicate on observed state, not a wait.
+  #
+  # epsilon is in NORMALISED gripper units ([0,1] over the ~0.08 m span), not
+  # metres: 2.5e-3 here is ~0.2 mm of finger travel. The spike used 2e-4 in
+  # metres; carrying that number across the normalisation makes the threshold
+  # 12.5x tighter than intended, and the grasp phase then times out on roughly
+  # half the seeds while still passing on the others.
+  grip_settle_window: 4
+  grip_settle_epsilon: 2.5e-3
+
+  phase_timeout_seconds: 5.0  # the failure path, per phase
+
+  ik:
+    damping: 0.15             # lambda; larger is safer near singularities
+    max_joint_step: 0.06      # rad per control step, per joint
+
+failure:
+  # Cube must rise this far above ITS OWN starting height for the episode
+  # to count as "grasped at some point"; distinguishes no_grasp from
+  # dropped. Not measured against the table -- robosuite's placement
+  # sampler spawns the cube with a z_offset already applied.
+  lift_threshold: 0.03
+  # Final cube-to-bin distance beyond which a placement reads as dropped in
+  # transit rather than aimed at the wrong spot.
+  dropped_radius: 0.15
