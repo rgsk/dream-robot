@@ -1,0 +1,40 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv*/
+*.egg-info/
+.ipynb_checkpoints/
+
+# --- jupytext ---
+# .py is the committed source of truth; .ipynb is a disposable build artifact
+# rebuilt with: jupytext --to ipynb --execute <file>.py
+*.ipynb
+
+# --- generated artifacts (the git-bloat sources) ---
+# datasets: recorded demos, potentially GBs of video frames
+data/
+datasets/
+# per-run outputs: videos, checkpoints, rollouts
+experiments/*/videos/
+experiments/*/checkpoints/
+experiments/*/rollouts/
+checkpoints/
+*.pt
+*.ckpt
+*.mp4
+*.webm
+outputs/
+
+# NOTE: experiments/<id>/{config.yaml,results.json,notes.md} ARE committed --
+# they are the matrix. Only the heavy artifacts above are ignored.
+
+# --- sim backends ---
+# Isaac and friends drop caches/logs next to the code
+.isaac/
+*.usd~
+logs/
+
+# --- editor / OS ---
+.DS_Store
+.vscode/settings.json
