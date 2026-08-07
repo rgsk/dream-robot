@@ -26,7 +26,11 @@ cameras:
 # Video only. Deliberately not the dataset resolution: coupling them forces a
 # choice between an ugly video and a dataset resized to look good.
 render:
-  camera: agentview
+  # frontview, not agentview: agentview clips the gripper out of frame during
+  # the 0.25 m lift, so the most informative part of the episode happens off
+  # screen. Safe to change freely -- this camera is never recorded, so it
+  # affects no dataset and no number in the results matrix.
+  camera: frontview
   height: 256
   width: 256
 
