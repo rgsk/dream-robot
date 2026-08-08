@@ -37,7 +37,7 @@ def observation_panel(
         image = images[name]
         if image.dtype != np.uint8 or image.ndim != 3 or image.shape[2] != 3:
             raise ValueError(
-                f"camera {name!r} must be uint8 (H, W, 3), got {image.shape}"
+                f"camera {name!r} must be uint8 (H, W, 3), got {image.dtype} {image.shape}"
             )
         if target_h % image.shape[0]:
             raise ValueError(

@@ -1,6 +1,7 @@
 """Watch the scripted expert do the task. Regenerates the demo video.
 """
 import argparse
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -52,9 +53,16 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    p.add_argument(
+        "--render-camera",
+        default=None,
+        help="override task.yaml's render camera (video only; never the dataset)",
+    )
     p.add_argument("--hold-frames", type=int, default=15)
     args = p.parse_args(argv)
     cfg = TaskConfig.load()
+    if args.render_camera:
+        cfg = replace(cfg, render_camera=args.render_camera)    
     env = PickPlaceCube(cfg)
     policy = ExpertPolicy(env)
     all_placed = True
