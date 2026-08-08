@@ -45,6 +45,49 @@ loop, before the hold. Watch out that `obs` has already been rebound to
 
 **Size.** One line.
 
+### A3. `observation_panel` guards the wrong divisibility, and its fix is dead code
+
+Found by rebuilding the panel from scratch in `rough/v0.py` — the reconstruction has a
+guard the shipped version lacks.
+
+`core/video.py` checks that each camera height divides the panel height
+(`target_h % img.shape[0]`), but never that the wide frame's height divides the *number
+of cameras*. So:
+
+```python
+observation_panel(np.zeros((513, 512, 3), np.uint8), {'top': ..., 'wrist': ...})
+→ ValueError: all the input array dimensions except for the concatenation axis must
+  match exactly, ... size 513 and ... size 512
+```
+
+A raw numpy error from `np.concatenate`, three lines below the actual cause, naming no
+constraint and no knob.
+
+**The interesting part:** lines 72-73 look like they were meant to handle this —
+
+```python
+if stacked.shape[0] != wide.shape[0]:  # odd heights leave a row or two over
+    stacked = stacked[: wide.shape[0]]
+```
+
+but that branch is **unreachable**. Given the per-camera check, each column entry is
+exactly `target_h` tall, so `stacked == n * (wide_h // n) <= wide_h` always. The trim can
+only shorten, and the case that actually occurs is `stacked < wide`, which it cannot fix.
+The comment correctly identifies the problem; the code goes the wrong direction.
+
+**Fix.** Add the guard, delete the trim:
+
+```python
+if wide.shape[0] % len(present):
+    raise ValueError(
+        f"render height {wide.shape[0]}px is not divisible by {len(present)} cameras "
+        f"{present}; each panel would be {wide.shape[0] / len(present)}px. "
+        f"Set render.height in task.yaml to a multiple of {len(present)}."
+    )
+```
+
+**Size.** Six lines added, two deleted. Verify the trim is unreachable before deleting it.
+
 ---
 
 ## B. Additions — build these to understand the stack

@@ -31,8 +31,8 @@ render:
   # screen. Safe to change freely -- this camera is never recorded, so it
   # affects no dataset and no number in the results matrix.
   camera: frontview
-  height: 512
-  width: 512
+  height: 256
+  width: 256
 
 scene:
   # Cube spawn randomisation, +/- metres about the table centre. robosuite's
