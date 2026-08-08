@@ -1,4 +1,7 @@
 """Watch the scripted expert do the task. Regenerates the demo video.
+
+    python -m dream_robot.sims.robosuite.tasks.pick_place_cube.demo_practice
+
 """
 import argparse
 from dataclasses import replace
