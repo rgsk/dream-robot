@@ -42,3 +42,4 @@ MUJOCO_LOG.TXT
 # --- editor / OS ---
 .DS_Store
 .vscode/settings.json
+rough/generated

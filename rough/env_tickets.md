@@ -104,6 +104,24 @@ downstream should ever see those names. Also: from here on you need `MUJOCO_GL=g
 
 **Non-goals.** Renaming them yet. Just look.
 
+### T3 — Result
+
+*Code: `t3()` in `rough/env_v0.py`. Images: `rough/t3-agent.png`, `rough/t3-robot.png`.*
+
+**Done.** `has_offscreen_renderer=True, use_camera_obs=True`, run under `MUJOCO_GL=glfw`. Both
+frames are `(256, 256, 3)` `uint8`, full range (8..254 on this reset — not a washed-out buffer).
+
+**The key names are not robosuite's vocabulary, they are mine.** `robot0_eye_in_hand_image` raised
+`KeyError` at first: `suite.make` defaults `camera_names="agentview"`, so exactly one camera is
+rendered even though the wrist camera exists in the model. Passing
+`camera_names=["agentview", "robot0_eye_in_hand"]` produces both keys. The rule is *camera name +
+`_image`* — so the obs keys are a function of a sim-specific config list I chose, which is the
+whole argument for T9 renaming them to `top` / `wrist` **in the adapter**. Downstream code keyed on
+`agentview_image` would be depending on an argument I passed, not on anything robosuite guarantees.
+
+Adjacent knobs, not touched yet: `camera_heights` / `camera_widths` default to 256 and accept a
+scalar or a per-camera list.
+
 ---
 
 ## T4 — The images are upside down
@@ -116,6 +134,28 @@ downstream should ever see those names. Also: from here on you need `MUJOCO_GL=g
 complains until they meet a second simulator or real hardware. Visible bugs are the cheap ones.
 
 **Non-goals.** Canonical names. Still just looking.
+
+### T4 — Result
+
+*Before/after: `rough/t3-agent.png` → `rough/t3-agent-rev.png`, `rough/t3-robot.png` →
+`rough/t3-robot-rev.png`.*
+
+**Done.** Wrong orientation was obvious on sight; `[::-1]` fixes it. Confirmed the corrected
+`agentview` frame is upright (robot base top, table below) rather than merely "different".
+
+**Why a flip and not a rotation.** OpenGL's framebuffer origin is bottom-left, so row 0 of what
+mujoco returns is the *bottom* row of the scene. Numpy, PNG, and every real camera driver put row 0
+at the top. It is correct data in reversed row order — vertical flip only. `img[::-1]` is
+`img[::-1, :, :]`: axis 0 reversed, columns and RGB untouched. Reversing axis 1 instead would
+mirror left-right, which is a different (and wrong) picture.
+
+**It is a view, not a copy** — verified `img[::-1].base is img`. Numpy just records a negative
+stride, so the fix is free. It is also exactly self-inverse, which is the failure mode to watch for:
+applying it twice looks like "the flip didn't work".
+
+**The flip belongs to the renderer, not to a camera.** The same `[::-1]` corrects both `agentview`
+and `robot0_eye_in_hand`. Had only one needed it, the diagnosis would have been camera placement,
+not row order — so checking the second camera was what turned a plausible story into a tested one.
 
 ---
 

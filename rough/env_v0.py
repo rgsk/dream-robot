@@ -1,7 +1,7 @@
 import robosuite as suite
 import numpy as np
 from robosuite.controllers import load_composite_controller_config
-
+import imageio
 
 def t1():
     env = suite.make(
@@ -52,5 +52,23 @@ def t2():
     for i in range(20):
         obs, reward, done, info = env.step(action)
         print(f'iter {i}: {np.abs(action[:7] - obs["robot0_joint_pos"])}')
+def t3t4():
+    env = suite.make(
+        "Lift",
+        robots="Panda",
+        camera_names=["agentview", "robot0_eye_in_hand"],
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        use_camera_obs=True,
+    )
+    obs = env.reset()
+    imageio.imwrite("rough/generated/t3-agent.png", obs["agentview_image"])
+    imageio.imwrite("rough/generated/t3-agent-rev.png", obs["agentview_image"][::-1])
+    imageio.imwrite("rough/generated/t3-robot.png", obs["robot0_eye_in_hand_image"])
+    imageio.imwrite("rough/generated/t3-robot-rev.png", obs["robot0_eye_in_hand_image"][::-1])
+    print({k: v.shape for k, v in obs.items()})
 
-t2()
+def t5():
+    pass
+
+t3t4()
