@@ -2,7 +2,7 @@ import robosuite as suite
 import numpy as np
 from robosuite.controllers import load_composite_controller_config
 import imageio
-
+from robosuite.environments.manipulation.lift import Lift
 def t1():
     env = suite.make(
         "Lift", robots="Panda",
@@ -68,7 +68,24 @@ def t3t4():
     imageio.imwrite("rough/generated/t3-robot-rev.png", obs["robot0_eye_in_hand_image"][::-1])
     print({k: v.shape for k, v in obs.items()})
 
-def t5():
-    pass
+class BinLift(Lift):  
+    def _load_model(self):
+        super()._load_model()
+        print(type(self.model))
+        print(f'{self.table_full_size=}')
+        print(f'{self.table_offset=}')
 
-t3t4()
+def t5():
+    env = BinLift(
+        robots="Panda",
+        camera_names=["agentview", "robot0_eye_in_hand"],
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        use_camera_obs=True,
+    )
+    obs = env.reset()
+    imageio.imwrite("rough/generated/t5-agent.png", obs["agentview_image"][::-1])
+    imageio.imwrite("rough/generated/t5-robot.png", obs["robot0_eye_in_hand_image"][::-1])
+
+
+t5()

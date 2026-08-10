@@ -106,7 +106,8 @@ downstream should ever see those names. Also: from here on you need `MUJOCO_GL=g
 
 ### T3 — Result
 
-*Code: `t3()` in `rough/env_v0.py`. Images: `rough/t3-agent.png`, `rough/t3-robot.png`.*
+*Code: `t3t4()` in `rough/env_v0.py`. Images: `rough/generated/t3-agent.png`,
+`rough/generated/t3-robot.png`.*
 
 **Done.** `has_offscreen_renderer=True, use_camera_obs=True`, run under `MUJOCO_GL=glfw`. Both
 frames are `(256, 256, 3)` `uint8`, full range (8..254 on this reset — not a washed-out buffer).
@@ -137,8 +138,8 @@ complains until they meet a second simulator or real hardware. Visible bugs are 
 
 ### T4 — Result
 
-*Before/after: `rough/t3-agent.png` → `rough/t3-agent-rev.png`, `rough/t3-robot.png` →
-`rough/t3-robot-rev.png`.*
+*Before/after, all under `rough/generated/`: `t3-agent.png` → `t3-agent-rev.png`,
+`t3-robot.png` → `t3-robot-rev.png`.*
 
 **Done.** Wrong orientation was obvious on sight; `[::-1]` fixes it. Confirmed the corrected
 `agentview` frame is upright (robot base top, table below) rather than merely "different".
