@@ -1,0 +1,25 @@
+{
+    "type": "BASIC",
+    "body_parts": {
+        "right": {
+            "type": "OSC_POSE",
+            "input_max": 1,
+            "input_min": -1,
+            "output_max": [0.05, 0.05, 0.05, 0.5, 0.5, 0.5],
+            "output_min": [-0.05, -0.05, -0.05, -0.5, -0.5, -0.5],
+            "kp": 150,
+            "damping_ratio": 1,
+            "impedance_mode": "fixed",
+            "kp_limits": [0, 300],
+            "damping_ratio_limits": [0, 10],
+            "position_limits": None,
+            "orientation_limits": None,
+            "uncouple_pos_ori": True,
+            "input_type": "delta",
+            "input_ref_frame": "base",
+            "interpolation": None,
+            "ramp_ratio": 0.2,
+            "gripper": {"type": "GRIP"},
+        }
+    },
+}
