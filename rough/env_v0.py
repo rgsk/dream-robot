@@ -3,6 +3,9 @@ import numpy as np
 from robosuite.controllers import load_composite_controller_config
 import imageio
 from robosuite.environments.manipulation.lift import Lift
+from robosuite.utils.mjcf_utils import new_body, new_geom, array_to_string
+import inspect
+import xml.etree.ElementTree as ET
 def t1():
     env = suite.make(
         "Lift", robots="Panda",
@@ -74,6 +77,33 @@ class BinLift(Lift):
         print(type(self.model))
         print(f'{self.table_full_size=}')
         print(f'{self.table_offset=}')
+        print(inspect.signature(new_geom))
+        g = new_geom(
+            name="goal_bin_floor", type="box", size=[0.08, 0.08, 0.02], group=1
+        )
+        
+        b = new_body(
+            name="goal_bin",
+            pos=[self.table_offset[0], self.table_offset[1] + 0.2, 0.8 + 0.02],
+        )
+        b.append(g)
+        t = 0.005          # wall half-thickness
+        hx = hy = 0.08     # floor half-extents
+        hz = 0.025         # wall half-height
+        z  = 0.02 + hz     # stand on the slab
+
+        walls = [
+            ("px", [ hx, 0.0, z], [t, hy, hz]),
+            ("nx", [-hx, 0.0, z], [t, hy, hz]),
+            ("py", [0.0,  hy, z], [hx, t, hz]),
+            ("ny", [0.0, -hy, z], [hx, t, hz]),
+        ]
+        for suffix, pos, size in walls:
+            b.append(new_geom(name=f"goal_bin_wall_{suffix}", type="box",
+                            size=size, pos=pos, group=1))
+
+        print(ET.tostring(b))
+        self.model.worldbody.append(b)
 
 def t5():
     env = BinLift(
@@ -83,9 +113,12 @@ def t5():
         has_offscreen_renderer=True,
         use_camera_obs=True,
     )
+    print(f'{"goal_bin_floor" in env.sim.model.geom_names=}')
     obs = env.reset()
-    imageio.imwrite("rough/generated/t5-agent.png", obs["agentview_image"][::-1])
-    imageio.imwrite("rough/generated/t5-robot.png", obs["robot0_eye_in_hand_image"][::-1])
+    print(f'{obs["cube_pos"][2]=}, {env.table_offset[2]=}')
+    # imageio.imwrite("rough/generated/t5-agent-group0.png", obs["agentview_image"][::-1])
+    imageio.imwrite("rough/generated/t5-agent-group1.png", obs["agentview_image"][::-1])
+    # imageio.imwrite("rough/generated/t5-robot.png", obs["robot0_eye_in_hand_image"][::-1])
 
 
 t5()

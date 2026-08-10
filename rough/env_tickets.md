@@ -176,6 +176,52 @@ in this repo.
 **Also:** name it `goal_bin`. robosuite already ships `left_eef_target_box` / `right_eef_target_box`
 indicator geoms parked at `z=-1`, and substring searches match them.
 
+### T5 — Result
+
+*Code: `BinLift._load_model` / `t5()` in `rough/env_v0.py`. Evidence pair:
+`rough/generated/t5-agent-group0.png` (empty table) vs `t5-agent-group1.png` (bin visible).*
+
+**Done.** Subclassed `Lift`, overrode `_load_model`, and after `super()` appended one `goal_bin`
+body — a floor slab plus four walls — to `self.model.worldbody`. Bin is open-topped, resting on the
+table, parked at `table_offset + [0, 0.2, 0]` clear of the cube's spawn region.
+
+**`_load_model` is the hook because it is the last point where the scene is still XML.** robosuite
+builds an MJCF tree in Python (arena + robot + objects), then compiles it into the MuJoCo model
+physics runs on. After `_load_model` returns there is nothing left to append to. Calling `super()`
+first is what makes the table and the cube already present.
+
+**The group-0 bug, reproduced deliberately.** `new_geom`'s signature is
+`(name, type, size, pos=(0,0,0), group=0, **kwargs)` — the trap is visible in the defaults. Built
+with that default, the render is an empty table. What makes it a *finding* rather than a broken
+attachment is the second observation: `"goal_bin_floor" in env.sim.model.geom_names` is `True`.
+Present in physics, absent from every camera. One attribute apart, same geoms — the two PNGs differ
+only in `group`. Same discipline as T2: invisibility has two possible causes and the picture alone
+cannot distinguish them.
+
+**Geometry conventions, each of which silently half-buries things.** MuJoCo box `size` is
+**half-extents**, and `pos` is the box's **center**. A geom's `pos` is relative to its parent body;
+the body's `pos` is relative to the world — so placement lives on the body and the floor geom stays
+at the origin, making the bin movable by one number. Walls stand on the slab at
+`z = floor_half_z + wall_half_z`, and the ±x walls are thin in x while the ±y walls are thin in y —
+the one thing a copy-paste gets wrong, which is why the four walls are a loop over
+`(suffix, pos, size)` rather than four calls.
+
+**Measured, not assumed: `table_offset` is the top surface, not the center.** `table_offset[2] ==
+0.8` and `cube_pos[2] == 0.8315` on a reset. The 0.0315 gap is the cube's half-height (~0.021) plus
+the sampler's `z_offset` (0.01). **This is the T7 trap, found three tickets early:** the cube spawns
+1 cm *above* the table, so "was it ever lifted" measured against the table surface reads true for an
+episode in which nothing happened.
+
+**`array_to_string` turned out not to be needed.** `new_geom(size=[0.08, 0.08, 0.02])` emits
+`size="0.08 0.08 0.02"` — it stringifies lists itself. `array_to_string` earns its keep only for
+attributes passed through `**kwargs`. Checked by printing `ET.tostring(g)` rather than assuming
+either way.
+
+**Known risk carried into T7.** The placement sampler has no knowledge of the bin — it samples over
+a table region that is now partly occupied. At +0.2 in y with `Lift`'s small spawn box a collision
+is very unlikely, but "very unlikely" is load-bearing: a cube spawned inside the bin makes the
+success predicate true at t=0.
+
 ---
 
 ## T6 — The gripper should be one number in [0, 1]
