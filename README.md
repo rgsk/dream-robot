@@ -15,16 +15,29 @@ Working toward the first cell of the matrix: record → dataset → train BC →
 
 | | |
 |---|---|
-| ✅ | `spec.md` — obs/action contract |
+| ✅ | `spec.md` — obs/action contract **and** the dataset layout on disk |
 | ✅ | `core/schema.py` — canonical types, allowlist enforced by construction |
 | ✅ | `core/env_api.py` — `Env` protocol, `FailureMode`, `check_env_conformance` |
 | ✅ | `sims/robosuite/tasks/pick_place_cube/` — Panda, absolute joint control, cube → bin |
-| ⬜ | scripted expert (predicate-driven) |
-| ⬜ | `core/record.py` → LeRobotDataset — **the seam** |
+| ✅ | scripted expert — predicate-driven phase machine + differential IK |
+| ✅ | `core/dataset.py` + `core/record.py` → LeRobotDataset — **the seam** |
 | ⬜ | `policies/bc/` |
 | ⬜ | `core/eval.py` — success · cycle time · failure histogram · video |
 
 `uv run pytest -m "not slow"` runs the core suite without a simulator.
+
+### Recording a dataset
+
+```- 
+MUJOCO_GL=glfw uv run python -m dream_robot.sims.robosuite.tasks.pick_place_cube.record \
+    --episodes 25 --verify
+```
+
+25 successful episodes ≈ 5.3k frames ≈ 176 s of demonstration, 8.9 MB on disk, about a minute to
+record. `--verify` reopens the dataset, decodes an episode out of it, and writes a video **from the
+bytes on disk** — the seam is only real once you have looked through it. Provenance (every seed,
+its outcome, its failure mode, the expert's success rate) lands in `recording_summary.json` beside
+the data.
 
 ## The shape
 

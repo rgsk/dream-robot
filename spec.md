@@ -3,8 +3,8 @@
 What a policy is allowed to see, and what it is required to emit. Every task in every
 simulator honors this, or its numbers are not comparable to anything else in the matrix.
 
-**Scope of this document today:** observation and action only. Dataset layout on disk and the
-eval protocol are marked OPEN at the bottom and get written when they are built, not before.
+**Scope of this document today:** observation, action, and the dataset layout on disk. The eval
+protocol is marked OPEN at the bottom and gets written when it is built, not before.
 
 ---
 
@@ -104,16 +104,62 @@ the matrix.
 | what | value | cost of changing it later |
 |---|---|---|
 | control rate | 30 Hz | every cycle-time number |
-| camera resolution | OPEN — see below | re-record every dataset |
+| camera resolution | 128 x 128, both cameras | re-record every dataset |
 | state layout | 7 arm + 1 gripper | every checkpoint |
+
+---
+
+## Dataset layout on disk
+
+**LeRobotDataset**, written by `core/record.py`, described by `core/dataset.py`. One directory per
+task; policies read the directory and never import sim code.
+
+| feature | dtype | shape |
+|---|---|---|
+| `observation.state` | `float32` | `(8,)` |
+| `action` | `float32` | `(8,)` |
+| `observation.images.top` | `video` | `(3, 128, 128)` |
+| `observation.images.wrist` | `video` | `(3, 128, 128)` |
+
+Plus LeRobot's own bookkeeping columns — `timestamp`, `frame_index`, `episode_index`, `index`,
+`task_index` — and a `task` string on every frame carrying the natural-language instruction.
+**That set is the whole file.** A recorded dataset containing any other key is a contract violation,
+and it is the checkable form of the ban above: `tests/test_record.py` asserts the written feature
+set equals this table.
+
+- **State and action share a shape and a set of element names.** They are the same quantity in the
+  same units one step apart, and declaring them identically is what lets a misaligned recorder show
+  up as a diff between two columns.
+- **Images are stored as video, not PNG frames.** A 215-step episode is ~21 MB raw across two
+  cameras and a few hundred kB encoded. The decoder returns `(3, H, W)` float32 in [0, 1]; use
+  `core.dataset.frame_to_uint8` to get back to the `(H, W, 3)` uint8 the rest of the repo speaks.
+  Encoding is lossy, so nothing may assert pixel equality across the round trip.
+- **`fps` equals the task's `control_hz`.** One frame per control step, no subsampling.
+- **Episode length varies**, by design (see above). Nothing may assume a fixed length.
+- **The terminal observation is not in the dataset.** N steps yield N `(observation, action)` pairs;
+  the final observation — the one showing the task already completed — has no action to pair with,
+  and inventing one would put a command in the action column that no policy ever issued.
+- **Only successful episodes are recorded**, unless a recorder is explicitly asked otherwise.
+  Behaviour cloning imitates what it is shown. The noisy-expert work is a different thing that is
+  easy to confuse with this one: recoveries from perturbed states are *successes* that start
+  somewhere unusual.
+- **Provenance travels with the data.** `recording_summary.json` sits in the dataset root with every
+  seed attempted, its outcome, its failure mode, and the expert's success rate.
+
+### Recorder integrity check
+
+Because `action[t]` and `state[t+1]` are the same quantity, `|action[t] - state[t+1]|` over the arm
+joints is checked on every episode before it is written. Over 25 recorded episodes of robosuite
+`pick_place_cube` it runs mean 0.018–0.020 rad with a peak of 0.062 — sitting just above the IK's
+`max_joint_step` of 0.060, which is the largest move the expert may command in one step and the
+bound the lag is measured against. This is a **mode** check, not a precision one: a controller
+quietly running in delta mode, or a recorder writing the wrong column, puts it in the order of
+radians. The threshold is 0.25 rad.
 
 ---
 
 ## OPEN
 
-- **Camera resolution.** Proposal: `128 x 128`, both cameras, chosen to fit BC and ACT training on
-  8 GB of VRAM. Raising it later means re-recording, so it is worth one deliberate decision now.
-- **Dataset layout on disk.** LeRobotDataset, version and exact feature keys to be pinned when the
-  recorder is written.
-- **Eval protocol.** Episode count, seed policy, success predicate, failure-mode taxonomy for the
-  histogram, video capture rules.
+- **Eval protocol.** Episode count, seed policy, success predicate, video capture rules. Written
+  when `core/eval.py` is built, not before. The failure-mode taxonomy it consumes is already closed
+  — `core.env_api.FailureMode`.
