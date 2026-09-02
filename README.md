@@ -11,7 +11,8 @@ commercial filter that decides which rung comes next.
 
 ## Status
 
-Working toward the first cell of the matrix: record → dataset → train BC → eval.
+The first cell of the matrix is closed: record → dataset → train BC → eval, end to end, with a
+number and a video at the end of it. What comes next is making that number better.
 
 | | |
 |---|---|
@@ -21,8 +22,10 @@ Working toward the first cell of the matrix: record → dataset → train BC →
 | ✅ | `sims/robosuite/tasks/pick_place_cube/` — Panda, absolute joint control, cube → bin |
 | ✅ | scripted expert — predicate-driven phase machine + differential IK |
 | ✅ | `core/dataset.py` + `core/record.py` → LeRobotDataset — **the seam** |
-| ⬜ | `policies/bc/` |
-| ⬜ | `core/eval.py` — success · cycle time · failure histogram · video |
+| ✅ | `policies/bc/` — spatial-softmax visuomotor net, 0.75M params |
+| ✅ | `core/eval.py` + `registry.py` + `run.py` — any policy × any task, one command |
+| ⬜ | noisy expert — jittered waypoints, recorded recoveries (**next**, see below) |
+| ⬜ | `policies/act/` |
 
 `uv run pytest -m "not slow"` runs the core suite without a simulator.
 
@@ -38,6 +41,42 @@ record. `--verify` reopens the dataset, decodes an episode out of it, and writes
 bytes on disk** — the seam is only real once you have looked through it. Provenance (every seed,
 its outcome, its failure mode, the expert's success rate) lands in `recording_summary.json` beside
 the data.
+
+### Training and evaluating
+
+```- 
+uv run python -m dream_robot.policies.bc.train --epochs 60
+
+MUJOCO_GL=glfw uv run python -m dream_robot.core.run \
+    --env robosuite/pick_place_cube --policy bc \
+    --checkpoint experiments/bc_pick_place_cube/checkpoint.pt
+```
+
+`--policy expert` runs the scripted expert through the **same harness**, which is what makes the
+ceiling row comparable to every other row. Every run writes `results.json` and a video.
+
+## The matrix so far
+
+`robosuite/pick_place_cube`, 20 episodes from seed 1000 — disjoint from the 25 seeds the
+demonstrations were recorded on.
+
+| policy | success | median cycle | failures |
+|---|---|---|---|
+| expert (scripted) | **100%** (20/20) | 6.9 s | — |
+| bc (20 demos, 0.75M params) | **25%** (5/20) | 7.6 s | 14 × `no_grasp`, 1 × `wrong_target` |
+
+**The failure histogram is the finding.** BC transports and places correctly whenever it gets hold
+of the cube — its successful episodes have expert-like cycle times — and misses the grasp in 93% of
+its failures. Held-out action error is 9.6 mrad, *below* the controller's own 18 mrad tracking lag,
+so the policy predicts the expert's actions accurately on the expert's own states.
+
+Re-evaluated on the seeds it trained on, it scores 50%. That splits the loss in two: half is
+compounding error — it cannot hold together a trajectory it has seen the demonstration for — and
+half is generalisation to unseen cube positions. The first half is exactly what
+[ROADMAP](ROADMAP.md) predicts for a **deterministic** expert: the demonstrations cover a ribbon of
+state space one trajectory wide, and a policy that drifts off it has never seen how to get back.
+The fix is prescribed there too, and it is the next box: a noisy expert with jittered waypoints,
+wider start poses, and recorded recoveries from perturbed states.
 
 ## The shape
 
