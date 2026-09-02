@@ -31,6 +31,12 @@ FAKE_EMBODIMENT = Embodiment(arm_joints=3, grippers=1)
 # round-trip test encodes and decodes in well under a second.
 FAKE_HW = (32, 32)
 
+# Render bigger than the cameras, as every real task does: the video wants a
+# legible wide view while the observation stays pinned to the dataset's
+# resolution. observation_panel scales the camera column to the wide view's
+# height by integer repetition, so the two must divide.
+FAKE_RENDER_HW = (64, 64)
+
 
 class FakeEnv:
     """Implements ``core.env_api.Env`` with a first-order lag and a step counter.
@@ -53,6 +59,7 @@ class FakeEnv:
         horizon: int = 8,
         lag: float = 0.1,
         hw: tuple[int, int] = FAKE_HW,
+        render_hw: tuple[int, int] = FAKE_RENDER_HW,
         failure_mode: FailureMode = FailureMode.NO_GRASP,
         cameras: tuple[str, ...] = ("top", "wrist"),
     ):
@@ -61,6 +68,7 @@ class FakeEnv:
         self._horizon = horizon
         self._lag = lag
         self._hw = hw
+        self._render_hw = render_hw
         self._failure_mode = failure_mode
         self._cameras = cameras
         self._state = np.zeros(embodiment.dim, dtype=np.float32)
@@ -103,7 +111,7 @@ class FakeEnv:
         )
 
     def render(self) -> np.ndarray:
-        return np.full((*self._hw, 3), 7, dtype=np.uint8)
+        return np.full((*self._render_hw, 3), 7, dtype=np.uint8)
 
     def close(self) -> None:
         self.closed = True
