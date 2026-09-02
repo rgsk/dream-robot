@@ -20,7 +20,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from dream_robot.core.eval import EVAL_SEED_START, evaluate, write_results
+from dream_robot.core.eval import (
+    EVAL_SEED_START,
+    VIDEO_PER_OUTCOME,
+    evaluate,
+    write_results,
+)
 from dream_robot.core.registry import make_env, make_policy
 
 DEFAULT_EXPERIMENTS = Path("experiments")
@@ -60,7 +65,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--checkpoint", type=Path, default=None)
     p.add_argument("--episodes", type=int, default=20)
     p.add_argument("--seed-start", type=int, default=EVAL_SEED_START)
-    p.add_argument("--video-episodes", type=int, default=3)
+    p.add_argument(
+        "--video-per-outcome", type=int, default=VIDEO_PER_OUTCOME,
+        help="film up to N successes AND N failures (0 disables video)",
+    )
+    p.add_argument(
+        "--video-seeds", type=int, nargs="+", default=None,
+        help="film exactly these seeds instead, into selected.mp4",
+    )
     p.add_argument("--experiments", type=Path, default=DEFAULT_EXPERIMENTS)
     p.add_argument("--device", default=None)
     args = p.parse_args(argv)
@@ -80,8 +92,9 @@ def main(argv: list[str] | None = None) -> int:
             policy_name=args.policy,
             episodes=args.episodes,
             seed_start=args.seed_start,
-            video_episodes=args.video_episodes,
-            video_path=out / "videos" / "rollouts.mp4",
+            video_per_outcome=args.video_per_outcome,
+            video_seeds=args.video_seeds,
+            video_dir=(out / "videos") if args.video_per_outcome or args.video_seeds else None,
         )
     finally:
         env.close()
@@ -91,8 +104,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"\n{result.summary()}")
     print(f"results -> {path.resolve()}")
-    if result.video:
-        print(f"video   -> {result.video.resolve()}")
+    for name, video in result.videos.items():
+        print(f"{name:9s} -> {video.resolve()}")
     return 0
 
 

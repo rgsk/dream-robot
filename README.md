@@ -53,7 +53,13 @@ MUJOCO_GL=glfw uv run python -m dream_robot.core.run \
 ```
 
 `--policy expert` runs the scripted expert through the **same harness**, which is what makes the
-ceiling row comparable to every other row. Every run writes `results.json` and a video.
+ceiling row comparable to every other row.
+
+Every run writes `results.json` plus **`videos/successes.mp4` and `videos/failures.mp4`** — up to two
+of each, so you always get footage of the policy winning *and* losing. (Filming "the first three
+episodes" is how the first BC run produced three failures and no evidence it ever worked.) An
+outcome that never happened leaves no file, so the expert has no `failures.mp4`. To film specific
+episodes instead, `--video-seeds 1000 1003 1009` writes just those to `videos/selected.mp4`.
 
 ## The matrix so far
 

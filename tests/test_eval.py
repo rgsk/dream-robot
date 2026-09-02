@@ -10,7 +10,7 @@ from dream_robot.core.eval import EVAL_SEED_START, evaluate, write_results
 
 def run(env=None, policy=None, **kwargs):
     kwargs.setdefault("episodes", 4)
-    kwargs.setdefault("video_episodes", 0)
+    kwargs.setdefault("video_per_outcome", 0)
     return evaluate(
         env or FakeEnv(),
         policy or FakePolicy(),
@@ -99,29 +99,76 @@ def test_results_json_carries_provenance(tmp_path):
 
 # --- video ------------------------------------------------------------------
 
-def test_video_is_written_for_the_first_few_episodes(tmp_path):
-    path = tmp_path / "rollouts.mp4"
-    result = run(episodes=3, video_episodes=2, video_path=path, hold_frames=2)
-    assert result.video == path and path.exists()
+def test_successes_and_failures_are_filmed_separately(tmp_path):
+    """The bug this fixes: the first BC run filmed three episodes, all failures,
+    so there was no footage of the policy ever succeeding."""
+    result = run(
+        env=Flaky(succeed_after=None, horizon=8), episodes=4, seed_start=0,
+        video_dir=tmp_path, video_per_outcome=2, hold_frames=0,
+    )
+    assert set(result.videos) == {"successes", "failures"}
 
     import imageio.v3 as iio
-    frames = iio.imread(path)
-    # Two episodes of 5 steps, each followed by 2 held frames.
-    assert len(frames) == 2 * (5 + 2)
+    # Two successes of 5 steps; two failures of 8.
+    assert len(iio.imread(result.videos["successes"])) == 2 * 5
+    assert len(iio.imread(result.videos["failures"])) == 2 * 8
+
+
+def test_the_per_outcome_quota_is_respected(tmp_path):
+    result = run(
+        env=Flaky(succeed_after=None, horizon=8), episodes=8, seed_start=0,
+        video_dir=tmp_path, video_per_outcome=1, hold_frames=0,
+    )
+    import imageio.v3 as iio
+    assert len(iio.imread(result.videos["successes"])) == 5
+    assert len(iio.imread(result.videos["failures"])) == 8
+
+
+def test_an_outcome_that_never_happened_leaves_no_file(tmp_path):
+    """A policy that never fails should not produce an empty failures.mp4."""
+    result = run(episodes=2, video_dir=tmp_path, video_per_outcome=2, hold_frames=0)
+    assert set(result.videos) == {"successes"}
+    assert not (tmp_path / "failures.mp4").exists()
+
+
+def test_explicit_seeds_film_exactly_those_episodes(tmp_path):
+    result = run(
+        env=Flaky(succeed_after=None, horizon=8), episodes=6, seed_start=0,
+        video_dir=tmp_path, video_seeds=[3, 4], hold_frames=0,
+    )
+    assert set(result.videos) == {"selected"}
+    import imageio.v3 as iio
+    # Seed 3 fails (8 steps), seed 4 succeeds (5) -- filmed in seed order.
+    assert len(iio.imread(result.videos["selected"])) == 8 + 5
 
 
 def test_no_video_requested_means_no_file(tmp_path):
-    result = run(episodes=2, video_episodes=0, video_path=tmp_path / "unused.mp4")
-    assert result.video is None
-    assert not (tmp_path / "unused.mp4").exists()
+    result = run(episodes=2, video_dir=None)
+    assert result.videos == {}
+    assert not list(tmp_path.iterdir())
+
+
+def test_rendering_stops_once_both_quotas_are_full(tmp_path):
+    """render() is the expensive call; filming must not cost the whole run."""
+    class Counting(Flaky):
+        renders = 0
+
+        def render(self):
+            type(self).renders += 1
+            return super().render()
+
+    env = Counting(succeed_after=None, horizon=8)
+    run(env=env, episodes=8, seed_start=0, video_dir=tmp_path,
+        video_per_outcome=1, hold_frames=0)
+    # Quotas fill on seeds 0 and 1; the remaining six episodes render nothing.
+    assert Counting.renders == 5 + 8
 
 
 def test_panel_shows_the_wide_view_beside_the_policy_input(tmp_path):
     """The left half is for a human; the right half is the complete policy input."""
-    path = tmp_path / "rollouts.mp4"
-    run(episodes=1, video_episodes=1, video_path=path, hold_frames=0)
+    result = run(episodes=1, video_dir=tmp_path, video_per_outcome=1, hold_frames=0)
     import imageio.v3 as iio
-    frame = np.asarray(iio.imread(path))[0]
+    frame = np.asarray(iio.imread(result.videos["successes"]))[0]
     # FakeEnv renders 64x64; two 32x32 cameras stack into a 32-wide column.
     assert frame.shape == (64, 64 + 32, 3)
     # The wide view is a constant 7; h.264 is lossy, so compare with tolerance.

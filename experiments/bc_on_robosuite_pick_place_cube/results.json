@@ -11,7 +11,10 @@
     "wrong_target": 1
   },
   "control_hz": 30.0,
-  "video": "experiments/bc_on_robosuite_pick_place_cube/videos/rollouts.mp4",
+  "videos": {
+    "successes": "experiments/bc_on_robosuite_pick_place_cube/videos/successes.mp4",
+    "failures": "experiments/bc_on_robosuite_pick_place_cube/videos/failures.mp4"
+  },
   "rollouts": [
     {
       "seed": 1000,

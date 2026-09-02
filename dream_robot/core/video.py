@@ -113,3 +113,48 @@ def camera_strip(
     return np.concatenate(
         [upscale_nearest(np.asarray(images[name]), scale) for name in present], axis=1
     )
+
+
+class VideoWriter:
+    """Append frames to an mp4 as they are produced, holding none of them.
+
+    ``write_video`` wants every frame in a list, which is fine for a demo and
+    wrong for evaluation: a failed episode runs the full horizon, and a 600-step
+    panel at 256x384 is ~177 MB. Deciding *after* an episode whether it was
+    worth filming means buffering one episode at most, then streaming it out.
+
+    Used as a context manager. Creates the file lazily, on the first frame, so a
+    writer that is never fed leaves no empty video behind -- which is what makes
+    "up to two failures" produce no failures file on a policy that never fails.
+    """
+
+    def __init__(self, path: Path, *, fps: float):
+        self.path = Path(path)
+        self._fps = fps
+        self._handle = None
+        self.frames = 0
+
+    def __enter__(self) -> VideoWriter:
+        return self
+
+    def append(self, frames: Sequence[np.ndarray]) -> None:
+        for frame in frames:
+            arr = np.asarray(frame)
+            if arr.dtype != np.uint8:
+                raise ValueError(f"frames must be uint8, got {arr.dtype}")
+            if self._handle is None:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                self._handle = iio.imopen(self.path, "w", plugin="pyav")
+                self._handle.init_video_stream("libx264", fps=self._fps)
+            self._handle.write_frame(arr)
+            self.frames += 1
+
+    def close(self) -> Path | None:
+        if self._handle is None:
+            return None
+        self._handle.close()
+        self._handle = None
+        return self.path
+
+    def __exit__(self, *exc) -> None:
+        self.close()

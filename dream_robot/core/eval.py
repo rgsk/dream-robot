@@ -22,7 +22,8 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import mean, median
 
@@ -30,7 +31,16 @@ import numpy as np
 
 from dream_robot.core.env_api import Env, FailureMode
 from dream_robot.core.record import Policy
-from dream_robot.core.video import observation_panel, write_video
+from dream_robot.core.video import VideoWriter, observation_panel
+
+#: Successes and failures filmed per run, when seeds are not named explicitly.
+#:
+#: Both, always. Filming "the first three episodes" is what the harness used to
+#: do, and on the first BC run all three happened to be failures -- so the only
+#: footage of the policy was of it losing, and whether it ever looked competent
+#: was unanswerable without re-running by hand. Two of each is enough to see
+#: whether the successes are clean or lucky.
+VIDEO_PER_OUTCOME = 2
 
 #: Where evaluation seeds start, by default.
 #:
@@ -66,7 +76,7 @@ class EvalResult:
     policy: str
     control_hz: float
     episodes: tuple[EpisodeOutcome, ...]
-    video: Path | None = None
+    videos: dict[str, Path] = field(default_factory=dict)
 
     @property
     def success_rate(self) -> float:
@@ -110,7 +120,7 @@ class EvalResult:
             "mean_steps": round(mean(e.steps for e in self.episodes), 1),
             "failure_histogram": self.failure_histogram,
             "control_hz": self.control_hz,
-            "video": str(self.video) if self.video else None,
+            "videos": {name: str(path) for name, path in self.videos.items()},
             "rollouts": [e.to_dict() for e in self.episodes],
         }
 
@@ -135,8 +145,9 @@ def evaluate(
     policy_name: str,
     episodes: int = 20,
     seed_start: int = EVAL_SEED_START,
-    video_episodes: int = 3,
-    video_path: Path | None = None,
+    video_dir: Path | None = None,
+    video_per_outcome: int = VIDEO_PER_OUTCOME,
+    video_seeds: Sequence[int] | None = None,
     hold_frames: int = 15,
     max_steps: int | None = None,
 ) -> EvalResult:
@@ -146,57 +157,96 @@ def evaluate(
     retried, nothing is discarded: unlike the recorder, which keeps successes
     because behaviour cloning needs clean targets, an evaluation that dropped
     its failures would be measuring nothing at all.
+
+    **Which episodes get filmed.** By default, up to ``video_per_outcome`` of
+    each outcome, into ``successes.mp4`` and ``failures.mp4``. Pass
+    ``video_seeds`` to film exactly those seeds instead, into ``selected.mp4``.
+
+    An episode's frames are buffered while it runs -- the outcome is not known
+    until it ends -- and streamed out or dropped the moment it does, so memory
+    is one episode rather than every filmed one. The alternative, re-running the
+    chosen seeds afterwards with rendering on, would be cheaper still and is
+    deliberately not what happens here: it only reproduces the same episode for
+    a *deterministic* policy, and Diffusion Policy is coming. The footage must
+    be of the episode that was actually counted.
     """
+    wanted = set(video_seeds) if video_seeds is not None else None
     outcomes: list[EpisodeOutcome] = []
-    frames: list[np.ndarray] = []
+    writers: dict[str, VideoWriter] = {}
+    if video_dir is not None:
+        names = ["selected"] if wanted is not None else ["successes", "failures"]
+        writers = {
+            name: VideoWriter(Path(video_dir) / f"{name}.mp4", fps=env.control_hz)
+            for name in names
+        }
+    filmed = Counter()
 
-    for i in range(episodes):
-        seed = seed_start + i
-        observation = env.reset(seed=seed)
-        policy.reset()
-        recording = i < video_episodes and video_path is not None
-        episode_frames: list[np.ndarray] = []
-        steps = 0
-        success, failure_mode = False, FailureMode.TIMEOUT
-
-        while max_steps is None or steps < max_steps:
-            if recording:
-                # The wide view is for a human and never enters the dataset;
-                # the small panels are the policy's complete input. Seeing them
-                # together is how you notice the wrist camera went blind.
-                episode_frames.append(
-                    observation_panel(env.render(), observation.images)
+    try:
+        for i in range(episodes):
+            seed = seed_start + i
+            observation = env.reset(seed=seed)
+            policy.reset()
+            # Explicit seeds are decided up front. In automatic mode the outcome
+            # is unknown until the episode ends, so film speculatively while
+            # *either* quota has room and spend one below -- but stop rendering
+            # entirely once both are full, since render() is the expensive call.
+            if wanted is not None:
+                recording = bool(writers) and seed in wanted
+            else:
+                recording = bool(writers) and any(
+                    filmed[name] < video_per_outcome for name in writers
                 )
-            result = env.step(policy(observation))
-            observation = result.observation
-            steps += 1
-            success, failure_mode = result.success, result.failure_mode
-            if result.terminated or result.truncated:
-                break
+            episode_frames: list[np.ndarray] = []
+            steps = 0
+            success, failure_mode = False, FailureMode.TIMEOUT
 
-        outcomes.append(
-            EpisodeOutcome(
-                seed=seed,
-                success=success,
-                failure_mode=FailureMode.NONE if success else failure_mode,
-                steps=steps,
+            while max_steps is None or steps < max_steps:
+                if recording:
+                    # The wide view is for a human and never enters the dataset;
+                    # the small panels are the policy's complete input. Seeing
+                    # them together is how you notice the wrist camera went blind.
+                    episode_frames.append(
+                        observation_panel(env.render(), observation.images)
+                    )
+                result = env.step(policy(observation))
+                observation = result.observation
+                steps += 1
+                success, failure_mode = result.success, result.failure_mode
+                if result.terminated or result.truncated:
+                    break
+
+            outcomes.append(
+                EpisodeOutcome(
+                    seed=seed,
+                    success=success,
+                    failure_mode=FailureMode.NONE if success else failure_mode,
+                    steps=steps,
+                )
             )
-        )
-        if recording and episode_frames:
-            # Hold the last frame so the outcome is readable at 30 fps.
-            frames.extend(episode_frames + [episode_frames[-1]] * hold_frames)
-        print(
-            f"  seed {seed}: {'SUCCESS' if success else str(failure_mode).upper()} "
-            f"in {steps} steps"
-        )
 
-    written = write_video(frames, video_path, fps=env.control_hz) if frames else None
+            if episode_frames:
+                bucket = "selected" if wanted is not None else (
+                    "successes" if success else "failures"
+                )
+                if wanted is not None or filmed[bucket] < video_per_outcome:
+                    filmed[bucket] += 1
+                    # Hold the last frame so the outcome is readable at 30 fps.
+                    writers[bucket].append(
+                        episode_frames + [episode_frames[-1]] * hold_frames
+                    )
+            print(
+                f"  seed {seed}: {'SUCCESS' if success else str(failure_mode).upper()} "
+                f"in {steps} steps"
+            )
+    finally:
+        videos = {name: w.close() for name, w in writers.items()}
+
     return EvalResult(
         task=task,
         policy=policy_name,
         control_hz=float(env.control_hz),
         episodes=tuple(outcomes),
-        video=written,
+        videos={name: path for name, path in videos.items() if path is not None},
     )
 
 
