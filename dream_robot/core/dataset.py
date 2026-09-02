@@ -74,6 +74,26 @@ def vector_names(embodiment: Embodiment) -> list[str]:
     )
 
 
+def embodiment_from_names(names: Sequence[str]) -> Embodiment:
+    """The inverse of ``vector_names``: recover the arm/gripper split from metadata.
+
+    This is what ROADMAP rule 2 means in practice. A policy needs to know which
+    entries of an 8-vector are joints and which is a gripper -- to clip the
+    gripper to [0, 1] and leave the joints alone, say -- and assuming "the last
+    one" is right for a Panda and wrong for a bimanual arm with two grippers,
+    silently. The dataset already recorded the answer.
+    """
+    joints = [n for n in names if n.startswith("joint_")]
+    grippers = [n for n in names if n.startswith("gripper_")]
+    if len(joints) + len(grippers) != len(names):
+        unknown = sorted(set(names) - set(joints) - set(grippers))
+        raise ValueError(
+            f"unrecognised vector element name(s) {unknown}; this repo's datasets "
+            "name them joint_<i> / gripper_<i> (see vector_names)"
+        )
+    return Embodiment(arm_joints=len(joints), grippers=len(grippers))
+
+
 def dataset_features(
     *,
     embodiment: Embodiment,
@@ -189,6 +209,26 @@ def frame_to_uint8(frame) -> np.ndarray:
     if arr.dtype == np.uint8:
         return np.ascontiguousarray(arr)
     return np.ascontiguousarray((np.clip(arr, 0.0, 1.0) * 255.0).round().astype(np.uint8))
+
+
+def frame_to_float_chw(frame) -> np.ndarray:
+    """``(H, W, 3)`` uint8 -> the ``(3, H, W)`` float32 in [0, 1] a model is fed.
+
+    The exact inverse of what LeRobot's loader already does, and it exists so
+    that both halves of a policy's life go through one function. Training reads
+    frames from the dataset, already channel-first floats; a policy running in a
+    simulator gets ``Observation.images``, which is channel-last uint8. If those
+    two paths disagree -- a missing divide by 255, a transpose in one and not
+    the other -- the policy trains fine and then sees different pixels at
+    rollout, which looks like a policy that does not generalise rather than like
+    a bug.
+    """
+    arr = np.asarray(frame)
+    if arr.ndim != 3 or arr.shape[2] != 3:
+        raise ValueError(f"expected (H, W, 3), got {arr.shape}")
+    if arr.dtype != np.uint8:
+        raise ValueError(f"expected uint8, got {arr.dtype}")
+    return np.ascontiguousarray(np.transpose(arr, (2, 0, 1)).astype(np.float32) / 255.0)
 
 
 def episode_frames(
