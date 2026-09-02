@@ -299,3 +299,31 @@ class ExpertPolicy:
         joints = self._ik.solve(command.waypoint, self._hold_rotation)
         action = np.concatenate([joints, [command.gripper]]).astype(np.float32)
         return action, command
+
+
+class ExpertActor:
+    """``ExpertPolicy`` narrowed to ``core.record.Policy``: an action, nothing else.
+
+    The recorder is not allowed to know what a phase is. ``ExpertPolicy``
+    returns ``(action, ExpertCommand)`` because ``demo.py`` wants to print which
+    phase an episode got stuck in, and that is a debugging affordance of this
+    task, not part of the interface a dataset is recorded through -- teleop and
+    a trained policy have no phase to report and must not have to invent one.
+
+    Note what this deliberately drops: ``command.timed_out``. The expert giving
+    up is a faster way to end an episode the environment would have truncated
+    anyway, and honouring it would give the recorder a second opinion about when
+    an episode ended, competing with the environment's. It is worth about ten
+    seconds across a fifty-episode recording, which is not worth two authorities
+    on the same question.
+    """
+
+    def __init__(self, policy: ExpertPolicy):
+        self._policy = policy
+
+    def reset(self) -> None:
+        self._policy.reset()
+
+    def __call__(self, observation) -> np.ndarray:
+        action, _command = self._policy(observation)
+        return action

@@ -90,3 +90,26 @@ def write_video(frames: Sequence[np.ndarray], path: Path, *, fps: float) -> Path
     path.parent.mkdir(parents=True, exist_ok=True)
     iio.imwrite(path, stack, fps=fps, codec="libx264")
     return path
+
+
+def camera_strip(
+    images: Mapping[str, np.ndarray],
+    *,
+    order: Sequence[str] = ("top", "wrist"),
+    scale: int = 3,
+) -> np.ndarray:
+    """The policy's cameras side by side, and nothing else.
+
+    ``observation_panel`` puts a wide human-legible view next to these. This one
+    deliberately cannot: it is what a frame read back out of a recorded dataset
+    contains, and a dataset holds no render camera. Reconstructing a video from
+    a dataset with this function shows the actual training input at its actual
+    resolution, which is the only way to notice that the wrist camera has been
+    staring at a finger for the whole episode.
+    """
+    present = [name for name in order if name in images]
+    if not present:
+        raise ValueError(f"none of {list(order)} in images {sorted(images)}")
+    return np.concatenate(
+        [upscale_nearest(np.asarray(images[name]), scale) for name in present], axis=1
+    )

@@ -51,6 +51,7 @@ class BinSpec:
 
 @dataclass(frozen=True)
 class TaskConfig:
+    prompt: str
     control_hz: float
     horizon_seconds: float
     camera_hw: tuple[int, int]
@@ -68,6 +69,7 @@ class TaskConfig:
         raw = yaml.safe_load(path.read_text())
         b = raw["scene"]["bin"]
         return cls(
+            prompt=str(raw["prompt"]),
             control_hz=float(raw["control"]["hz"]),
             horizon_seconds=float(raw["control"]["horizon_seconds"]),
             camera_hw=(int(raw["cameras"]["height"]), int(raw["cameras"]["width"])),
@@ -197,6 +199,11 @@ class PickPlaceCube:
     @property
     def control_hz(self) -> float:
         return float(self._cfg.control_hz)
+
+    @property
+    def prompt(self) -> str:
+        """The instruction a language-conditioned policy is given."""
+        return self._cfg.prompt
 
     def reset(self, *, seed: int | None = None) -> Observation:
         if seed is not None:

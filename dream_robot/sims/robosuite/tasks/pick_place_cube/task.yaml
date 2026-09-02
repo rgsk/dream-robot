@@ -8,6 +8,12 @@ name: pick_place_cube
 sim: robosuite
 robot: Panda
 
+# The natural-language instruction, stored on every recorded frame. Present from
+# the first dataset rather than added later: a VLA has nothing to condition on
+# without it, and retrofitting the annotation in month 3 means re-recording
+# everything (ROADMAP).
+prompt: put the cube in the bin
+
 control:
   hz: 30                    # spec.md, frozen. Changing it invalidates every
                             # cycle-time number in the results matrix.
