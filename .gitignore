@@ -11,7 +11,7 @@ venv*/
 # --- jupytext ---
 # .py is the committed source of truth; .ipynb is a disposable build artifact
 # rebuilt with: jupytext --to ipynb --execute <file>.py
-*.ipynb
+# *.ipynb
 
 # --- generated artifacts (the git-bloat sources) ---
 # datasets: recorded demos, potentially GBs of video frames
