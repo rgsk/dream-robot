@@ -1,0 +1,153 @@
+{
+  "task": "robosuite/pick_place_cube",
+  "policy": "act",
+  "episodes": 20,
+  "success_rate": 0.85,
+  "successes": 17,
+  "cycle_time_seconds": 7.23,
+  "mean_steps": 270.4,
+  "failure_histogram": {
+    "no_grasp": 3
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "successes": "experiments/act_clean25_s2/eval/act_on_robosuite_pick_place_cube/videos/successes.mp4",
+    "failures": "experiments/act_clean25_s2/eval/act_on_robosuite_pick_place_cube/videos/failures.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1000,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 212
+    },
+    {
+      "seed": 1001,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1002,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 216
+    },
+    {
+      "seed": 1003,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 220
+    },
+    {
+      "seed": 1004,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 217
+    },
+    {
+      "seed": 1005,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 222
+    },
+    {
+      "seed": 1006,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 229
+    },
+    {
+      "seed": 1007,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 213
+    },
+    {
+      "seed": 1008,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1009,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 218
+    },
+    {
+      "seed": 1010,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 209
+    },
+    {
+      "seed": 1011,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 217
+    },
+    {
+      "seed": 1012,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 203
+    },
+    {
+      "seed": 1013,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 162
+    },
+    {
+      "seed": 1014,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 218
+    },
+    {
+      "seed": 1015,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 205
+    },
+    {
+      "seed": 1016,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 221
+    },
+    {
+      "seed": 1017,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 206
+    },
+    {
+      "seed": 1018,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 220
+    },
+    {
+      "seed": 1019,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    }
+  ],
+  "provenance": {
+    "checkpoint": "experiments/act_clean25_s2/checkpoint.pt",
+    "epoch": 90,
+    "val_l1_rad": 0.00933124881905283,
+    "dataset_repo_id": "dream_robot/pick_place_cube",
+    "demonstrations": 20,
+    "held_out_episodes": [
+      7,
+      14,
+      16,
+      20,
+      21
+    ]
+  }
+}

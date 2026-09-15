@@ -62,9 +62,18 @@ def _bc(env, *, checkpoint: Path | None = None, device: str | None = None):
     return BCPolicy.load(Path(checkpoint), device=device)
 
 
+def _act(env, *, checkpoint: Path | None = None, device: str | None = None):
+    from dream_robot.policies.act.policy import ACTPolicy
+
+    if checkpoint is None:
+        raise ValueError("policy 'act' needs --checkpoint")
+    return ACTPolicy.load(Path(checkpoint), device=device)
+
+
 POLICIES: dict[str, Callable] = {
     "expert": _expert,
     "bc": _bc,
+    "act": _act,
 }
 
 
