@@ -30,7 +30,7 @@ from statistics import mean, median
 import numpy as np
 
 from dream_robot.core.env_api import Env, FailureMode
-from dream_robot.core.record import Policy
+from dream_robot.core.record import Perturb, Policy
 from dream_robot.core.video import VideoWriter, observation_panel
 
 #: Successes and failures filmed per run, when seeds are not named explicitly.
@@ -150,6 +150,7 @@ def evaluate(
     video_seeds: Sequence[int] | None = None,
     hold_frames: int = 15,
     max_steps: int | None = None,
+    perturb: Perturb | None = None,
 ) -> EvalResult:
     """Roll ``policy`` out ``episodes`` times and report.
 
@@ -169,6 +170,12 @@ def evaluate(
     deliberately not what happens here: it only reproduces the same episode for
     a *deterministic* policy, and Diffusion Policy is coming. The footage must
     be of the episode that was actually counted.
+
+    **``perturb``** is the recorder's hook, applied the same way: the env steps
+    ``perturb(action, rng)`` with ``rng`` seeded by the episode seed. Off by
+    default. It exists for scenes with no randomisation of their own (a fixed
+    cube pose), where a deterministic policy would otherwise play the same
+    episode twenty times and the success rate would be one sample.
     """
     wanted = set(video_seeds) if video_seeds is not None else None
     outcomes: list[EpisodeOutcome] = []
@@ -186,6 +193,7 @@ def evaluate(
             seed = seed_start + i
             observation = env.reset(seed=seed)
             policy.reset()
+            rng = np.random.default_rng(seed)
             # Explicit seeds are decided up front. In automatic mode the outcome
             # is unknown until the episode ends, so film speculatively while
             # *either* quota has room and spend one below -- but stop rendering
@@ -208,7 +216,8 @@ def evaluate(
                     episode_frames.append(
                         observation_panel(env.render(), observation.images)
                     )
-                result = env.step(policy(observation))
+                action = policy(observation)
+                result = env.step(action if perturb is None else perturb(action, rng))
                 observation = result.observation
                 steps += 1
                 success, failure_mode = result.success, result.failure_mode

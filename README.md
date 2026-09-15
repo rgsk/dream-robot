@@ -26,6 +26,9 @@ Rung 1 (reach + grasp a rigid cube) is closed in sim for both BC and ACT: record
 | ✅ | `core/eval.py` + `registry.py` + `run.py` — any policy × any task, one command |
 | ✅ | noisy expert — shaky executed actions, clean recorded labels (`--noise-sigma`) |
 | ✅ | `policies/act/` — action chunking + transformer, 4.8M params |
+| ✅ | `sims/robosuite/tasks/pick_place_two_bins/` — T2: a second bin, coin-flip expert; `_fixed` variant pins the cube |
+| ✅ | eval `--noise-sigma` — shake at test time, for scenes with no randomisation of their own |
+| ✅ | [`runpod.md`](runpod.md) + `scripts/runpod_setup.sh` — running jobs on a RunPod pod, and when not to |
 
 `uv run pytest -m "not slow"` runs the core suite without a simulator.
 
@@ -98,6 +101,36 @@ Caveats: the ACT 100-demo cells and ACT 25 half shake are single training runs, 
 episodes means "≳ 85%", not "perfect". Every step, number and dead end is in
 [experiments/noisy_expert/notes.md](experiments/noisy_expert/notes.md) and
 [experiments/act/notes.md](experiments/act/notes.md).
+
+## T2: two valid bins
+
+Same scene with a second bin mirrored across the cube; the scripted expert flips a coin for which
+one. 100 half-shake demos, 20 evaluation episodes from seed 1000. The question is multimodality: does
+BC average the two choices into the gap between the bins, and does ACT's latent carry the choice?
+
+| scene | expert | BC (L1) | ACT | ACT latent KL | random latent changes the bin |
+|---|---|---|---|---|---|
+| random cube spawn, fair coin | 20/20 · 12 L / 8 R | 20/20 · 6 L / 14 R | 20/20 · 7 L / 13 R | 0.00007 | 0 of 20 |
+| fixed cube, exactly 50/50 demos, eval with shake | 20/20 · 9 L / 11 R | 20/20 · 14 L / 6 R | 20/20 · 9 L / 11 R | 0.00008 | 1 of 20 |
+
+No cube ever ended between the bins.
+
+**What it says.**
+
+- **Neither policy averages.** Both use L1, which follows the local majority instead of the mean.
+- **With a random spawn, both invent a rule.** 100 fair coins leaned 54/46 by how far the cube spawned,
+  and BC and ACT both turned that into "far cube → right bin" (7 of 7 eval seeds each).
+- **With the cube fixed and the demos exactly balanced, noise picks the bin.** The shake nudges the
+  arm to one side, the next frames look like that side's demos, and the policy commits. One BC episode
+  hesitated ~100 steps first; none failed.
+- **ACT's latent stays empty in both.** It never needs it: closed-loop tie-breaking already solves the
+  task, so encoding the choice only costs KL.
+- **Success rate can't tell "commits to one" from "represents both."** A test that can: run a policy
+  many times from one identical start with no shake and check it produces both bins. BC and ACT
+  can't; Diffusion Policy should.
+
+Predictions were written before each run and most were wrong; the full log is in
+[experiments/t2/notes.md](experiments/t2/notes.md).
 
 ## The shape
 

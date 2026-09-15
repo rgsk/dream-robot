@@ -26,8 +26,27 @@ def _robosuite_pick_place_cube(**kwargs):
     return PickPlaceCube(**kwargs)
 
 
+def _robosuite_pick_place_two_bins(**kwargs):
+    from dream_robot.sims.robosuite.tasks.pick_place_two_bins.env import PickPlaceTwoBins
+
+    return PickPlaceTwoBins(**kwargs)
+
+
+def _robosuite_pick_place_two_bins_fixed(**kwargs):
+    from dataclasses import replace
+
+    from dream_robot.sims.robosuite.tasks.pick_place_two_bins.env import (
+        PickPlaceTwoBins,
+        TaskConfig,
+    )
+
+    return PickPlaceTwoBins(replace(TaskConfig.load(), fixed_cube_pose=True), **kwargs)
+
+
 TASKS: dict[str, Callable] = {
     "robosuite/pick_place_cube": _robosuite_pick_place_cube,
+    "robosuite/pick_place_two_bins": _robosuite_pick_place_two_bins,
+    "robosuite/pick_place_two_bins_fixed": _robosuite_pick_place_two_bins_fixed,
 }
 
 
@@ -46,12 +65,12 @@ def make_env(name: str, **kwargs):
 
 
 def _expert(env, *, checkpoint: Path | None = None, device: str | None = None):
-    from dream_robot.sims.robosuite.tasks.pick_place_cube.expert import (
-        ExpertActor,
-        ExpertPolicy,
-    )
+    # Each task ships its own expert, in an ``expert`` module beside its env.
+    import importlib
 
-    return ExpertActor(ExpertPolicy(env))
+    task_package = type(env).__module__.rsplit(".", 1)[0]
+    expert = importlib.import_module(f"{task_package}.expert")
+    return expert.ExpertActor(expert.ExpertPolicy(env))
 
 
 def _bc(env, *, checkpoint: Path | None = None, device: str | None = None):

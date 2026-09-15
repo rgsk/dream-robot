@@ -1,0 +1,99 @@
+# pick_place_two_bins -- robosuite / Panda. ROADMAP task T2.
+#
+# T1 (pick_place_cube) with a second bin mirrored across the cube, and an expert
+# that flips a coin for which bin to use. Both are valid. Every number that is not
+# about the second bin is copied from T1's task.yaml unchanged: T2 is only a
+# multimodality test if it is physically T1 plus one extra mode.
+
+name: pick_place_two_bins
+sim: robosuite
+robot: Panda
+
+prompt: put the cube in a bin
+
+control:
+  hz: 30
+  horizon_seconds: 20.0
+
+cameras:
+  height: 128
+  width: 128
+  mapping:
+    agentview: top
+    robot0_eye_in_hand: wrist
+
+render:
+  camera: frontview
+  height: 256
+  width: 256
+
+scene:
+  cube_xy_range: [0.03, 0.03]
+
+  # false: robosuite's default spawn, as T1 (random ±3 cm, random yaw).
+  # true: the cube spawns at the table centre with zero yaw, every episode.
+  # The fixed variant is registered as robosuite/pick_place_two_bins_fixed.
+  # Why it exists (experiments/t2/notes.md): with a random spawn, 100 fair
+  # coins always lean a little by spawn position, and BC and ACT both turned
+  # that lean into a "far cube -> right bin" rule. A fixed pose leaves nothing
+  # in the scene to build a rule from, so the policy faces two labels for the
+  # same picture -- the multimodality test T2 was meant to be.
+  fixed_cube_pose: false
+
+  # Geometry shared by both bins -- T1's bin exactly.
+  bin:
+    inner_half: 0.060
+    wall_half_thickness: 0.006
+    wall_half_height: 0.025
+
+  # offset_xy is from table centre. The first is T1's bin, colour included
+  # (right of the cube in the front camera); the second is its mirror (left).
+  # Symmetric about the cube's spawn, so the two carries are the same length and
+  # neither bin is "the easy one" -- and the midpoint of the two modes is the
+  # spawn area itself, which makes an averaged placement easy to see and detect.
+  #
+  # Both T1's blue, deliberately. Distinct colours are T5's business (and T5
+  # must randomise them per episode, or "green bin" and "left bin" stay the same
+  # instruction). Randomising here would add a colour-invariance problem T1
+  # never posed, confounding any T2 drop with something other than the second
+  # mode; and T5 re-records its data regardless, since its expert obeys a
+  # prompt instead of a coin. rgba is per bin so T5 only edits values.
+  bins:
+    - name: right
+      offset_xy: [0.0, 0.20]
+      rgba: [0.15, 0.35, 0.75, 1.0]
+    - name: left
+      offset_xy: [0.0, -0.20]
+      rgba: [0.15, 0.35, 0.75, 1.0]
+
+success:
+  # Inside EITHER bin's footprint and resting low.
+  resting_z_margin: 0.05
+
+expert:
+  approach_height: 0.10
+  grasp_dz: 0.005
+  lift_height: 0.25
+  drop_height: 0.085
+
+  reach_tolerance: 0.015
+  fine_tolerance: 0.010
+  carry_tolerance: 0.020
+  lift_clearance: 0.03
+  release_opening: 0.85
+
+  grip_settle_window: 4
+  grip_settle_epsilon: 2.5e-3
+
+  phase_timeout_seconds: 5.0
+
+  ik:
+    damping: 0.15
+    max_joint_step: 0.06
+
+failure:
+  # As T1: the cube must rise this far above its own start to count as grasped.
+  lift_threshold: 0.03
+  # No dropped_radius. T1 split "dropped" from "wrong_target" by distance to its
+  # one bin; here wrong_target means exactly "ended between the bins", decided
+  # by geometry in env.py, and every other lifted failure is dropped.

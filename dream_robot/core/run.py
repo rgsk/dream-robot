@@ -26,6 +26,7 @@ from dream_robot.core.eval import (
     evaluate,
     write_results,
 )
+from dream_robot.core.record import JointNoise
 from dream_robot.core.registry import make_env, make_policy
 
 DEFAULT_EXPERIMENTS = Path("experiments")
@@ -73,6 +74,10 @@ def main(argv: list[str] | None = None) -> int:
         "--video-seeds", type=int, nargs="+", default=None,
         help="film exactly these seeds instead, into selected.mp4",
     )
+    p.add_argument(
+        "--noise-sigma", type=float, default=0.0,
+        help="Gaussian noise (rad) on executed arm joints, seeded per episode; as record.py",
+    )
     p.add_argument("--experiments", type=Path, default=DEFAULT_EXPERIMENTS)
     p.add_argument("--device", default=None)
     args = p.parse_args(argv)
@@ -95,13 +100,17 @@ def main(argv: list[str] | None = None) -> int:
             video_per_outcome=args.video_per_outcome,
             video_seeds=args.video_seeds,
             video_dir=(out / "videos") if args.video_per_outcome or args.video_seeds else None,
+            perturb=(
+                JointNoise(args.noise_sigma, env.embodiment) if args.noise_sigma > 0 else None
+            ),
         )
     finally:
         env.close()
 
-    path = write_results(
-        result, out / "results.json", extra=checkpoint_provenance(args.checkpoint)
-    )
+    provenance = checkpoint_provenance(args.checkpoint)
+    if args.noise_sigma > 0:
+        provenance["eval_noise_sigma"] = args.noise_sigma
+    path = write_results(result, out / "results.json", extra=provenance)
     print(f"\n{result.summary()}")
     print(f"results -> {path.resolve()}")
     for name, video in result.videos.items():
