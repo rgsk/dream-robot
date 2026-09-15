@@ -1,0 +1,154 @@
+{
+  "task": "robosuite/pick_place_cube",
+  "policy": "bc",
+  "episodes": 20,
+  "success_rate": 0.75,
+  "successes": 15,
+  "cycle_time_seconds": 6.87,
+  "mean_steps": 308.6,
+  "failure_histogram": {
+    "dropped": 1,
+    "no_grasp": 4
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "successes": "experiments/bc_clean_n100_s1/eval/bc_on_robosuite_pick_place_cube/videos/successes.mp4",
+    "failures": "experiments/bc_clean_n100_s1/eval/bc_on_robosuite_pick_place_cube/videos/failures.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1000,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 199
+    },
+    {
+      "seed": 1001,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 203
+    },
+    {
+      "seed": 1002,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 206
+    },
+    {
+      "seed": 1003,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 227
+    },
+    {
+      "seed": 1004,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 218
+    },
+    {
+      "seed": 1005,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 233
+    },
+    {
+      "seed": 1006,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 207
+    },
+    {
+      "seed": 1007,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 204
+    },
+    {
+      "seed": 1008,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 191
+    },
+    {
+      "seed": 1009,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 224
+    },
+    {
+      "seed": 1010,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1011,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1012,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1013,
+      "success": false,
+      "failure_mode": "dropped",
+      "steps": 600
+    },
+    {
+      "seed": 1014,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 212
+    },
+    {
+      "seed": 1015,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 205
+    },
+    {
+      "seed": 1016,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 244
+    },
+    {
+      "seed": 1017,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 195
+    },
+    {
+      "seed": 1018,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 205
+    },
+    {
+      "seed": 1019,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    }
+  ],
+  "provenance": {
+    "checkpoint": "experiments/bc_clean_n100_s1/checkpoint.pt",
+    "epoch": 56,
+    "val_l1_rad": 0.004400228842436354,
+    "dataset_repo_id": "dream_robot/pick_place_cube",
+    "demonstrations": 95,
+    "held_out_episodes": [
+      6,
+      8,
+      16,
+      48,
+      81
+    ]
+  }
+}

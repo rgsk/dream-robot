@@ -22,7 +22,7 @@ import argparse
 from pathlib import Path
 
 from dream_robot.core.dataset import episode_frames, open_dataset
-from dream_robot.core.record import record_episodes
+from dream_robot.core.record import JointNoise, record_episodes
 from dream_robot.core.video import camera_strip, write_video
 from dream_robot.sims.robosuite.tasks.pick_place_cube.env import PickPlaceCube, TaskConfig
 from dream_robot.sims.robosuite.tasks.pick_place_cube.expert import ExpertActor, ExpertPolicy
@@ -60,6 +60,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="record failed episodes too; poisons behaviour cloning, see core/record.py",
     )
+    p.add_argument(
+        "--noise-sigma",
+        type=float,
+        default=0.0,
+        help="Gaussian noise (rad) on executed arm joints; the dataset keeps the clean action",
+    )
     p.add_argument("--verify", action="store_true", help="write a video read back from disk")
     p.add_argument("--verify-episode", type=int, default=0)
     p.add_argument("--verify-out", type=Path, default=DEFAULT_VIDEO)
@@ -80,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
             seed_start=args.seed_start,
             max_attempts=args.max_attempts,
             keep_failures=args.keep_failures,
+            perturb=JointNoise(args.noise_sigma, env.embodiment) if args.noise_sigma > 0 else None,
         )
     finally:
         env.close()

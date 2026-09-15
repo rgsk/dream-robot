@@ -21,6 +21,8 @@ datasets/
 experiments/*/videos/
 experiments/*/checkpoints/
 experiments/*/rollouts/
+# run logs: the numbers that matter are copied into notes.md
+experiments/**/*.log
 checkpoints/
 *.pt
 *.ckpt

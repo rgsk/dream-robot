@@ -13,6 +13,7 @@ from dream_robot.core.dataset import (
 )
 from dream_robot.core.env_api import FailureMode
 from dream_robot.core.record import (
+    JointNoise,
     Policy,
     check_tracking,
     record_episodes,
@@ -132,6 +133,104 @@ def test_tracking_check_catches_a_controller_ignoring_its_target():
     episode = rollout(env, FakePolicy(delta=0.5), seed=0)
     with pytest.raises(ValueError, match="exceeds"):
         check_tracking(episode, FAKE_EMBODIMENT)
+
+
+# --- perturbation: execute one action, record another ----------------------
+
+class ExecutedLog(FakeEnv):
+    """FakeEnv that remembers what it was actually stepped with."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.executed: list[np.ndarray] = []
+
+    def step(self, action):
+        self.executed.append(np.array(action, copy=True))
+        return super().step(action)
+
+
+def shift(amount):
+    """A deterministic perturbation, so the test can say exactly what was sent."""
+    def perturb(action, rng):
+        out = np.array(action, copy=True)
+        out[FAKE_EMBODIMENT.arm_slice] += amount
+        return out
+    return perturb
+
+
+def test_perturb_changes_what_is_executed_not_what_is_recorded(fake_policy):
+    """The whole point of the hook: the label is the policy's, the motion is noisy."""
+    env = ExecutedLog()
+    episode = rollout(env, fake_policy, seed=0, perturb=shift(1.0))
+
+    arm = FAKE_EMBODIMENT.arm_slice
+    executed = np.stack(env.executed)
+    assert len(executed) == episode.steps
+    assert np.allclose(executed[:, arm], episode.actions[:, arm] + 1.0)
+    assert np.array_equal(executed[:, 3:], episode.actions[:, 3:])
+    # And the recorded action is still the one computed from the recorded
+    # observation -- perturbation must not break the pairing.
+    for t in range(episode.steps):
+        assert np.allclose(episode.actions[t][arm], episode.states[t][arm] + fake_policy.delta)
+
+
+def test_the_perturbation_actually_moves_the_arm(fake_policy):
+    """States come from executed actions, so a perturbed episode visits other states."""
+    clean = rollout(FakeEnv(), fake_policy, seed=0)
+    pushed = rollout(FakeEnv(), fake_policy, seed=0, perturb=shift(1.0))
+    arm = FAKE_EMBODIMENT.arm_slice
+    assert np.array_equal(clean.states[0], pushed.states[0])
+    assert not np.allclose(clean.states[1:, arm], pushed.states[1:, arm])
+
+
+def test_no_perturb_executes_exactly_what_is_recorded(fake_policy):
+    env = ExecutedLog()
+    episode = rollout(env, fake_policy, seed=0)
+    assert np.array_equal(np.stack(env.executed), episode.actions)
+
+
+def test_joint_noise_leaves_the_gripper_alone():
+    noise = JointNoise(sigma=0.1, embodiment=FAKE_EMBODIMENT)
+    action = np.array([0.1, 0.2, 0.3, 1.0], dtype=np.float32)
+    before = action.copy()
+    out = noise(action, np.random.default_rng(0))
+    assert out[3] == 1.0
+    assert not np.allclose(out[:3], action[:3])
+    assert np.array_equal(action, before)                   # input untouched
+
+
+def test_joint_noise_has_the_requested_scale():
+    noise = JointNoise(sigma=0.05, embodiment=FAKE_EMBODIMENT)
+    rng = np.random.default_rng(0)
+    zero = np.zeros(4, dtype=np.float32)
+    draws = np.stack([noise(zero, rng)[:3] for _ in range(20_000)])
+    assert draws.std() == pytest.approx(0.05, rel=0.03)
+    assert abs(draws.mean()) < 0.003
+
+
+def test_perturbed_rollouts_are_reproducible_from_the_seed(fake_policy):
+    """Same seed, same noise: a perturbed dataset is as reproducible as a clean one."""
+    noise = JointNoise(sigma=0.05, embodiment=FAKE_EMBODIMENT)
+    a = rollout(ExecutedLog(), fake_policy, seed=3, perturb=noise)
+    b = rollout(ExecutedLog(), fake_policy, seed=3, perturb=noise)
+    c = rollout(ExecutedLog(), fake_policy, seed=4, perturb=noise)
+    assert np.array_equal(a.states, b.states)
+    assert not np.array_equal(a.states[1:], c.states[1:])
+
+
+def test_the_perturbation_is_recorded_in_the_summary(tmp_path):
+    noise = JointNoise(sigma=0.01, embodiment=FAKE_EMBODIMENT)
+    record(tmp_path, episodes=1, perturb=noise)
+    written = json.loads((tmp_path / "ds" / "recording_summary.json").read_text())
+    assert written["perturbation"] == {"type": "joint_noise", "sigma": 0.01}
+    assert record(tmp_path / "clean", episodes=1).perturbation is None
+
+
+def test_a_perturbation_without_to_dict_is_still_not_recorded_as_clean(tmp_path):
+    """``None`` means a clean dataset; a noisy one must never be mistaken for it."""
+    summary = record(tmp_path, episodes=1, perturb=shift(0.0))
+    assert summary.perturbation is not None
+    assert summary.perturbation["type"] == "custom"
 
 
 # --- recording --------------------------------------------------------------

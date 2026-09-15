@@ -21,13 +21,20 @@ failing. The noisy-expert work ROADMAP calls for is a different thing that is
 easy to confuse with this one: recoveries from perturbed states are *successes*
 that start somewhere unusual, and they widen the ribbon of state space the data
 covers. Failed episodes narrow nothing and poison the target.
+
+**What gets executed and what gets recorded can differ, on purpose.** A
+``perturb`` hook adds noise to the action sent to ``env.step`` while the
+dataset keeps the policy's own, clean action (DART, Laskey et al. 2017). The
+noise pushes the arm somewhere the expert would never have gone; the clean
+label is the expert's correction from there. Recording the noisy action instead
+would teach the policy to reproduce the jitter rather than to recover from it.
 """
 
 from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -60,6 +67,38 @@ RUNAWAY_STEPS = 100_000
 #: fire on a well-tuned task, tight enough that the failure it exists to catch
 #: cannot slip past.
 TRACKING_TOLERANCE = 0.25
+
+
+#: ``(action, rng) -> executed action``. Must return a new array; the recorded
+#: action is the one passed in. Seeded per episode from the episode seed, so a
+#: perturbed recording is exactly as reproducible as a clean one.
+Perturb = Callable[[np.ndarray, np.random.Generator], np.ndarray]
+
+
+@dataclass(frozen=True)
+class JointNoise:
+    """Gaussian noise on the arm joints of the executed action, in radians.
+
+    The gripper is left alone. Its command is an open/close decision, not a
+    position the expert converges on, so noise there does not produce a
+    recovery -- it produces a gripper that flickers, and a release at the wrong
+    moment is a failed episode rather than a wider one.
+
+    Measured on robosuite pick_place_cube: the expert still succeeds on 9/10
+    seeds at sigma 0.05 and collapses to 3/10 by 0.1.
+    """
+
+    sigma: float
+    embodiment: Embodiment
+
+    def __call__(self, action: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+        executed = np.array(action, dtype=np.float32, copy=True)
+        arm = self.embodiment.arm_slice
+        executed[arm] += rng.normal(0.0, self.sigma, self.embodiment.arm_joints)
+        return executed
+
+    def to_dict(self) -> dict:
+        return {"type": "joint_noise", "sigma": self.sigma}
 
 
 @runtime_checkable
@@ -149,6 +188,9 @@ class RecordingSummary:
     root: Path
     task_prompt: str
     episodes: tuple[EpisodeRecord, ...] = field(default_factory=tuple)
+    #: How the executed actions were perturbed, or None for a clean recording.
+    #: Two datasets with identical seeds and different noise are different data.
+    perturbation: dict | None = None
 
     @property
     def attempted(self) -> int:
@@ -186,6 +228,7 @@ class RecordingSummary:
             "repo_id": self.repo_id,
             "root": str(self.root),
             "task_prompt": self.task_prompt,
+            "perturbation": self.perturbation,
             "attempted": self.attempted,
             "kept": self.kept,
             "total_frames": self.total_frames,
@@ -201,7 +244,14 @@ class RecordingSummary:
         return path
 
 
-def rollout(env: Env, policy: Policy, *, seed: int, max_steps: int | None = None) -> Episode:
+def rollout(
+    env: Env,
+    policy: Policy,
+    *,
+    seed: int,
+    max_steps: int | None = None,
+    perturb: Perturb | None = None,
+) -> Episode:
     """Drive one episode to its own end and buffer it.
 
     Stops when the environment says the episode is over -- success, termination
@@ -209,10 +259,14 @@ def rollout(env: Env, policy: Policy, *, seed: int, max_steps: int | None = None
     bans time features from observations precisely because fixed-length episodes
     make "where am I in the episode" predict the action; a recorder that cut
     every episode at the same step would reintroduce that through the back door.
+
+    With ``perturb``, ``env.step`` receives ``perturb(action, rng)`` and the
+    episode still records ``action``. See the module docstring.
     """
     limit = RUNAWAY_STEPS if max_steps is None else max_steps
     observation = env.reset(seed=seed)
     policy.reset()
+    rng = np.random.default_rng(seed)
 
     states: list[np.ndarray] = []
     actions: list[np.ndarray] = []
@@ -229,7 +283,7 @@ def rollout(env: Env, policy: Policy, *, seed: int, max_steps: int | None = None
         actions.append(action.copy())
         images.append({k: np.array(v, copy=True) for k, v in observation.images.items()})
 
-        result = env.step(action)
+        result = env.step(action if perturb is None else perturb(action, rng))
         observation = result.observation
         success, failure_mode = result.success, result.failure_mode
         if result.terminated or result.truncated:
@@ -258,6 +312,12 @@ def check_tracking(
 
     Run on the arrays that are about to be written, not on anything held
     separately, so it checks the dataset rather than a parallel copy of it.
+
+    Under ``perturb`` that means the clean labels, not the executed actions, and
+    it stays tight: a closed-loop expert re-solves from wherever the noise left
+    the arm, so its label still lands near the next state. Measured on robosuite
+    pick_place_cube at sigma 0.05: clean-label max 0.069 rad, executed-action
+    max 0.250 -- the check would sit right on its limit had it read the latter.
     """
     mean, maximum = joint_tracking_error(episode.actions, episode.states, embodiment)
     if maximum > tolerance:
@@ -285,6 +345,7 @@ def record_episodes(
     max_attempts: int | None = None,
     keep_failures: bool = False,
     tracking_tolerance: float = TRACKING_TOLERANCE,
+    perturb: Perturb | None = None,
 ) -> RecordingSummary:
     """Record until ``episodes`` episodes have been kept, and write the dataset.
 
@@ -300,6 +361,9 @@ def record_episodes(
             kept or not, lands in the returned summary.
         cameras: which canonical cameras to record. Defaults to whatever the
             first observation carries.
+        perturb: noise on the executed action; the dataset keeps the clean one.
+            Described in the summary by its ``to_dict()``, or its ``repr`` if
+            it has none -- never by nothing, which would read as a clean dataset.
 
     Returns the summary, and also writes it to ``root/recording_summary.json``.
     """
@@ -318,7 +382,7 @@ def record_episodes(
     for attempt in range(limit):
         if kept >= episodes:
             break
-        episode = rollout(env, policy, seed=seed_start + attempt)
+        episode = rollout(env, policy, seed=seed_start + attempt, perturb=perturb)
         mean, maximum = check_tracking(episode, env.embodiment, tolerance=tracking_tolerance)
         keep = episode.success or keep_failures
 
@@ -362,7 +426,11 @@ def record_episodes(
     dataset.finalize()
 
     summary = RecordingSummary(
-        repo_id=repo_id, root=root, task_prompt=task_prompt, episodes=tuple(records)
+        repo_id=repo_id,
+        root=root,
+        task_prompt=task_prompt,
+        episodes=tuple(records),
+        perturbation=_describe(perturb),
     )
     if kept < episodes:
         # Not an error: a short dataset that says so beats a run that silently
@@ -373,6 +441,15 @@ def record_episodes(
         )
     summary.write(root / "recording_summary.json")
     return summary
+
+
+def _describe(perturb: Perturb | None) -> dict | None:
+    """Provenance for the summary. None means clean, so only clean may produce it."""
+    if perturb is None:
+        return None
+    if hasattr(perturb, "to_dict"):
+        return perturb.to_dict()
+    return {"type": "custom", "repr": repr(perturb)}
 
 
 def _write_episode(dataset, episode: Episode, task_prompt: str, cameras: Sequence[str]) -> None:
