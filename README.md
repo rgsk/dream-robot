@@ -11,8 +11,8 @@ commercial filter that decides which rung comes next.
 
 ## Status
 
-The first cell of the matrix is closed: record → dataset → train BC → eval, end to end, with a
-number and a video at the end of it. What comes next is making that number better.
+Rung 1 (reach + grasp a rigid cube) is closed in sim for both BC and ACT: record → dataset → train
+→ eval, end to end, with a number and a video for every cell. The matrix is below.
 
 | | |
 |---|---|
@@ -24,8 +24,8 @@ number and a video at the end of it. What comes next is making that number bette
 | ✅ | `core/dataset.py` + `core/record.py` → LeRobotDataset — **the seam** |
 | ✅ | `policies/bc/` — spatial-softmax visuomotor net, 0.75M params |
 | ✅ | `core/eval.py` + `registry.py` + `run.py` — any policy × any task, one command |
-| ⬜ | noisy expert — jittered waypoints, recorded recoveries (**next**, see below) |
-| ⬜ | `policies/act/` |
+| ✅ | noisy expert — shaky executed actions, clean recorded labels (`--noise-sigma`) |
+| ✅ | `policies/act/` — action chunking + transformer, 4.8M params |
 
 `uv run pytest -m "not slow"` runs the core suite without a simulator.
 
@@ -37,7 +37,8 @@ MUJOCO_GL=glfw uv run python -m dream_robot.sims.robosuite.tasks.pick_place_cube
 ```
 
 25 successful episodes ≈ 5.3k frames ≈ 176 s of demonstration, 8.9 MB on disk, about a minute to
-record. `--verify` reopens the dataset, decodes an episode out of it, and writes a video **from the
+record. Add `--noise-sigma 0.025` to shake the executed arm joints while the dataset keeps the
+expert's clean action as the label — every recovery becomes a training example. `--verify` reopens the dataset, decodes an episode out of it, and writes a video **from the
 bytes on disk** — the seam is only real once you have looked through it. Provenance (every seed,
 its outcome, its failure mode, the expert's success rate) lands in `recording_summary.json` beside
 the data.
@@ -46,6 +47,7 @@ the data.
 
 ```- 
 uv run python -m dream_robot.policies.bc.train --epochs 60
+uv run python -m dream_robot.policies.act.train --out experiments/act_pick_place_cube
 
 MUJOCO_GL=glfw uv run python -m dream_robot.core.run \
     --env robosuite/pick_place_cube --policy bc \
@@ -63,26 +65,39 @@ episodes instead, `--video-seeds 1000 1003 1009` writes just those to `videos/se
 
 ## The matrix so far
 
-`robosuite/pick_place_cube`, 20 episodes from seed 1000 — disjoint from the 25 seeds the
-demonstrations were recorded on.
+`robosuite/pick_place_cube`, 20 evaluation episodes per run from seed 1000 — disjoint from every
+recording seed. Where a cell says 3 runs, the policy was trained three times with different seeds.
 
-| policy | success | median cycle | failures |
-|---|---|---|---|
-| expert (scripted) | **100%** (20/20) | 6.9 s | — |
-| bc (20 demos, 0.75M params) | **25%** (5/20) | 7.6 s | 14 × `no_grasp`, 1 × `wrong_target` |
+| data | BC (0.75M) | ACT (4.8M) |
+|---|---|---|
+| 25 clean demos | 5/20 (25%) | **49/60 (82%)** · 3 runs |
+| 25 half-shake demos | 4/20 (20%) | 14/20 (70%) |
+| 100 clean demos | 32/60 (53%) · 3 runs | **20/20 (100%)** |
+| 100 half-shake demos | **58/60 (97%)** · 3 runs | **20/20 (100%)** |
 
-**The failure histogram is the finding.** BC transports and places correctly whenever it gets hold
-of the cube — its successful episodes have expert-like cycle times — and misses the grasp in 93% of
-its failures. Held-out action error is 9.6 mrad, *below* the controller's own 18 mrad tracking lag,
-so the policy predicts the expert's actions accurately on the expert's own states.
+Scripted expert: 20/20, median cycle 6.9 s. Learned policies' successes run 7.0–7.8 s (BC on 25
+half-shake demos: 11.1 s).
+Full shake (sigma 0.05) hurts BC: 0/20 at 25 demos, 2/20 at 100.
 
-Re-evaluated on the seeds it trained on, it scores 50%. That splits the loss in two: half is
-compounding error — it cannot hold together a trajectory it has seen the demonstration for — and
-half is generalisation to unseen cube positions. The first half is exactly what
-[ROADMAP](ROADMAP.md) predicts for a **deterministic** expert: the demonstrations cover a ribbon of
-state space one trajectory wide, and a policy that drifts off it has never seen how to get back.
-The fix is prescribed there too, and it is the next box: a noisy expert with jittered waypoints,
-wider start poses, and recorded recoveries from perturbed states.
+**What it says.**
+
+- **BC fails at the grasp, and not for lack of precision.** It lands 1–4 cm beside the cube and
+  freezes with the gripper open. Clean demos never show an off-centre grasp — the expert is always
+  within 0.25 cm — so BC has never seen what to do from there.
+- **Shaky demos fix BC, but only with enough of them.** Half shake puts the gripper off-centre and
+  records the expert correcting; at 100 demos that takes BC from 53% to 97%. At 25 demos it does
+  nothing, and full shake makes the corrections too inconsistent to learn.
+- **ACT doesn't need them.** Predicting a 50-step chunk and averaging overlapping plans removes the
+  freeze by itself: 82% on the same 25 clean demos where BC gets 25%, and 100% on 100 clean demos.
+  Its remaining failures are 3–4 cm edge pinches — it commits to a grasp it has mis-aimed.
+- **Held-out action error does not predict success.** Clean ×100 BC has the best error of any BC run
+  and scores 53%; ACT's error on 25 demos is about the same as BC's (9.2–11.2 vs 9.6 mrad) and it scores
+  3× higher.
+
+Caveats: the ACT 100-demo cells and ACT 25 half shake are single training runs, and 20/20 over 20
+episodes means "≳ 85%", not "perfect". Every step, number and dead end is in
+[experiments/noisy_expert/notes.md](experiments/noisy_expert/notes.md) and
+[experiments/act/notes.md](experiments/act/notes.md).
 
 ## The shape
 

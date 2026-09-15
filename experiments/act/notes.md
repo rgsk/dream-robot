@@ -154,3 +154,10 @@ Reading: ~20/20 → at 100 demos ACT doesn't need the shake; clearly below → t
 - **At 100 demos:** ACT is at ceiling on both datasets; BC only on half shake. The noisy expert is a fix for single-step BC's stall, which chunking removes by itself.
 - Caveats: ACT 100-demo cells are single runs; 20 eval episodes each, so 20/20 means "≳ 85%" at this sample size, not "perfect".
 Results: `experiments/act_clean100/eval/act_on_robosuite_pick_place_cube/results.json`.
+
+**Committed** 2026-09-15 as `4ac4372` (code, tests, notes, scripts, per-run summaries and results; logs not kept).
+
+## PENDING
+
+- ~~README results matrix~~ — done, committed with the README update.
+- Single-run cells: ACT on 25 half shake, 100 clean, 100 half shake.
