@@ -43,10 +43,17 @@ def _robosuite_pick_place_two_bins_fixed(**kwargs):
     return PickPlaceTwoBins(replace(TaskConfig.load(), fixed_cube_pose=True), **kwargs)
 
 
+def _robosuite_two_arm_lift(**kwargs):
+    from dream_robot.sims.robosuite.tasks.two_arm_lift.env import TwoArmLiftTask
+
+    return TwoArmLiftTask(**kwargs)
+
+
 TASKS: dict[str, Callable] = {
     "robosuite/pick_place_cube": _robosuite_pick_place_cube,
     "robosuite/pick_place_two_bins": _robosuite_pick_place_two_bins,
     "robosuite/pick_place_two_bins_fixed": _robosuite_pick_place_two_bins_fixed,
+    "robosuite/two_arm_lift": _robosuite_two_arm_lift,
 }
 
 

@@ -1,0 +1,151 @@
+# two_arm_lift -- robosuite / Panda + Panda
+#
+# T6 in ROADMAP's task matrix: the coordination axis. Two arms, one pot, one
+# handle each; the pot only rises if both arms grasp and lift together.
+#
+# Deliberately NOT "one holds, other inserts". That bundles coordination with
+# T3's precision-and-contact axis, and the matrix asks each task to isolate one.
+# See experiments/t6/notes.md for why robosuite's own TwoArmPegInHole was
+# rejected (it has no grippers at all, so it cannot be expressed in spec.md's
+# action contract).
+
+name: two_arm_lift
+sim: robosuite
+robot: Panda + Panda
+
+prompt: lift the pot with both arms
+
+control:
+  hz: 30                    # spec.md, frozen, same as every other task
+  horizon_seconds: 20.0
+
+cameras:
+  height: 128
+  width: 128
+  # backend name -> canonical name.
+  #
+  # Three cameras, not two. A bimanual scene has two wrist cameras and the
+  # single-arm contract has one `wrist` slot; `wrist_left` / `wrist_right` were
+  # added to CANONICAL_CAMERAS for exactly this, additively, so T1 and T2
+  # datasets still validate unchanged.
+  #
+  # Which arm is which: in the `parallel` arrangement robot0's base sits at
+  # y = -0.25 and robot1's at y = +0.25, and +y is screen-right in the front
+  # camera (the same convention that made T2's y = +0.20 bin the "right" one).
+  # So robot0 is the left arm and robot1 the right.
+  # birdview, not T1's agentview. Compared at 128 px in scratch/t6/cameras.png:
+  # agentview frames the pot beautifully and puts BOTH arms out of frame, and
+  # its side-on angle hides the marbles inside the pot until they spill.
+  # frontview sees both arms but the pot is ~20 px wide. birdview is the only
+  # one carrying all three things this task depends on -- both grippers, the
+  # pot's yaw (the randomised variable), and the marbles.
+  mapping:
+    birdview: top
+    robot0_eye_in_hand: wrist_left
+    robot1_eye_in_hand: wrist_right
+
+render:
+  # frontview sees both arms and the pot between them. birdview and sideview
+  # both drop one arm out of frame at the lift.
+  camera: frontview
+  height: 256
+  width: 256
+
+scene:
+  # `parallel` puts both bases on the -x side of the table, side by side, like
+  # an ALOHA-style two-arm station. `opposed` faces them across the table, which
+  # renders worse from any single camera and is further from the two-arm rigs
+  # this is meant to transfer to.
+  arrangement: parallel
+  table_full_size: [0.8, 0.8, 0.05]
+
+  # Marbles on the tray. Without them a tilted lift still scores: success is a
+  # height threshold and the tray's angle is free. Marbles make the tilt cost
+  # something -- they roll off, and that is visible in the video rather than
+  # only in a tilt column nobody watches. They also rehearse T4 (pour N balls),
+  # which is the same trick: rigid spheres standing in for a fluid.
+  marbles:
+    count: 9
+    radius: 0.018
+    mass: 0.02
+    # Fraction that must still be aboard for the lift to count.
+    keep_fraction: 0.75
+
+  # A TRAY, not robosuite's pot -- see tray.py. The pot is a 12 cm box with
+  # 13 cm walls, and a ball never escapes a wall taller than itself, so its
+  # contents sit tight until it is past 90 degrees. Measured across every fill
+  # and depth in scripts/t6_spill_curve.py.
+  tray:
+    # What the lip is calibrated to. Documentation for lip_over_radius below --
+    # changing this alone changes nothing.
+    spill_angle_deg: 45.0
+    # Lip height as a multiple of the marble radius. MEASURED, in
+    # scripts/t6_spill_curve.py: a 9-marble tray holds all 9 at 40 deg and
+    # drops to 6 at 45 deg with this lip.
+    #
+    #   u = L/r    0.60   0.76   0.80   0.85   0.93
+    #   onset      30°    45°    50°    55°    70°
+    #
+    # The static derivation in tray.py gives L = r·(1 − cos θ) = 0.29 r for
+    # 45 deg, and that is a LOWER BOUND, not the answer: it balances a ball
+    # sitting still against the lip. A ball on a 12 cm tray starts rolling once
+    # the tilt passes the friction angle (atan 0.4 ≈ 22°) and arrives at the lip
+    # with momentum, so it hops a lip that would statically hold it. Built at
+    # 0.29 r the tray spills at 20 deg. Hence the measured number.
+    #
+    # The constraint the derivation does give is hard and worth keeping: L < r
+    # always, so a wall taller than the ball can never be escaped. That is why
+    # the original pot, at 11 r, does not spill at any angle below 90 deg.
+    lip_over_radius: 0.76
+    handle_height: 0.055
+
+success:
+  # Pot bottom must clear the table top by this much. Same quantity robosuite's
+  # own _check_success uses, recomputed here so the number lives in this file
+  # rather than inside the backend.
+  #
+  # AND the pot must still hold scene.marbles.keep_fraction of its marbles. The
+  # height alone is robosuite's own predicate and it does not care about tilt.
+  lift_height: 0.10
+
+failure:
+  # Pot's own z axis vs world z. Past this the pot has been tipped rather than
+  # lifted -- the visible signature of two arms pulling out of sync.
+  #
+  # This is the NUMERIC failure line. The marbles cannot be it: measured in
+  # scripts/t6_spill_curve.py, an open box does not spill below ~90 deg at any
+  # fill or depth, because for tilt < 90 deg gravity still has a component
+  # pointing INTO the pot and the contents pile against a wall instead of
+  # reaching the rim. The marbles catch outright dumps on video; this catches
+  # the merely-botched lifts.
+  tilt_threshold_deg: 45.0
+  # Fraction of lift_height the pot must have reached at some point to count as
+  # "had it and lost it" rather than "never got it off the table".
+  dropped_lift_fraction: 0.5
+
+# The scripted expert. Written in step 2; the numbers below are the ones the
+# phase machine reads, and they are tuned against this scene, not inherited.
+expert:
+  approach_height: 0.10       # hover above the handle before descending
+  grasp_dz: 0.005             # grip-site target relative to handle centre
+  lift_height: 0.25           # above the grasp point
+
+  reach_tolerance: 0.015
+  fine_tolerance: 0.010
+  lift_clearance: 0.03
+
+  # Coordination, as a predicate rather than a wait. Neither arm advances out
+  # of a phase until BOTH arms satisfy that phase -- this is the one structural
+  # difference from T1's expert and the entire reason the task is interesting.
+  # A per-arm phase machine with no barrier produces exactly the failure the
+  # policies are supposed to be tested on, in the demonstrations themselves.
+  sync_barrier: true
+
+  grip_settle_window: 4
+  grip_settle_epsilon: 2.5e-3
+
+  phase_timeout_seconds: 5.0
+
+  ik:
+    damping: 0.15
+    max_joint_step: 0.06

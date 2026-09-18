@@ -41,6 +41,13 @@ class FailureMode(StrEnum):
     WRONG_TARGET = "wrong_target"    # placed, but not where it was asked
     KNOCKED_OVER = "knocked_over"    # disturbed the scene
     TIMEOUT = "timeout"              # ran out of steps mid-task
+    # Bimanual only: the arms did not act as one. One gripper holds its handle
+    # and the other does not, or one starts lifting while the other is still
+    # descending. Distinct from NO_GRASP (nothing was ever held) and from
+    # DROPPED (both had it and lost it), and it is the whole failure axis the
+    # coordination task isolates -- a histogram that cannot name it reports the
+    # task's characteristic failure as one of two things it is not.
+    DESYNCHRONISED = "desynchronised"
 
 
 @dataclass(frozen=True)

@@ -25,7 +25,16 @@ import numpy as np
 # Every backend names its cameras differently -- agentview, robot0_eye_in_hand,
 # cam_high, top. Adapters normalise to these, and nothing downstream ever sees a
 # backend's own name. Silent cross-sim breakage lives here if it lives anywhere.
-CANONICAL_CAMERAS: tuple[str, ...] = ("top", "wrist")
+#
+# ``wrist_left`` / ``wrist_right`` were added for the first bimanual task: a
+# two-arm scene has two wrist cameras and one ``wrist`` slot to put them in.
+# The addition is deliberately additive -- ``wrist`` still means "the wrist
+# camera" on a single-arm task, so every dataset recorded before this line
+# changed still validates. A rename would have invalidated them all.
+#
+# A task uses a *subset*: single-arm records top + wrist, bimanual records
+# top + wrist_left + wrist_right. Nothing requires all four.
+CANONICAL_CAMERAS: tuple[str, ...] = ("top", "wrist", "wrist_left", "wrist_right")
 
 STATE_DTYPE = np.float32
 ACTION_DTYPE = np.float32
@@ -68,6 +77,12 @@ class Embodiment:
 
 #: robosuite Panda: 7 arm joints + 1 gripper -> dim 8, spec.md's float32[8].
 PANDA = Embodiment(arm_joints=7, grippers=1)
+
+#: Two robosuite Pandas: 14 arm joints + 2 grippers -> dim 16. The example in
+#: this module's docstring, made real by the first bimanual task. Layout is
+#: [arm0 (7) | arm1 (7) | gripper0 | gripper1], and which physical arm is 0 is
+#: the task adapter's business, recorded in its task.yaml.
+BIMANUAL_PANDA = Embodiment(arm_joints=14, grippers=2)
 
 
 @dataclass(frozen=True)

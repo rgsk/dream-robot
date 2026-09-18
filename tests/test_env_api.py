@@ -150,9 +150,17 @@ def test_timeout_reports_a_failure_mode():
 
 
 def test_failure_modes_are_a_closed_set():
-    """A free-text reason string would make histograms non-summable."""
+    """A free-text reason string would make histograms non-summable.
+
+    This list is meant to need editing rarely and deliberately. ``desynchronised``
+    was added with the first bimanual task (T6), where "one arm holds its handle
+    and the other does not" is the failure axis under test and neither
+    ``no_grasp`` nor ``dropped`` names it. Adding a bucket is a decision about
+    every task's histogram, which is why it fails a test until made explicitly.
+    """
     assert {m.value for m in FailureMode} == {
         "none", "no_grasp", "dropped", "wrong_target", "knocked_over", "timeout",
+        "desynchronised",
     }
 
 
