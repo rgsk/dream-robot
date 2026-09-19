@@ -53,7 +53,10 @@ class TrayWithHandlesObject(PotWithHandlesObject):
 
     Args:
         lip_height: wall height above the inner floor, in metres. Set it from
-            the marble radius: ``0.293 * r`` gives a 45 degree spill.
+            the marble radius: ``0.293 * r`` gives a 45 degree spill, which is
+            the derivation above taken at face value. Measured on the scene at
+            that lip: nothing leaves below 15 deg however long it is held,
+            20 deg empties in ~5 s, and 25 deg and up inside a second.
         handle_height: height of the handle bars above the tray's centre plane.
             Independent of the lip -- that independence is the whole point.
     """

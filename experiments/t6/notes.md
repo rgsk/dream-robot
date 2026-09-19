@@ -597,3 +597,128 @@ is what makes the success criterion a single physical statement instead of three
 
 **Proposed, for approval:** `lip_over_radius: 0.293`; success = tray above `lift_height`, still above
 it 2 s later, with `keep_fraction` of the marbles aboard. Expert 20/20, ablation 5/20.
+
+---
+
+## Step 2f — applied, and verified on the real task (2026-09-19)
+
+Both changes are in: `lip_over_radius: 0.293`, and success = tray above `lift_height`, **still above
+it 2 s later**, with `keep_fraction` of the marbles aboard. `tilt_threshold_deg` is now diagnosis
+only. Full suite **210 passed** (one new test: success cannot fire on the frame the tray first
+clears the height).
+
+```-
+                     success   tilt at the end   marbles   episode length
+  barrier on         20 / 20   0.1 - 6.7 deg     9/9 all   175-246 steps
+  barrier off         5 / 20   -                 -         -
+```
+
+The failure histogram without the barrier is now the shape the task was built to produce:
+**12 desynchronised, 3 knocked_over, 5 success**. Before these changes the same ablation scored
+11 successes and the marble check never fired once.
+
+Videos: `experiments/t6/videos/expert_two_arm_lift.mp4` (clean, seeds 1000/1002/1008) and
+`..._no_barrier.mp4` (seeds 1005/1017/1015 — two trays end up dangling at 60-70 deg with the marbles
+gone, one never gets the second handle at all).
+
+Next: record the dataset.
+
+---
+
+## Step 2g — a graded spill: 25 small balls on a 6 mm rim (2026-09-19)
+
+Review ask: make the count track *how badly* the tray tipped, not just whether it did, and do it
+without making a 35 deg lift acceptable. Swept ball radius x rim/radius x **fill** (fill is a lever,
+not an assumption) in `experiments/t6/scripts/graded_spill.py`, 36 configs, ranked on: starts full
+below 20 deg, most distinct levels, no reversals, widest graded band.
+
+Mixed ball sizes were considered and rejected before measuring, on the user's physics: the big balls
+reach the low edge first and dam the small ones behind them, so the release is a queue rather than a
+size-ordered curve.
+
+**Chosen: r = 10 mm, rim 0.60 r = 6.0 mm, 25 balls (a full layer).**
+
+```-
+  tilt      15°  20°  25°  30°  35°  40°  45°
+  aboard     25   25   21   15   15   12    0
+```
+
+Onset stays at 25 deg — the same as the 9-ball tray — so nothing sloppy became acceptable. The
+gradation comes from **crowding**, not from a more forgiving rim: packed balls have no run-up and
+have to queue at the rim, so they leave in groups. That is also why the rim ratio had to rise from
+0.293 to 0.60: at 0.293 a *full* tray sheds everything by 15 deg, because the balls behind push the
+front row over a rim that would hold any of them alone. Rim ratio and fill trade against each other;
+only the pair means anything.
+
+**Verified on the task. Full suite: 210 passed.**
+
+```-
+                     success   tilt          balls aboard
+  barrier on         20 / 20   0.2-6.7 deg   25 on 15 seeds, 24 on 5
+  barrier off         5 / 20   -             graded: 2, 5, 17, 21-25
+```
+
+The two trays left dangling at 63 and 74 deg now report **5 and 2 balls of 25**; the ones that were
+simply dropped report 17-22. That is the severity signal the histogram never had.
+
+**Costs, both real.** A packed tray has a noise floor: 5 of 20 clean lifts lose a single ball to the
+jostle as the grippers close, so "perfect" is 24-25 rather than always 25. The rollout test pins that
+explicitly (at most one lost) rather than loosening to the pass line. And 25 free bodies instead of 9
+makes each episode slower to simulate, which will show up in recording wall-clock.
+
+**Duration does not grade, and that is physics, not tuning.** At any angle the balls that can escape
+leave within about a second and the rest sit in equilibrium; holding ten seconds sheds no more than
+holding one. The count reports how far the tray tipped, not how long. The 2 s hold in the success
+test is still doing its own job: it catches the tray that falls.
+
+**Placement bug, found by looking at the picture (2026-09-19).** The balls spawned in a rhombus with
+its corners on the rim. The spawn lattice was written straight into world x/y while the placement
+sampler yaws the tray by up to 60 deg either side of pi, so a square grid landed across a square
+cavity at an angle: four balls sat **9 mm outside the inner wall** before the episode began. It read
+as a flaky "24 of 25 on clean lifts" — a tolerance story — and it was a rotation missing from three
+lines of reset code. Every in-scene marble number measured before this had a few balls perched on the
+rim, which is worth remembering when comparing back to steps 2b-2f.
+
+Fixed by rotating the lattice into the tray's frame. Minimum clearance is now 7.5 mm, nothing
+outside, and the clean expert returns **25 of 25 on all 20 eval seeds** instead of 24 on five of them.
+The rollout test asserts the full tray rather than "at most one lost".
+
+```-
+                     success   tilt          balls aboard
+  barrier on         20 / 20   0.2-6.7 deg   25/25, every seed
+  barrier off         6 / 20   -             graded: 2, 6, 16-23
+```
+
+## Step 2h — re-sweep with the balls actually inside the rim (2026-09-19)
+
+Three faults in the first sweep, all found by looking at a picture rather than a number:
+
+1. **The bench rig used a 5 mm wall**, so its cavity fitted a 6x6 lattice where the task fits 5x5.
+   The winner did not transfer as measured. Now `HALF, WALL = 0.07, 0.01` — the scene's tray.
+2. **Partial fills were packed row-major**, so a half-full tray sat against one wall and spilled the
+   instant it tipped that way. Slots are now ordered centre-outwards, in the rig *and* in the env.
+3. **Any lattice that overhangs the rim is rejected**, not measured: 8 mm balls at 37 and 49 per
+   layer overhang by 1.6 mm, which loses balls at rest and reads as an early spill.
+
+**Single deterministic runs were also deciding configs on a 3-ball difference.** With jitter and 3
+repeats the curves are sharper and several "reversals" vanish:
+
+```-
+   r   rim    n |    15°    20°    25°    30°    35°    40°
+  10   6.0   21 |  21.0   21.0   20.0    6.7    2.3    0.3     cliff at 25-30
+  10   6.0   25 |  25.0   25.0   18.3    6.3    1.7    0.7     cliff at 25-30
+  10   7.5   19 |  19.0   19.0   19.0   19.0   19.0   17.3     too forgiving
+   8   4.8   24 |  24.0   18.0   12.0    5.0    1.7    2.3     graded across 20-35
+```
+
+**The 8 mm tray looked best on the bench and lost in the scene.** Verified on the task: clean lifts
+20/20 but five seeds finish 22-23 of 24, and the graded band never appears, because a lift that
+touches 22 deg for half a second keeps everything — only sustained tilt spills, and the bench holds
+its angle for two seconds. So the low-tilt gradation is a property of the rig, not of the task.
+
+**Kept: 10 mm, rim 6.0 mm, 25 balls.** Re-verified after the placement fixes — **210 passed**, clean
+expert 20/20 with **25 of 25 on every seed**, ablation 5-7/20 across runs (the jitter makes it vary)
+with graded counts 2, 6, 16-23.
+
+What the re-sweep bought was not a better config. It was two placement bugs and the knowledge that
+the bench rig's low-tilt curve does not describe the task.

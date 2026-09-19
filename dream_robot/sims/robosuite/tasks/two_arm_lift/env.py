@@ -18,6 +18,11 @@ point of the task:
    handle and the other does not. Neither ``NO_GRASP`` nor ``DROPPED`` describes
    it, and it is the exact failure this task exists to measure.
 
+Success is one physical statement -- **lifted, still lifted two seconds later,
+still full**. Not a height threshold: that fires the instant the tray crosses
+the line, and a tray hoisted at 48 degrees crossed it cleanly because it had not
+yet had time to fall or to spill. The hold gives the physics time to report.
+
 No MJCF authoring: unlike T1's bin, robosuite ships this scene. The adapter is
 where the backend's names die, as always.
 """
@@ -86,17 +91,18 @@ class TraySpec:
     handle_height: float
 
     def lip_height(self, marble_radius: float) -> float:
-        """Lip height, as a measured multiple of the marble radius.
+        """Lip height, as a multiple of the marble radius.
 
-        Not the static formula. tray.py derives L = r·(1 − cos θ) by balancing a
-        ball sitting still against the lip, which gives 0.29 r for 45 deg -- and
-        a tray built to it spills at 20 deg, because a ball that has rolled the
-        length of a 12 cm tray arrives with momentum and hops a lip that would
-        statically hold it. The calibration is in task.yaml with the curve it
-        came from.
+        The derivation in tray.py, unmodified: L = r·(1 − cos θ), which is
+        0.293 r for a 45 degree escape. It was briefly raised to 0.76 r to match
+        scripts/t6_spill_curve.py, which tilts the tray first and drops the
+        marbles in -- they roll its whole length and hop a lip that would
+        statically hold them. The scene tilts the tray over about a second with
+        the marbles already resting in it, so the quasi-static number is the
+        right one; 0.76 r put the true escape angle at 76 degrees.
 
-        What the derivation does give, and what still holds, is L < r: a ball
-        cannot escape a wall taller than itself at any angle below 90 deg.
+        The load-bearing constraint either way is L < r: a ball cannot escape a
+        wall taller than itself at any angle below 90 deg.
         """
         return float(marble_radius * self.lip_over_radius)
 
@@ -115,6 +121,7 @@ class TaskConfig:
     marbles: MarbleSpec
     tray: TraySpec
     lift_height: float
+    hold_seconds: float
     tilt_threshold_deg: float
     dropped_lift_fraction: float
 
@@ -143,6 +150,7 @@ class TaskConfig:
                 handle_height=float(raw["scene"]["tray"]["handle_height"]),
             ),
             lift_height=float(raw["success"]["lift_height"]),
+            hold_seconds=float(raw["success"]["hold_seconds"]),
             tilt_threshold_deg=float(raw["failure"]["tilt_threshold_deg"]),
             dropped_lift_fraction=float(raw["failure"]["dropped_lift_fraction"]),
         )
@@ -150,6 +158,11 @@ class TaskConfig:
     @property
     def horizon_steps(self) -> int:
         return int(round(self.horizon_seconds * self.control_hz))
+
+    @property
+    def hold_steps(self) -> int:
+        """Consecutive steps the tray must stay up for the lift to count."""
+        return int(round(self.hold_seconds * self.control_hz))
 
 
 class _TwoArmLiftWithMarbles(TwoArmLift):
@@ -256,13 +269,31 @@ class _TwoArmLiftWithMarbles(TwoArmLift):
         jitter = 0.05 * m.radius
         usable = 2 * (self.pot.inner_half_width - m.radius)
         per_row = max(1, int(usable // pitch) + 1)
+        # The lattice is laid out in the TRAY's frame and rotated into the
+        # world, not written straight into world x/y. The placement sampler
+        # yaws the tray by up to 60 degrees either side of pi, so an
+        # axis-aligned grid lands as a rhombus across a square cavity: the
+        # outermost balls sit on the rim or 9 mm beyond it before the episode
+        # starts, and a few fall off during the lift. It reads as a flaky
+        # "24 of 25" rather than as a placement bug.
+        rot = np.array(self.sim.data.body_xmat[self.pot_body_id]).reshape(3, 3)
+        # Slots ordered from the CENTRE outwards, so a tray that is not filled
+        # to capacity is still filled symmetrically. Row-major from slot 0 packs
+        # one corner and leaves the opposite one bare, which spills on the first
+        # tilt toward the loaded side -- a placement artefact that reads as the
+        # tray being fragile.
+        grid = [
+            (np.array([c, r]) - (per_row - 1) / 2.0) * pitch
+            for r in range(per_row) for c in range(per_row)
+        ]
+        grid.sort(key=lambda xy: float(xy @ xy))
         for slot, addr in enumerate(self.marble_qpos_addrs):
-            col, row = slot % per_row, (slot // per_row) % per_row
-            layer = slot // (per_row * per_row)
-            local = (np.array([col, row]) - (per_row - 1) / 2.0) * pitch
+            local = grid[slot % len(grid)]
+            layer = slot // len(grid)
             local = local + np.random.uniform(-jitter, jitter, size=2)
+            offset = rot @ np.array([local[0], local[1], layer * pitch])
             self.sim.data.qpos[addr : addr + 3] = [
-                centre[0] + local[0], centre[1] + local[1], floor_z + layer * pitch
+                centre[0] + offset[0], centre[1] + offset[1], floor_z + offset[2]
             ]
             self.sim.data.qpos[addr + 3 : addr + 7] = [1.0, 0.0, 0.0, 0.0]
         for addr in self.marble_qvel_addrs:
@@ -355,6 +386,7 @@ class TwoArmLiftTask:
         self._t = 0
         self._max_pot_lift = self._pot_lift()
         self._ever_grasped = [False, False]
+        self._steps_held_up = 0
         return self._observe()
 
     def step(self, action) -> StepResult:
@@ -374,8 +406,15 @@ class TwoArmLiftTask:
         for i, held in enumerate(self.handles_held):
             self._ever_grasped[i] = self._ever_grasped[i] or held
 
+        # Consecutive, not cumulative: a tray that dips back to the table has
+        # not held anything, and counting total time above the line would let a
+        # bouncing lift accumulate its way to a success.
+        if self._pot_lift() > self._cfg.lift_height:
+            self._steps_held_up += 1
+        else:
+            self._steps_held_up = 0
         success = (
-            self._pot_lift() > self._cfg.lift_height
+            self._steps_held_up >= self._cfg.hold_steps
             and self.marbles_inside >= self._cfg.marbles.required_inside
         )
         truncated = (not success) and self._t >= self._cfg.horizon_steps
@@ -524,7 +563,13 @@ class TwoArmLiftTask:
         return pot_bottom - table_top
 
     def _pot_tilt_deg(self) -> float:
-        """Angle between the pot's own z axis and world z."""
+        """Angle between the pot's own z axis and world z.
+
+        A diagnosis number, not a success condition. The hold in ``step`` makes
+        the angle redundant for scoring -- a tray tilted when the height fires
+        has fallen or spilled within two seconds -- but it is still the clearest
+        label for *why* such an episode failed.
+        """
         sim = self._env.sim
         rot = np.array(sim.data.body_xmat[self._env.pot_body_id]).reshape(3, 3)
         cos = float(np.clip(rot[:, 2] @ np.array([0.0, 0.0, 1.0]), -1.0, 1.0))

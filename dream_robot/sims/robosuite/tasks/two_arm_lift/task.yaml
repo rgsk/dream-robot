@@ -68,10 +68,24 @@ scene:
   # only in a tilt column nobody watches. They also rehearse T4 (pour N balls),
   # which is the same trick: rigid spheres standing in for a fluid.
   marbles:
-    count: 9
-    radius: 0.018
-    mass: 0.02
-    # Fraction that must still be aboard for the lift to count.
+    # A FULL tray of small balls, not a handful of big ones. The count is the
+    # measurement axis: 9 large balls share one escape angle and leave together,
+    # so the spill was pass/fail. 25 small ones packed edge to edge have no
+    # run-up and have to queue at the rim, so they leave in groups and the count
+    # reports HOW FAR the tray tipped, not just that it did:
+    #
+    #   tilt      15°  20°  25°  30°  35°  40°  45°
+    #   aboard     25   25   21   15   15   12    0
+    #
+    # Swept over ball size x rim ratio x fill in
+    # experiments/t6/scripts/graded_spill.py; this is the only corner that both
+    # starts full below 20 deg and grades monotonically after.
+    count: 25
+    radius: 0.010
+    # Constant density against the old 18 mm / 20 g ball, so the payload falls
+    # with the volume rather than the task quietly getting heavier.
+    mass: 0.0034
+    # Fraction that must still be aboard for the lift to count: 19 of 25.
     keep_fraction: 0.75
 
   # A TRAY, not robosuite's pot -- see tray.py. The pot is a 12 cm box with
@@ -79,37 +93,47 @@ scene:
   # contents sit tight until it is past 90 degrees. Measured across every fill
   # and depth in scripts/t6_spill_curve.py.
   tray:
-    # What the lip is calibrated to. Documentation for lip_over_radius below --
-    # changing this alone changes nothing.
+    # The angle the tray was designed around: documentation, not an input. The
+    # rim below is chosen by sweep, not by solving for this number -- a packed
+    # tray's onset is set by crowding as much as by geometry.
     spill_angle_deg: 45.0
-    # Lip height as a multiple of the marble radius. MEASURED, in
-    # scripts/t6_spill_curve.py: a 9-marble tray holds all 9 at 40 deg and
-    # drops to 6 at 45 deg with this lip.
+    # Lip height as a multiple of the ball radius. Ball radius r, lip L:
     #
-    #   u = L/r    0.60   0.76   0.80   0.85   0.93
-    #   onset      30°    45°    50°    55°    70°
+    #   tan θ_escape = √(2rL − L²) / (r − L)
     #
-    # The static derivation in tray.py gives L = r·(1 − cos θ) = 0.29 r for
-    # 45 deg, and that is a LOWER BOUND, not the answer: it balances a ball
-    # sitting still against the lip. A ball on a 12 cm tray starts rolling once
-    # the tilt passes the friction angle (atan 0.4 ≈ 22°) and arrives at the lip
-    # with momentum, so it hops a lip that would statically hold it. Built at
-    # 0.29 r the tray spills at 20 deg. Hence the measured number.
+    # for ONE ball resting against the lip, which gives L = r·(1 − cos θ) and so
+    # 0.293 r for a 45 deg escape. A packed tray is not one ball: the balls
+    # behind push the front row over a rim that would hold them alone, so a full
+    # tray at 0.293 r sheds everything by 15 deg. 0.60 r restores the onset to
+    # 25 deg with the tray full, and the crowding that cost us the margin is
+    # what buys the graded curve above.
     #
-    # The constraint the derivation does give is hard and worth keeping: L < r
-    # always, so a wall taller than the ball can never be escaped. That is why
-    # the original pot, at 11 r, does not spill at any angle below 90 deg.
-    lip_over_radius: 0.76
+    # Two earlier values, both wrong and both worth remembering. 0.76 r was
+    # "measured" in scripts/t6_spill_curve.py, which tilts the tray first and
+    # drops the balls in so they roll its full length and hop a rim that would
+    # statically hold them -- the scene tilts slowly with the balls already at
+    # rest, so that rig measures a regime the task never enters, and 0.76 r put
+    # the real escape angle at 76 deg. 0.293 r then fixed the angle but only for
+    # a sparse tray. See experiments/t6/notes.md, steps 2c-2g.
+    lip_over_radius: 0.60
     handle_height: 0.055
 
 success:
   # Pot bottom must clear the table top by this much. Same quantity robosuite's
   # own _check_success uses, recomputed here so the number lives in this file
   # rather than inside the backend.
-  #
-  # AND the pot must still hold scene.marbles.keep_fraction of its marbles. The
-  # height alone is robosuite's own predicate and it does not care about tilt.
   lift_height: 0.10
+  # ...and STILL clear it this many seconds later, with the marbles aboard.
+  #
+  # Without the hold, success fires the instant the tray crosses the height, and
+  # a tray hoisted at 48 degrees scored a clean success -- it had not yet had
+  # time to fall or to spill. Two seconds is enough for both: measured, a lift
+  # that reaches 57 deg as the height fires is back on the table by then.
+  #
+  # This is why `failure.tilt_threshold_deg` is NOT a success condition. One
+  # physical statement -- lifted, still lifted, still full -- beats three
+  # thresholds, and the angle stays where it is useful: labelling the failure.
+  hold_seconds: 2.0
 
 failure:
   # Pot's own z axis vs world z. Past this the pot has been tipped rather than

@@ -57,6 +57,11 @@ def test_expert_lifts_the_tray_without_spilling_it(rig):
     result, _, _, phases = rollout(env, policy, seed=1000)
     assert result.success, f"failed in {phases[-1]} as {result.failure_mode}"
     assert result.failure_mode is FailureMode.NONE
+    # Every ball, not "most". A clean lift losing the odd ball looked like the
+    # price of a packed tray and was really a placement bug: the spawn lattice
+    # was laid out in world axes while the tray is randomly yawed, so the
+    # corners of the grid hung over the rim. Now that it rotates with the tray,
+    # all 20 eval seeds finish 25 of 25, and anything less is a regression.
     assert env.marbles_inside == env._cfg.marbles.count
     assert env._pot_tilt_deg() < env._cfg.tilt_threshold_deg
 
@@ -122,3 +127,31 @@ def test_without_the_barrier_the_same_expert_desynchronises(rig):
     assert not result.success
     assert result.failure_mode is FailureMode.DESYNCHRONISED
     assert any(left != right for left, right in phases), "arms never diverged at all"
+
+
+def test_success_needs_the_tray_held_up_not_just_lifted(rig):
+    """The lift has to survive two seconds, not just happen.
+
+    Without the hold, success fires on the frame the tray crosses the height --
+    which is how a tray hoisted at 48 degrees scored a clean success, having had
+    no time yet to fall or to spill. Assert the gap directly: the episode cannot
+    end on the frame it first goes above the line.
+    """
+    env, policy = rig
+    obs = env.reset(seed=1000)
+    policy.reset()
+    first_above = None
+    for step in range(env._cfg.horizon_steps):
+        action, _ = policy(obs)
+        result = env.step(action)
+        obs = result.observation
+        if first_above is None and env._pot_lift() > env._cfg.lift_height:
+            first_above = step
+        if result.success:
+            assert first_above is not None
+            assert step - first_above >= env._cfg.hold_steps - 1, (
+                f"succeeded {step - first_above} steps after clearing the height, "
+                f"hold is {env._cfg.hold_steps}"
+            )
+            return
+    raise AssertionError("expert never succeeded")

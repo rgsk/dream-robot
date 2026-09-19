@@ -40,11 +40,12 @@ def main():
     radius = float(sys.argv[1]) / 1000.0 if len(sys.argv) > 1 else 0.012
     u = float(sys.argv[2]) if len(sys.argv) > 2 else 0.85
     hold_steps = int(round((float(sys.argv[3]) if len(sys.argv) > 3 else HOLD_SECONDS) * 30))
+    forced_count = int(sys.argv[4]) if len(sys.argv) > 4 else None
     # Lattice columns the env will actually fit, so the count never spills into
     # a second layer -- on a 10 mm lip a stacked layer rolls off at rest.
     inner = 0.06
     per_row = max(1, int((2 * (inner - radius)) // (2.1 * radius)) + 1)
-    count = per_row * per_row
+    count = forced_count or per_row * per_row
     mass = BASE_MASS * (radius / BASE_R) ** 3
 
     base = TaskConfig.load()
