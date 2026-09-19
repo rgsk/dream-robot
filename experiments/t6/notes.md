@@ -722,3 +722,91 @@ with graded counts 2, 6, 16-23.
 
 What the re-sweep bought was not a better config. It was two placement bugs and the knowledge that
 the bench rig's low-tilt curve does not describe the task.
+
+---
+
+## Step 3 — the first T6 numbers: 25 clean demos (2026-09-19)
+
+Recorded 25 clean demonstrations (expert succeeded on 25 of 25 attempts, 5149 frames, three cameras,
+read back off disk and re-rendered before training). Trained both policies on them: BC 3.5 min,
+ACT 12.2 min on the 4060, ACT's first-action error settling at 12.6 mrad.
+
+```-
+  policy   25 clean demos   median cycle   failures
+  ACT      20 / 20 (100%)   6.9 s          --
+  BC        6 / 20 ( 30%)   6.5 s          no_grasp 10, desynchronised 3, timeout 1
+```
+
+**ACT is perfect on a quarter of the data the step-0 prediction allowed for.** That prediction was
+ACT >= 16/20 on *100 half-shake* demos; it is 20/20 on 25 clean ones. The bimanual spine needed no
+policy change to get there, which is ROADMAP rule 2 closed out end to end: 16-dim actions, three
+cameras, two arms, nothing in `policies/` touched.
+
+**The gap is the widest this repo has measured**, and in the predicted direction. T1 at 25
+half-shake demos was BC 20% / ACT 70%; T6 at 25 clean demos is BC 30% / ACT 100%. Step 0's reasoning
+holds: with one arm a mistimed grasp stalls an episode, with two it actively destroys it, so the same
+per-arm error rate costs far more — and chunking commits both arms to one synchronised plan instead
+of re-deciding each arm every frame.
+
+**BC's failures say what it cannot do.** Ten of fourteen are `no_grasp`: it never closes on a handle
+at all, which is T1's freeze failure at 1-4 cm, doubled. Three are `desynchronised` — one arm
+grasped, the other did not, and the tray was levered off one handle. That bucket, added for this
+task, is now carrying real signal rather than sitting at zero.
+
+Videos: `experiments/t6/eval_clean25/*/videos/`. Next: 25 half-shake demos for the matrix cell that
+T1 and T2 already have, then 100 of each.
+
+---
+
+## Step 4 — four cameras, and what the policy could not see (2026-09-19)
+
+Looked at the policy's actual input for the first time (`policy_view.py` renders the frames it is
+fed, at true pixels). The overhead view was robosuite's stock `birdview`: the table filled about a
+third of a 128 px frame and the tray was ~20x40 px of it, so most of the policy's main view was
+floor. T1 and T2 never had this problem -- their static camera is aimed across the table -- so T6
+had inherited a camera placed to show a human the room.
+
+**Now four cameras, each with a job:**
+
+```-
+  top       tight overhead (0.55 m of table across the frame) -- the tray's yaw, and where each
+            gripper sits relative to its own handle
+  front     wide room view (60 deg, bolted down) -- the whole situation, and height above the
+            table, which a straight-down view cannot show at all
+  wrist_*   one per arm -- am I on the handle, is it time to close
+```
+
+This is ALOHA's set, which ACT was built on. `front` is additive to `CANONICAL_CAMERAS`, as
+`wrist_left`/`wrist_right` were. It is deliberately **not** a tracking camera: MuJoCo's
+`targetbody` would keep it pointed at the tray, which is a stabilised view no camera bolted to a
+real cell can give.
+
+**Re-recorded and retrained on the four-camera setup.** 25 clean demos, expert 100% of attempts.
+
+```-
+  policy                  3 cameras       4 cameras
+  BC                       6/20 (30%)     15/20 (75%)
+  ACT, 100 epochs         20/20           18/20
+  ACT, 150 epochs           --            19/20   (held-out error 13.6 -> 11.2 mrad)
+```
+
+**BC's gain is the room camera, and the failure histogram says so**: `no_grasp` fell from **10 to
+2**. Straight down cannot show how high a gripper is above the table, and failing to close on a
+handle is precisely that judgement. ACT's apparent dip at 100 epochs was mostly under-training -- an
+extra camera means an extra vision encoder on the same 25 demos.
+
+**Where BC still fails** (`scratch/t6/bc_failures.png`, one row per failing seed): four of five
+never get the tray off the table at all -- the arms arrive, hover, close on nothing or on one
+handle, and the episode times out with all 25 balls aboard and zero tilt. The fifth lifts
+one-handed to 18 cm at 64 deg and sheds 3 balls. So the spill measure is not idle; the failures
+simply happen before the lift.
+
+**Caveat worth keeping:** seed 1004 failed in the eval and succeeded when re-run from the same
+checkpoint. GPU arithmetic is not bit-identical run to run, so a borderline episode can flip --
+BC's 15/20 is 15 ± 1, and single-run cells in this table should be read that way.
+
+Costs: recording 2 min, BC 4.3 min, ACT 16.4 min at 100 epochs (24 at 150) -- roughly a third more
+than three cameras, as expected.
+
+**Open:** success asks for 10 cm of lift while the expert reaches 24 cm, so most of the demonstrated
+motion is beyond anything scored.

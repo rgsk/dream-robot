@@ -34,7 +34,13 @@ import numpy as np
 #
 # A task uses a *subset*: single-arm records top + wrist, bimanual records
 # top + wrist_left + wrist_right. Nothing requires all four.
-CANONICAL_CAMERAS: tuple[str, ...] = ("top", "wrist", "wrist_left", "wrist_right")
+#: ``front`` is a room-level view of the workspace, the fourth camera ALOHA ran
+#: alongside an overhead and one per wrist. Overhead alone carries no height
+#: information -- how far a gripper is above the table is exactly what it cannot
+#: show -- and that is the judgement a policy gets wrong when it never closes.
+CANONICAL_CAMERAS: tuple[str, ...] = (
+    "top", "front", "wrist", "wrist_left", "wrist_right",
+)
 
 STATE_DTYPE = np.float32
 ACTION_DTYPE = np.float32

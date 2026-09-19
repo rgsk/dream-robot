@@ -39,8 +39,43 @@ cameras:
   # frontview sees both arms but the pot is ~20 px wide. birdview is the only
   # one carrying all three things this task depends on -- both grippers, the
   # pot's yaw (the randomised variable), and the marbles.
+  # FOUR cameras, each with a job. Framing is judged against the job, not
+  # against how the picture looks to a human:
+  #
+  #   top         tight overhead -- the tray's yaw, and where each gripper sits
+  #               relative to its own handle. Wants pixels on the tray.
+  #   front       wide room view -- the whole situation, and height above the
+  #               table, which a straight-down view cannot show at all.
+  #   wrist_*     one per arm -- am I on the handle, and is it time to close.
+  #
+  # This is ALOHA's set, which ACT was built on. The pairing matters more than
+  # either camera: tight overhead alone loses height, wide room alone loses the
+  # handle, and the wrists are blind until they are already close.
+  workspace:
+    # Metres of table the frame spans. The tray is 14 cm wide and both grippers
+    # must be visible through the lift, which carries the tray 25 cm up -- and
+    # up here means TOWARD the camera, so the frame only gets tighter.
+    frame_width: 0.55
+    fovy: 45.0
+
+  # The room-level view, and the reason there are four cameras here rather than
+  # three: straight down cannot show how high a gripper is above the table, and
+  # BC's dominant failure is never closing on a handle at all. ALOHA, which ACT
+  # was built on, ran exactly this set -- overhead, front, one per wrist.
+  front:
+    # Bolted down, not tracking. A camera that follows the tray is a privileged
+    # view no real cell has; this one is aimed once and left alone.
+    distance: 0.60          # metres in front of the table centre
+    height: 0.30            # metres above the table top
+    # Aimed above the table rather than at it: the lift carries the tray 25 cm
+    # up, so pointing at the surface spends the decisive seconds looking under
+    # the action. Half the lift height keeps both the grasp and the top in frame.
+    look_at_height: 0.12
+    fovy: 60.0
+
   mapping:
-    birdview: top
+    workspace: top
+    front_cam: front
     robot0_eye_in_hand: wrist_left
     robot1_eye_in_hand: wrist_right
 
@@ -48,11 +83,14 @@ render:
   # frontview sees both arms and the pot between them. birdview and sideview
   # both drop one arm out of frame at the lift.
   camera: frontview
-  # 384, not T1's 256: the demo panel stacks the policy's cameras beside the
-  # wide view at integer scale, and three 128 px cameras need a height they
-  # divide. 256/3 is 85 and the panel refuses to fake it.
-  height: 384
-  width: 384
+  # 768: the demo panel stacks the policy's three 128 px cameras beside this
+  # wide view at integer scale, so the height has to be a multiple of 3 x 128.
+  # 384 satisfies that but renders the tray small on a laptop; 768 is the next
+  # one up and gives the human view real detail. The camera column stays at its
+  # true 128 px, doubled with nearest-neighbour -- it looks blocky because that
+  # IS the policy's input, and a smoothed version would hide what it can see.
+  height: 768
+  width: 768
 
 scene:
   # `parallel` puts both bases on the -x side of the table, side by side, like

@@ -44,9 +44,15 @@ def test_embodiment_is_sixteen_dim(env):
     assert obs.state[env.embodiment.gripper_slice].shape == (2,)
 
 
-def test_three_canonical_cameras_and_no_backend_names(env):
+def test_four_canonical_cameras_and_no_backend_names(env):
+    """Overhead, room-level, one per wrist -- ALOHA's set, which ACT was built on.
+
+    The room-level view is not decoration: straight down cannot show how high a
+    gripper is above the table, and failing to close on a handle is BC's
+    dominant failure here.
+    """
     obs = env.reset(seed=0)
-    assert set(obs.images) == {"top", "wrist_left", "wrist_right"}
+    assert set(obs.images) == {"top", "front", "wrist_left", "wrist_right"}
     assert set(obs.images) <= set(CANONICAL_CAMERAS)
     # The single-arm name must not leak into a two-arm dataset, and a backend
     # name must never survive the adapter.

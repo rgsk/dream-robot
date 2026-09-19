@@ -63,6 +63,12 @@ EEF_SITES = ("gripper0_right_grip_site", "gripper1_right_grip_site")
 #: on its own arm's side of the table.
 HANDLE_SITES = ("pot_handle0", "pot_handle1")
 
+#: The overhead camera this task adds to the scene, framed on the work area.
+WORKSPACE_CAMERA = "workspace"
+
+#: The room-level camera, looking across the table at it.
+FRONT_CAMERA = "front_cam"
+
 N_ARMS = 2
 
 
@@ -108,12 +114,69 @@ class TraySpec:
 
 
 @dataclass(frozen=True)
+class WorkspaceCamera:
+    """A top-down camera framed on the work area, not on the room.
+
+    robosuite's stock ``birdview`` sits far enough back that the table fills
+    about a third of a 128 px frame and the tray is ~20x40 px of it -- the
+    policy's main view spends most of its pixels on the floor. This one is
+    placed so a chosen width of table fills the frame:
+
+        d = frame_width / (2 tan(fovy/2))
+
+    above the table top, looking straight down.
+    """
+
+    frame_width: float
+    fovy: float
+
+    @property
+    def distance(self) -> float:
+        return float(self.frame_width / (2.0 * np.tan(np.radians(self.fovy) / 2.0)))
+
+
+@dataclass(frozen=True)
+class FrontCamera:
+    """A room-level view across the table, bolted down.
+
+    Deliberately NOT ``mode="targetbody"``. Aiming at the tray makes MuJoCo keep
+    the camera pointed at it, which is a camera that follows the object -- a
+    privileged, stabilised view no camera bolted to a real cell can give, and
+    exactly the kind of thing that makes a sim number fail to transfer.
+
+    So the orientation is computed once, from where it stands to where it looks:
+
+        ẑ = (p − t)/‖p − t‖          (a camera looks along −z)
+        x̂ = (0,0,1) × ẑ, normalised   (no roll)
+        ŷ = ẑ × x̂
+    """
+
+    distance: float
+    height: float
+    look_at_height: float
+    fovy: float
+
+    def xyaxes(self) -> str:
+        """MuJoCo's ``xyaxes``: the camera's x then y, in world coordinates."""
+        p = np.array([self.distance, 0.0, self.height])
+        t = np.array([0.0, 0.0, self.look_at_height])
+        z = p - t
+        z = z / np.linalg.norm(z)
+        x = np.cross([0.0, 0.0, 1.0], z)
+        x = x / np.linalg.norm(x)
+        y = np.cross(z, x)
+        return " ".join(f"{v:.6f}" for v in [*x, *y])
+
+
+@dataclass(frozen=True)
 class TaskConfig:
     prompt: str
     control_hz: float
     horizon_seconds: float
     camera_hw: tuple[int, int]
     camera_mapping: dict[str, str]
+    workspace_camera: WorkspaceCamera
+    front_camera: FrontCamera
     render_camera: str
     render_hw: tuple[int, int]
     arrangement: str
@@ -134,6 +197,16 @@ class TaskConfig:
             horizon_seconds=float(raw["control"]["horizon_seconds"]),
             camera_hw=(int(raw["cameras"]["height"]), int(raw["cameras"]["width"])),
             camera_mapping=dict(raw["cameras"]["mapping"]),
+            workspace_camera=WorkspaceCamera(
+                frame_width=float(raw["cameras"]["workspace"]["frame_width"]),
+                fovy=float(raw["cameras"]["workspace"]["fovy"]),
+            ),
+            front_camera=FrontCamera(
+                distance=float(raw["cameras"]["front"]["distance"]),
+                height=float(raw["cameras"]["front"]["height"]),
+                look_at_height=float(raw["cameras"]["front"]["look_at_height"]),
+                fovy=float(raw["cameras"]["front"]["fovy"]),
+            ),
             render_camera=str(raw["render"]["camera"]),
             render_hw=(int(raw["render"]["height"]), int(raw["render"]["width"])),
             arrangement=str(raw["scene"]["arrangement"]),
@@ -176,9 +249,13 @@ class _TwoArmLiftWithMarbles(TwoArmLift):
     pot lands somewhere new each seed. Hence the ``_reset_internal`` override.
     """
 
-    def __init__(self, marbles: MarbleSpec, tray: TraySpec, **kwargs):
+    def __init__(self, marbles: MarbleSpec, tray: TraySpec,
+                 workspace_camera: WorkspaceCamera, front_camera: FrontCamera,
+                 **kwargs):
         self._marbles = marbles        # must exist before _load_model runs
         self._tray = tray
+        self._workspace_camera = workspace_camera
+        self._front_camera = front_camera
         super().__init__(**kwargs)
 
     def _load_model(self) -> None:
@@ -201,6 +278,30 @@ class _TwoArmLiftWithMarbles(TwoArmLift):
             super()._load_model()
         finally:
             _two_arm_lift.PotWithHandlesObject = original
+        # The framed overhead view, added rather than reused: every stock
+        # robosuite camera is placed to show a human the room. xyaxes puts this
+        # camera's x along world +y and its y along world -x, so it looks
+        # straight down and the robots sit at the top of the image.
+        cam = self._workspace_camera
+        ET.SubElement(
+            self.model.worldbody, "camera",
+            name=WORKSPACE_CAMERA,
+            pos=array_to_string(
+                np.array(self.table_offset)
+                + [0.0, 0.0, self.table_full_size[2] / 2 + cam.distance]
+            ),
+            xyaxes="0 1 0 -1 0 0",
+            fovy=str(cam.fovy),
+        )
+        front = self._front_camera
+        ET.SubElement(
+            self.model.worldbody, "camera",
+            name=FRONT_CAMERA,
+            pos=array_to_string(np.array(self.table_offset) +
+                                [front.distance, 0.0, front.height]),
+            xyaxes=front.xyaxes(),
+            fovy=str(front.fovy),
+        )
         for i in range(self._marbles.count):
             body = new_body(name=f"marble_{i}", pos=array_to_string([0, 0, 0]))
             body.append(new_joint(name=f"marble_{i}_free", type="free"))
@@ -346,6 +447,8 @@ class TwoArmLiftTask:
         self._env = _TwoArmLiftWithMarbles(
             self._cfg.marbles,
             self._cfg.tray,
+            self._cfg.workspace_camera,
+            self._cfg.front_camera,
             robots=["Panda", "Panda"],
             env_configuration=self._cfg.arrangement,
             controller_configs=[_joint_position_controller_config() for _ in range(N_ARMS)],

@@ -20,6 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
+from dream_robot.core.record import JointNoise
 from dream_robot.core.video import observation_panel, write_video
 from dream_robot.sims.robosuite.tasks.two_arm_lift.env import TaskConfig, TwoArmLiftTask
 from dream_robot.sims.robosuite.tasks.two_arm_lift.expert import ExpertConfig, ExpertPolicy
@@ -28,10 +29,19 @@ DEFAULT_OUT = Path("experiments/t6/videos/expert_two_arm_lift.mp4")
 PANEL_ORDER = ("top", "wrist_left", "wrist_right")
 
 
-def rollout_frames(env: TwoArmLiftTask, policy: ExpertPolicy, seed: int, hold: int):
-    """One scripted episode. Returns (frames, lifted, reason)."""
+def rollout_frames(env: TwoArmLiftTask, policy: ExpertPolicy, seed: int, hold: int,
+                   noise: JointNoise | None = None):
+    """One scripted episode. Returns (frames, lifted, reason).
+
+    ``noise`` shakes the EXECUTED joint targets, exactly as the recorder does.
+    The dataset would keep the clean action, so a demonstration recorded this
+    way teaches the correction rather than the wobble -- which is the whole
+    reason T1 went from 25% to 97% on BC. Watching it is the point: the video
+    shows what the arms actually do, not what was written down.
+    """
     obs = env.reset(seed=seed)
     policy.reset()
+    rng = np.random.default_rng(seed)
     frames: list[np.ndarray] = []
     result = None
     command = None
@@ -39,7 +49,7 @@ def rollout_frames(env: TwoArmLiftTask, policy: ExpertPolicy, seed: int, hold: i
     for _ in range(env._cfg.horizon_steps):
         action, command = policy(obs)
         frames.append(observation_panel(env.render(), obs.images, order=PANEL_ORDER))
-        result = env.step(action)
+        result = env.step(noise(action, rng) if noise else action)
         obs = result.observation
         if result.success or result.truncated or command.timed_out:
             break
@@ -61,6 +71,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="each arm advances on its own predicates: the DESYNCHRONISED ablation",
     )
+    p.add_argument(
+        "--noise-sigma",
+        type=float,
+        default=0.0,
+        help="shake the executed arm joints, as the recorder does (half shake: 0.025)",
+    )
     p.add_argument("--render-camera", default=None)
     p.add_argument("--hold-frames", type=int, default=15)
     args = p.parse_args(argv)
@@ -74,10 +90,13 @@ def main(argv: list[str] | None = None) -> int:
 
     env = TwoArmLiftTask(cfg)
     policy = ExpertPolicy(env, expert_cfg)
+    noise = (JointNoise(args.noise_sigma, env.embodiment)
+             if args.noise_sigma > 0 else None)
     try:
         frames: list[np.ndarray] = []
         for seed in args.seeds:
-            episode, lifted, reason = rollout_frames(env, policy, seed, args.hold_frames)
+            episode, lifted, reason = rollout_frames(env, policy, seed, args.hold_frames,
+                                                     noise)
             frames.extend(episode)
             print(f"seed {seed}: {'LIFTED' if lifted else 'FAILED'} ({reason}), "
                   f"{len(episode) - args.hold_frames} steps")

@@ -1,0 +1,155 @@
+{
+  "task": "robosuite/two_arm_lift",
+  "policy": "bc",
+  "episodes": 20,
+  "success_rate": 0.3,
+  "successes": 6,
+  "cycle_time_seconds": 6.53,
+  "mean_steps": 479.6,
+  "failure_histogram": {
+    "desynchronised": 3,
+    "no_grasp": 10,
+    "timeout": 1
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "successes": "experiments/t6/eval_clean25/bc_on_robosuite_two_arm_lift/videos/successes.mp4",
+    "failures": "experiments/t6/eval_clean25/bc_on_robosuite_two_arm_lift/videos/failures.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1000,
+      "success": false,
+      "failure_mode": "desynchronised",
+      "steps": 600
+    },
+    {
+      "seed": 1001,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1002,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1003,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 197
+    },
+    {
+      "seed": 1004,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1005,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 188
+    },
+    {
+      "seed": 1006,
+      "success": false,
+      "failure_mode": "desynchronised",
+      "steps": 600
+    },
+    {
+      "seed": 1007,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 214
+    },
+    {
+      "seed": 1008,
+      "success": false,
+      "failure_mode": "timeout",
+      "steps": 600
+    },
+    {
+      "seed": 1009,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1010,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1011,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 207
+    },
+    {
+      "seed": 1012,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 195
+    },
+    {
+      "seed": 1013,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1014,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1015,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1016,
+      "success": false,
+      "failure_mode": "desynchronised",
+      "steps": 600
+    },
+    {
+      "seed": 1017,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1018,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1019,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 190
+    }
+  ],
+  "provenance": {
+    "checkpoint": "experiments/t6/bc_clean25/checkpoint.pt",
+    "epoch": 57,
+    "val_l1_rad": 0.01033958617022367,
+    "dataset_repo_id": "dream_robot/two_arm_lift",
+    "demonstrations": 20,
+    "held_out_episodes": [
+      4,
+      10,
+      11,
+      19,
+      24
+    ]
+  }
+}
