@@ -29,6 +29,8 @@ Rung 1 (reach + grasp a rigid cube) is closed in sim for both BC and ACT: record
 | ✅ | `sims/robosuite/tasks/pick_place_two_bins/` — T2: a second bin, coin-flip expert; `_fixed` variant pins the cube |
 | ✅ | eval `--noise-sigma` — shake at test time, for scenes with no randomisation of their own |
 | ✅ | [`runpod.md`](runpod.md) + `scripts/runpod_setup.sh` — running jobs on a RunPod pod, and when not to |
+| ✅ | `sims/robosuite/tasks/two_arm_lift/` — T6: two arms, one loaded tray, four cameras, 16-dim action |
+| ✅ | two-arm scripted expert — two phase machines and a synchronisation barrier |
 
 `uv run pytest -m "not slow"` runs the core suite without a simulator.
 
@@ -131,6 +133,46 @@ No cube ever ended between the bins.
 
 Predictions were written before each run and most were wrong; the full log is in
 [experiments/t2/notes.md](experiments/t2/notes.md).
+
+## T6: two arms, one tray
+
+Two Pandas, a tray with a handle at each end and 25 loose balls on it. Each arm takes its own handle
+and both lift together. Success is one physical statement: **the tray is above 10 cm, still above it
+two seconds later, and still holding at least 19 of its 25 balls.** Tilt is measured but does not
+score — it labels failures.
+
+The failure this task exists to measure is one arm lifting while the other has not gripped. It tips
+the tray, the balls go on the floor, and the histogram calls it `desynchronised`.
+
+25 clean demos, 20 evaluation episodes from seed 1000.
+
+| policy | three cameras | four cameras |
+|---|---|---|
+| scripted expert | 20/20 | 20/20 |
+| BC (0.75M) | 6/20 (30%) | **15/20 (75%)** |
+| ACT (4.8M) | 20/20 | **19/20** · identical across 4 evals |
+
+**What it says.**
+
+- **Bimanual cost the spine nothing.** 16-dim actions, four cameras, two arms — no change in
+  `policies/`, `core/` or the dataset format. Rule 2 executed rather than asserted.
+- **The expert's barrier is the task.** Neither arm leaves a phase until both have satisfied it.
+  Remove it and the same expert scores 5-7/20, with 12 of 20 episodes `desynchronised` — half the
+  demonstrations would have been the failure we are trying to measure.
+- **BC's jump from 30% to 75% is one camera.** Its dominant failure was closing on nothing
+  (`no_grasp` 10 of 14). A straight-down view cannot show how high a gripper is above the table; a
+  room-level view can. Adding it took `no_grasp` to 2 of 5.
+- **ACT is reproducibly imperfect, which is more useful than a round number.** Four evaluations of
+  the same checkpoint fail the same scene (seed 1017) every time: the right arm grips, the left
+  misses, and the right lifts anyway and dumps the tray.
+- **Every demonstration is a success, so no policy has seen a recovery.** The left gripper closing to
+  zero width is directly readable from the robot's own state, and neither policy does anything with
+  it. That is the failure-detection gap, not a perception gap.
+
+Cameras are ALOHA's set and each has a job: tight overhead for the tray's rotation and gripper
+alignment, a wide room view for the whole scene and for height, one wrist camera per arm for the
+close. Full log, including two placement bugs found by looking at renders rather than numbers, is in
+[experiments/t6/notes.md](experiments/t6/notes.md).
 
 ## The shape
 

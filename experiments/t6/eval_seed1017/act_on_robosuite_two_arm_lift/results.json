@@ -1,0 +1,38 @@
+{
+  "task": "robosuite/two_arm_lift",
+  "policy": "act",
+  "episodes": 1,
+  "success_rate": 0.0,
+  "successes": 0,
+  "cycle_time_seconds": null,
+  "mean_steps": 600,
+  "failure_histogram": {
+    "desynchronised": 1
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "selected": "experiments/t6/eval_seed1017/act_on_robosuite_two_arm_lift/videos/selected.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1017,
+      "success": false,
+      "failure_mode": "desynchronised",
+      "steps": 600
+    }
+  ],
+  "provenance": {
+    "checkpoint": "experiments/t6/act_clean25_4cam_150/checkpoint.pt",
+    "epoch": 137,
+    "val_l1_rad": 0.011297439096298644,
+    "dataset_repo_id": "dream_robot/two_arm_lift",
+    "demonstrations": 20,
+    "held_out_episodes": [
+      4,
+      10,
+      11,
+      19,
+      24
+    ]
+  }
+}
