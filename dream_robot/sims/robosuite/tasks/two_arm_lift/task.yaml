@@ -48,8 +48,11 @@ render:
   # frontview sees both arms and the pot between them. birdview and sideview
   # both drop one arm out of frame at the lift.
   camera: frontview
-  height: 256
-  width: 256
+  # 384, not T1's 256: the demo panel stacks the policy's cameras beside the
+  # wide view at integer scale, and three 128 px cameras need a height they
+  # divide. 256/3 is 85 and the panel refuses to fake it.
+  height: 384
+  width: 384
 
 scene:
   # `parallel` puts both bases on the -x side of the table, side by side, like

@@ -306,3 +306,106 @@ A test now pins it: `test_lip_is_shorter_than_the_marble`.
 
 Rendering right after `reset()` is what surfaced both. Filming a settled frame would have hidden the
 first one entirely.
+
+---
+
+## Step 2 — the two-arm expert, and what the barrier is worth (2026-09-19)
+
+The expert was scoped in step 0 as "roughly 2x T1's expert: two phase machines plus
+synchronisation predicates". That is what it is. `two_arm_lift/expert.py`, plus `demo.py`,
+9 unit tests and 6 rollout tests. **Full suite: 209 passed.**
+
+**Headline, eval seeds 1000–1019:**
+
+```-
+  barrier          success      tilt at the end of the lift     marbles aboard
+  on               20 / 20      4–11 deg  (median 9)            9/9 every seed
+  off              11 / 20      9–48 deg  (median 32)           7–9
+```
+
+Step 0 predicted the scripted expert at ≥ 18/20. It is 20/20 first try, no tuning: the
+numbers in `task.yaml` were written before any of it ran and none of them moved.
+
+The ablation is the point. Same expert, same seeds, `sync_barrier: false`, so each arm
+advances on its own predicates — and *nine of the twenty episodes end as `DESYNCHRONISED`*,
+with the other failures being `dropped`. The eleven that still "succeed" do it at a median
+tilt of 32 deg, one of them at 48. Videos: `experiments/t6/videos/expert_two_arm_lift.mp4`
+and `..._no_barrier.mp4`.
+
+So the barrier is not a tidiness measure. Without it, **half the recorded demonstrations
+would be the failure the task exists to measure**, and the other half would be a tray
+hoisted at 30–48 deg — i.e. BC and ACT would be scored on how well they imitate a
+desynchronised expert, and the T6 result would say nothing about coordination.
+
+### Design, and the three decisions inside it
+
+**Two phase indices, not one.** With the barrier on, the arms are in lockstep by
+construction, so a single shared index would be simpler and would make desynchronisation
+*unrepresentable*. That sounds like a safety property and is actually a measurement loss:
+the ablation above is only possible because divergence is expressible. Lockstep is instead
+derived and tested — `test_the_arms_stay_in_lockstep_whatever_order_they_arrive_in` drives
+400 steps of random arrival order and asserts the two indices never differ, and in physics
+`test_the_arms_never_leave_each_other_behind` asserts it per frame of a real episode.
+
+**Waiting is not failing.** T1's phase timeout counts steps in a phase and gives up at 5 s.
+Under a barrier an arm that arrived first sits on its waypoint for as long as its partner
+needs, which would trip that timer and report the *fast* arm as the stuck one. So an arm
+whose own predicate is satisfied stops its clock: `waiting` and `timed_out` are separate
+flags, and `demo.py` can still say which arm actually could not get there.
+
+**Per-arm settle windows.** `grip_settled` keeps a rolling window of gripper openings. One
+shared window would let one arm's fingers vouch for the other's — the single most direct way
+to break "neither lifts until *both* have settled closed" while still passing a success test.
+
+### The grasp frame — the part T1 did not need
+
+T1 held the gripper's reset rotation for the whole episode, and got away with it because a
+cube is symmetric about z: any yaw grasps it. A handle bar is not, and the tray's yaw is the
+scene's randomised variable (measured over 12 seeds: 120 deg of spread, which is exactly
+robosuite's sampler range of π ± π/3).
+
+Measured first, in `experiments/t6/scripts/grasp_geometry.py`: the vector between the two
+finger bodies, expressed in the grip site's own frame, is (1, 0, 0) for both arms — **the
+fingers separate along the site's x axis**. The bar runs along the tray's local x and the
+handle hangs off its local ±y, so with d̂ the horizontal unit vector from tray centre to
+handle,
+
+```-
+  x̂ = d̂                 fingers close across the bar
+  ẑ = (0, 0, −1)        approach from above
+  ŷ = ẑ × x̂             and the frame closes:  x̂ × ŷ = ẑ
+```
+
+R = [x̂ ŷ ẑ] as columns. Both ±d̂ grasp the same bar, so the sign is free — take the one
+nearer the wrist's current x axis, which halves worst-case yaw travel from 180 to 90 deg.
+
+Also measured there, and worth having checked rather than assumed: handle0 lands on arm 0's
+side of the table for every seed. The sampler's ±60 deg of yaw is not enough to swap them,
+so the fixed `gripper0 → handle0` pairing robosuite uses in its own grasp checks is safe.
+
+### What bit
+
+1. **`env._env.sim` is a different object after every reset.** robosuite runs `hard_reset=True`,
+   so caching the sim handle gives you the construction-time scene forever. The first probe
+   read handle sites through a fresh handle and the tray's body pose through a cached one,
+   which reads as "the tray never moves while its handles do" and looks like a broken seeding
+   path rather than a stale pointer. `env.py`'s own properties were already right about this
+   (`mujoco` says so in its docstring); the probe script was not.
+2. **Three cameras do not divide 256.** `observation_panel` scales the camera column to share
+   the wide view's height at integer scale and refuses to fake it, so the render height had to
+   go to 384 = 3 × 128. Video only; nothing in the dataset changed.
+
+### Two things found that are not the expert's to fix
+
+- **Success does not check tilt.** `_diagnose` runs only on truncation, so the tilt threshold
+  never applies to an episode that succeeds — which is how the ablation's seed 1000 scored
+  SUCCESS at 48 deg with 8 of 9 marbles still aboard. The marbles are the only thing guarding
+  a successful lift, and at 45 deg they are only just starting to leave. A policy that learns
+  to hoist the tray at 40 deg would be scored a clean success. Worth deciding before any T6
+  numbers are recorded: either `success` also requires `tilt < tilt_threshold_deg`, or the
+  threshold is documented as a failure-*diagnosis* number only.
+- **`handles_held` flickers under load.** Mid-lift, `_check_grasp` goes False on an arm that is
+  visibly carrying the tray — the load spreads the fingers ~2 mm and the contact set changes.
+  `_ever_grasped` is latched so `DESYNCHRONISED` is unaffected, but the `DROPPED` branch reads
+  the instantaneous value and could mislabel a successful carry that times out for another
+  reason.

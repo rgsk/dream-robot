@@ -100,11 +100,6 @@ class TraySpec:
         """
         return float(marble_radius * self.lip_over_radius)
 
-    @property
-    def required_inside(self) -> int:
-        """How many must still be in the pot. Ceil, so 0.75 x 8 is 6, not 5."""
-        return int(np.ceil(self.keep_fraction * self.count))
-
 
 @dataclass(frozen=True)
 class TaskConfig:
