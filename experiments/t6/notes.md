@@ -409,3 +409,191 @@ so the fixed `gripper0 → handle0` pairing robosuite uses in its own grasp chec
   `_ever_grasped` is latched so `DESYNCHRONISED` is unaffected, but the `DROPPED` branch reads
   the instantaneous value and could mislabel a successful carry that times out for another
   reason.
+
+---
+
+## Step 2b — "make it hold the tray" (2026-09-19)
+
+Question from the T6 review of step 2: instead of gating success on the tilt *angle*, keep the
+episode running a few seconds after the height is reached — a tray held at 45 deg spills, and
+then the marbles decide it. Rig: `experiments/t6/scripts/hold_after_lift.py`, which samples
+tilt / marbles aboard / tray height at 0, 1, 2 and 3 seconds past the moment success fires.
+
+**The clean expert is untouched by a hold. 20/20, every sample:**
+
+```-
+  held for        0s      1s      2s      3s
+  tray height     0.10    0.24    0.24    0.24   m
+  tilt (median)   9       4       3       2      deg
+  marbles         9/9     9/9     9/9     9/9
+  still above 0.10 m   20/20   20/20   20/20   20/20
+```
+
+Tilt *falls* during the hold: the arms pull the tray level as they finish the lift to +0.25 m.
+So a hold requirement costs the expert nothing, and at 1 s it costs no static frames either —
+the tray is still rising at that point. That last part matters for BC, whose T1 failure mode was
+freezing; ending every demonstration with two seconds of stillness is how you teach that.
+
+**The unsynchronised expert's eleven "successes", held for 3 s:**
+
+```-
+  dropped the tray back onto the table       1000  1012  1015        3
+  still up, but hanging at 66-71 deg         1005  1017              2
+  still up, tilt <= 20 deg                   1004 1010 1011 1013 1016 1019   6
+```
+
+So the hold works, **but through the height, not the marbles**. A one-armed lift is unstable and
+falls within 1-2 s; that is what the extra seconds expose.
+
+**The marbles flagged none of the eleven. Not one, at any hold length.** Seed 1000 ends with the
+tray flat on the table and a marble on the floor, and `marbles_inside` still reports 7 of 9 —
+a pass. Two reasons, and both are worth keeping in mind:
+
+1. **They arch.** Seed 1005 hangs at 71 deg for three seconds with all 9 aboard
+   (`scratch/t6/hold_1005.png`). Nine 18 mm balls in a 12 cm cavity wedge into the low corner and
+   jam against each other, the way grain jams in a hopper. The step 1c/1d spill curve was measured
+   on a tray tilted *empty-ish and quasi-statically*; a packed tray behaves differently.
+2. **The counter is generous by construction.** It counts in the tray's own frame, so once the
+   tray is lying on the table the marbles that rolled out beside it are still inside its footprint.
+   Step 1b chose that frame to avoid the opposite error (world bounds counting a marble beside an
+   upended tray) and this is the mirror-image cost.
+
+**Decision proposed, not yet taken:** success = tray above `lift_height` **sustained for ~1 s**
+*and* tilt below `tilt_threshold_deg` at that moment. The hold catches the drops, the tilt catches
+the dangle — neither catches both, and the marbles catch neither. Effect on the numbers: expert
+with barrier 20/20 (unchanged), without barrier 11/20 -> 6/20, i.e. the ablation gets sharper
+rather than noisier. The marbles stay as the video signal they were always best at.
+
+---
+
+## Step 2c — the lip was calibrated against dynamics the task never produces (2026-09-19)
+
+Review question after step 2b: the marbles do not spill because they are too big — shrink them
+and they will. Measured, and the answer is that size is not the lever, but chasing it found the
+real fault. Rigs: `scripts/t6_spill_curve.py scale`, `experiments/t6/scripts/marble_size.py`.
+
+**Size, in the standalone rig: the hypothesis looks right.** Lip tied to the marble radius, so
+the static escape condition is scale free in theory. It is not in practice — roughly 10 deg
+earlier per halving:
+
+```-
+  r (mm)    n   lip (mm) |  20°  30°  35°  40°  45°  50°  60°  70°   % aboard
+      18    9      13.7  | 100  100  100  100   66   66   66    0
+      12   25       9.1  | 100  100   60   40   40   40    0    0
+       9   36       6.8  | 100   83   50   50    0    0    0    0
+       6  100       4.6  |  50   40   30   10    0    0    0    0
+```
+
+**Size, in the actual scene: no effect at all.** 12 mm marbles, lip re-tuned to 0.85 r, mass
+scaled by r³ so the payload does not change (16 x 5.9 g = 95 g; keeping 20 g each would have
+been 320 g against today's 180 g, and that confound was in the first run). Unsynchronised expert:
+9 of 11 still pass, both failures on height — and trays hanging at **61, 65 and 72 deg kept all
+sixteen marbles**.
+
+**Where the marbles actually are, at 72 deg:** all sixteen flat on the tray floor, pressed against
+the down-slope lip (max offset 0.052 m against a 0.060 m inner wall), one layer, at rest. Not
+arched, not piled. Simply held.
+
+**The lip, evaluated:**
+
+```-
+  tan θ_escape = √(2rL − L²) / (r − L)
+
+  r = 18 mm, L = 0.76 r   ->  76 deg      <- today
+  r = 12 mm, L = 0.85 r   ->  81 deg      <- the "fix"
+  r = 18 mm, L = 0.293 r  ->  45 deg      <- the derivation, unmodified
+```
+
+Both trays were built to hold their contents past 70 deg. Nobody computed the angle the measured
+ratio implied. And the measured ratio came from the standalone rig, where marbles are **dropped at
+a fixed angle and roll the length of the tray with momentum**, hopping a lip that would statically
+hold them. That is a real effect and it is why 0.293 spilled at 20 deg *there*. It is not what the
+scene does: the tray tilts over about a second while the arms hold it, the marbles creep to the low
+wall and settle. Quasi-static, so the static formula is the right one — step 1d corrected a number
+that was never wrong for this scene, using a rig that measures a different regime.
+
+**Built to the derivation, `lip_over_radius: 0.293`, 18 mm marbles, 1 s hold:**
+
+```-
+  expert, barrier on    20/20 pass, 9/9 marbles every seed, tilt 0-10 deg
+  expert, barrier off    6/11 pass (was 9/11 at lip 0.85 r)
+     newly caught BY THE MARBLES:  1005 (69 deg, 6/9)  1017 (64 deg, 6/9)  1016 (21 deg, 5/9)
+     still missed:                 1015 (57 deg, 9/9 aboard)
+```
+
+So the marbles now do real work, and they cost the clean expert nothing — not even on the jolt
+when the grippers close, which was the risk of a 5 mm lip. Seed 1015 is the case for keeping the
+tilt gate as well: a fast tilt that has not had time to shed anything by the time the height fires.
+
+**Recommended package, one decision:** `lip_over_radius: 0.293`; success = height sustained ~1 s
+AND tilt under `tilt_threshold_deg` AND `keep_fraction` of the marbles aboard. Ablation lands at
+5/20 against the expert's 20/20. Also worth doing at the same time: rename `spill_angle_deg` from
+documentation to the number the lip is actually derived from, since it now is one.
+
+---
+
+## Step 2d — spill vs tilt vs time, on the proposed tray (2026-09-19)
+
+Review question: is spilling a threshold in tilt, or does a shallow tilt spill too if held long
+enough? Rig: `experiments/t6/scripts/spill_vs_time.py`, lip 0.293 r, 9 marbles at 18 mm.
+
+**The rig had to be rebuilt to answer it.** `scripts/t6_spill_curve.py` builds the tray already at
+the target angle and drops the marbles in, so they slide its whole length and arrive at the lip with
+speed — the error behind the 0.76 r calibration (step 2c). Here the tray stays level and **gravity is
+rotated over a 1 s ramp**, which is the motion the arms actually produce, then held.
+
+```-
+  tilt |  marbles aboard after holding for 1s  2s  5s  10s  30s
+    5° |                                    9   9   9   9   9
+   10° |                                    9   9   9   9   9
+   15° |                                    9   9   9   9   9
+   20° |                                    9   9   0   0   0
+   25° |                                    0   0   0   0   0
+   45° |                                    0   0   0   0   0
+```
+
+**Both matter, but the time-dependent band is narrow.** Below ~15 deg nothing leaves however long you
+wait — the marbles sit against the lip in equilibrium. At 20 deg it takes a couple of seconds. From
+25 deg up it is gone inside one second.
+
+Consistent with the in-scene numbers from step 2c: clean lifts run at 0–10 deg and keep 9/9; the
+unsynchronised seed at 21 deg lost 4 of 9 over the lift; seeds at 64 and 69 deg lost 3 of 9 in the
+1 s hold. And seed 1015 at **57 deg kept all nine**, because it had only just reached that angle when
+the height fired — the case for keeping the tilt gate as well as the marbles. The marbles catch a
+sustained tilt; the angle catches an instantaneous one.
+
+Also worth noting for T4 later (pour N balls): a sphere rolls at any slope — the friction angle
+argument that applies to a sliding block does not apply here, which is why the "never" boundary sits
+at 15 deg rather than at atan(0.4) = 22 deg.
+
+---
+
+## Step 2e — a 2 s hold makes the angle rule unnecessary (2026-09-19)
+
+Review call: rather than bolting a tilt gate onto success, hold longer and let the marbles report
+what a bad angle does. Measured on the proposed tray (lip 0.293 r), hold raised from 1 s to 2 s:
+
+```-
+                          hold 1 s              hold 2 s
+  expert, barrier on      20/20, 9/9 aboard     20/20, 9/9 aboard, tilt 0-7 deg
+  expert, barrier off      6/11                  5/11
+  seed 1015 (57 deg)      PASS, 9/9 aboard      FAIL  -- tray back on the table
+  seed 1005 (70 deg)      FAIL, 6/9             FAIL, 1/9
+  seed 1017 (64 deg)      FAIL, 6/9             FAIL, 5/9
+```
+
+Every remaining failure is caught by height or by marbles, so **the tilt gate is not needed in the
+success test** — 2 s is long enough that a tray tilted at the moment the height fires has either
+shed its load or fallen. `tilt_threshold_deg` stays as a diagnosis number, labelling the failure
+`KNOCKED_OVER` in the histogram; it stops being a third success condition.
+
+The five that still pass are genuinely acceptable lifts: tilt 10-21 deg, tray up, marbles aboard.
+
+**Cost:** episodes grow from ~160 to ~220 steps, of which roughly 30 frames are the arms holding
+still after the lift completes. That is ~14% of a demonstration spent stationary, and BC's
+characteristic T1 failure was freezing, so it is worth watching in the first BC run rather than
+dismissing. Against it: holding what you have lifted is a real part of the skill, and the 2 s hold
+is what makes the success criterion a single physical statement instead of three thresholds.
+
+**Proposed, for approval:** `lip_over_radius: 0.293`; success = tray above `lift_height`, still above
+it 2 s later, with `keep_fraction` of the marbles aboard. Expert 20/20, ablation 5/20.

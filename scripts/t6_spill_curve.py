@@ -152,7 +152,48 @@ def tray_curve(count: int, radius: float, spill_deg: float) -> None:
         print(f"{angle:>5}°  {n:>3}/{count}  {'#' * n}")
 
 
+def scale_curve(u: float = 0.76) -> None:
+    """Does the spill angle survive shrinking the marbles?
+
+    The tray's lip is defined as a MULTIPLE of the marble radius
+    (task.yaml: lip_over_radius), so shrinking the marbles shrinks the lip with
+    them and the static escape condition
+
+        tan θ = √(2rL − L²) / (r − L)     with L = u·r
+
+    is scale free -- it depends only on u, not on r. Every row below should
+    therefore spill at the same angle.
+
+    It is not obvious that they will, for two reasons that both break scale
+    invariance in the real thing:
+
+      * gravity sets a timescale. A ball rolls the tray's half-width in
+        t ≈ √(2a / (g·sinθ)) regardless of its size, so a SMALLER ball covers
+        more of its own radii in that time and arrives at the lip carrying more
+        speed relative to the lip it has to hop. That is the same effect that
+        moved the calibration from 0.29 r to 0.76 r in the first place.
+      * jamming. Nine 18 mm balls span the 12 cm cavity 3.3 diameters across,
+        which is squarely in the arching regime; 36 or 81 smaller ones are not.
+    """
+    print(f"lip = {u} x marble radius in every row; one full layer each\n")
+    angles = (10, 20, 30, 35, 40, 45, 50, 55, 60, 70)
+    print(f"{'r (mm)':>7} {'n':>4} {'lip (mm)':>9} | " +
+          " ".join(f"{a:>4}" for a in angles))
+    for radius in (0.018, 0.012, 0.009, 0.006):
+        lip = u * radius
+        half_z = (lip + WALL) / 2.0
+        _, per_row = lattice(radius)
+        count = per_row * per_row
+        kept = [spill(count, radius, a, half_z, tray=True) for a in angles]
+        cells = " ".join(f"{100 * k // count:>4}" for k in kept)
+        print(f"{radius * 1000:>7.0f} {count:>4} {lip * 1000:>9.1f} | {cells}")
+    print("\ncells are % of the marbles still aboard; the task fails below 75%")
+
+
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "scale":
+        scale_curve()
+        return
     if len(sys.argv) > 1 and sys.argv[1] == "tray":
         tray_curve(9, 0.018, 45.0)
         return
