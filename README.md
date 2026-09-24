@@ -31,6 +31,8 @@ Rung 1 (reach + grasp a rigid cube) is closed in sim for both BC and ACT: record
 | ✅ | [`runpod.md`](runpod.md) + `scripts/runpod_setup.sh` — running jobs on a RunPod pod, and when not to |
 | ✅ | `sims/robosuite/tasks/two_arm_lift/` — T6: two arms, one loaded tray, four cameras, 16-dim action |
 | ✅ | two-arm scripted expert — two phase machines and a synchronisation barrier |
+| ✅ | `policies/flow_matching/` — Diffusion Policy with flow matching: action chunks sampled from noise, 5.5M params |
+| ✅ | `watch/watch_file.sh` — live view of runs and results, marks each log in progress / finished |
 
 `uv run pytest -m "not slow"` runs the core suite without a simulator.
 
@@ -53,6 +55,7 @@ the data.
 ```- 
 uv run python -m dream_robot.policies.bc.train --epochs 60
 uv run python -m dream_robot.policies.act.train --out experiments/act_pick_place_cube
+uv run python -m dream_robot.policies.flow_matching.train --out experiments/fm_pick_place_cube
 
 MUJOCO_GL=glfw uv run python -m dream_robot.core.run \
     --env robosuite/pick_place_cube --policy bc \
@@ -108,14 +111,24 @@ episodes means "≳ 85%", not "perfect". Every step, number and dead end is in
 
 Same scene with a second bin mirrored across the cube; the scripted expert flips a coin for which
 one. 100 half-shake demos, 20 evaluation episodes from seed 1000. The question is multimodality: does
-BC average the two choices into the gap between the bins, and does ACT's latent carry the choice?
+BC average the two choices into the gap between the bins, does ACT's latent carry the choice, and does
+a policy that samples its actions represent both?
 
-| scene | expert | BC (L1) | ACT | ACT latent KL | random latent changes the bin |
-|---|---|---|---|---|---|
-| random cube spawn, fair coin | 20/20 · 12 L / 8 R | 20/20 · 6 L / 14 R | 20/20 · 7 L / 13 R | 0.00007 | 0 of 20 |
-| fixed cube, exactly 50/50 demos, eval with shake | 20/20 · 9 L / 11 R | 20/20 · 14 L / 6 R | 20/20 · 9 L / 11 R | 0.00008 | 1 of 20 |
+| scene | expert | BC (L1) | ACT | flow matching | ACT latent KL | random latent changes the bin |
+|---|---|---|---|---|---|---|
+| random cube spawn, fair coin | 20/20 · 12 L / 8 R | 20/20 · 6 L / 14 R | 20/20 · 7 L / 13 R | — | 0.00007 | 0 of 20 |
+| fixed cube, exactly 50/50 demos, eval with shake | 20/20 · 9 L / 11 R | 20/20 · 14 L / 6 R | 20/20 · 9 L / 11 R | **20/20** | 0.00008 | 1 of 20 |
 
-No cube ever ended between the bins.
+On the standard eval no cube ended between the bins, and all three policies score 20/20.
+
+**The sampling test** separates them. One start, repeated 20 times: the same env seed, so the same
+scene and arm pose, and only the policy's own random seed changes. Fixed-cube scene, no shake.
+
+| one start × 20 runs | start 1000 | start 1010 | start 1013 |
+|---|---|---|---|
+| **flow matching** | 14 L / 6 R | 10 L / 10 R | 11 L / 9 R |
+| BC | 20 L | 20 L | 20 R |
+| ACT | 20 R | **20 between the bins (0/20)** | 20 R |
 
 **What it says.**
 
@@ -127,12 +140,18 @@ No cube ever ended between the bins.
   hesitated ~100 steps first; none failed.
 - **ACT's latent stays empty in both.** It never needs it: closed-loop tie-breaking already solves the
   task, so encoding the choice only costs KL.
-- **Success rate can't tell "commits to one" from "represents both."** A test that can: run a policy
-  many times from one identical start with no shake and check it produces both bins. BC and ACT
-  can't; Diffusion Policy should.
+- **Success rate can't tell "commits to one" from "represents both." The sampling test can.** From
+  one start, flow matching uses both bins every time (60/60 successful); BC and ACT repeat one outcome.
+- **The averaging failure exists, and only the sampling test found it.** At start 1010 ACT carries
+  toward the right bin, turns back and drops the cube between them, on all 20 repeats. The 20-seed
+  eval never landed on that start.
+- **"Fixed cube" still randomises the arm's start joints** (up to 0.036 rad), and that, not the
+  shake, is what picked BC's and ACT's bin.
+- Flow matching trains in ~23 min on one GPU (100 epochs), about the same as ACT.
 
-Predictions were written before each run and most were wrong; the full log is in
-[experiments/t2/notes.md](experiments/t2/notes.md).
+Predictions were written before each run and most were wrong; the full logs are in
+[experiments/t2/notes.md](experiments/t2/notes.md) and
+[experiments/t2_fm/notes.md](experiments/t2_fm/notes.md).
 
 ## T6: two arms, one tray
 
@@ -180,7 +199,7 @@ close. Full log, including two placement bugs found by looking at renders rather
 dream_robot/
   core/        schema · dataset · env_api · record · eval · registry · run
   sims/        robosuite/ · isaac/  → each with tasks/<task>/{env,expert,task.yaml}
-  policies/    bc/ · act/ · diffusion_policy/ · rl_finetune/ · vla/
+  policies/    bc/ · act/ · flow_matching/ · rl_finetune/ · vla/
 experiments/   <exp_id>/{config.yaml, results.json, videos/, notes.md}
 results.md     the matrix, regenerated — never hand-edited
 ```
