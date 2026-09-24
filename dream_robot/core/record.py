@@ -145,6 +145,9 @@ class Episode:
     images: list[dict[str, np.ndarray]]      # N frames, canonical camera -> uint8
     success: bool
     failure_mode: FailureMode
+    #: The instruction this episode was given, when it has its own. None for
+    #: rollouts whose prompt is fixed per dataset -- see ``record_episodes``.
+    prompt: str | None = None
 
     @property
     def steps(self) -> int:
@@ -162,9 +165,10 @@ class EpisodeRecord:
     kept: bool
     tracking_error_mean: float
     tracking_error_max: float
+    prompt: str | None = None
 
     def to_dict(self) -> dict:
-        return {
+        out = {
             "seed": self.seed,
             "steps": self.steps,
             "success": self.success,
@@ -173,6 +177,9 @@ class EpisodeRecord:
             "tracking_error_mean": round(self.tracking_error_mean, 6),
             "tracking_error_max": round(self.tracking_error_max, 6),
         }
+        if self.prompt is not None:
+            out["prompt"] = self.prompt
+        return out
 
 
 @dataclass(frozen=True)
@@ -186,7 +193,9 @@ class RecordingSummary:
 
     repo_id: str
     root: Path
-    task_prompt: str
+    #: The one prompt of the dataset, or None when every episode has its own
+    #: (then each EpisodeRecord carries it).
+    task_prompt: str | None
     episodes: tuple[EpisodeRecord, ...] = field(default_factory=tuple)
     #: How the executed actions were perturbed, or None for a clean recording.
     #: Two datasets with identical seeds and different noise are different data.
@@ -251,6 +260,7 @@ def rollout(
     seed: int,
     max_steps: int | None = None,
     perturb: Perturb | None = None,
+    prompt: Callable[[], str] | None = None,
 ) -> Episode:
     """Drive one episode to its own end and buffer it.
 
@@ -262,9 +272,14 @@ def rollout(
 
     With ``perturb``, ``env.step`` receives ``perturb(action, rng)`` and the
     episode still records ``action``. See the module docstring.
+
+    With ``prompt``, it is called once, right after the reset, and the episode
+    keeps the answer: an env that draws its instruction in ``reset`` has only
+    decided it by then.
     """
     limit = RUNAWAY_STEPS if max_steps is None else max_steps
     observation = env.reset(seed=seed)
+    instruction = prompt() if prompt is not None else None
     policy.reset()
     rng = np.random.default_rng(seed)
 
@@ -302,6 +317,7 @@ def rollout(
         images=images,
         success=success,
         failure_mode=FailureMode.NONE if success else failure_mode,
+        prompt=instruction,
     )
 
 
@@ -337,7 +353,7 @@ def record_episodes(
     *,
     repo_id: str,
     root: Path,
-    task_prompt: str,
+    task_prompt: str | Callable[[], str],
     episodes: int,
     robot_type: str,
     cameras: Sequence[str] | None = None,
@@ -355,6 +371,12 @@ def record_episodes(
             language-annotated from day one, because a VLA has nothing to
             condition on otherwise and retrofitting the annotation means
             re-recording everything.
+
+            A string is one prompt for the whole dataset. A callable is asked
+            after every reset, for tasks whose instruction changes per episode
+            (T5): pass ``lambda: env.prompt``. A callable rather than reading
+            ``env.prompt`` here, so this module still touches the env only
+            through reset / step / close.
         episodes: how many *kept* episodes are wanted. Seeds are consumed in
             order from ``seed_start`` and failures are skipped, so the seed set
             depends on the expert's success rate -- which is why every attempt,
@@ -369,7 +391,8 @@ def record_episodes(
     """
     if episodes < 1:
         raise ValueError(f"episodes must be >= 1, got {episodes}")
-    if not task_prompt.strip():
+    per_episode = callable(task_prompt)
+    if not per_episode and not task_prompt.strip():
         raise ValueError("task_prompt must be a non-empty instruction")
     root = Path(root)
     limit = max_attempts if max_attempts is not None else 2 * episodes + 10
@@ -382,7 +405,12 @@ def record_episodes(
     for attempt in range(limit):
         if kept >= episodes:
             break
-        episode = rollout(env, policy, seed=seed_start + attempt, perturb=perturb)
+        episode = rollout(
+            env, policy, seed=seed_start + attempt, perturb=perturb,
+            prompt=task_prompt if per_episode else None,
+        )
+        if per_episode and not (episode.prompt or "").strip():
+            raise ValueError(f"seed {episode.seed}: the env gave an empty instruction")
         mean, maximum = check_tracking(episode, env.embodiment, tolerance=tracking_tolerance)
         keep = episode.success or keep_failures
 
@@ -403,7 +431,9 @@ def record_episodes(
                     image_hw=(sample.shape[0], sample.shape[1]),
                     robot_type=robot_type,
                 )
-            _write_episode(dataset, episode, task_prompt, camera_names)
+            _write_episode(
+                dataset, episode, episode.prompt if per_episode else task_prompt, camera_names
+            )
             kept += 1
 
         records.append(
@@ -415,6 +445,7 @@ def record_episodes(
                 kept=keep,
                 tracking_error_mean=mean,
                 tracking_error_max=maximum,
+                prompt=episode.prompt,
             )
         )
 
@@ -428,7 +459,7 @@ def record_episodes(
     summary = RecordingSummary(
         repo_id=repo_id,
         root=root,
-        task_prompt=task_prompt,
+        task_prompt=None if per_episode else task_prompt,
         episodes=tuple(records),
         perturbation=_describe(perturb),
     )

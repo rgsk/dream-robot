@@ -1,0 +1,127 @@
+# instructed_pick_place -- robosuite / Panda. ROADMAP task T5.
+#
+# "put the red cube in the left box". T2's scene (two mirrored bins) plus a
+# second cube, and an expert that obeys an instruction instead of a coin. The
+# instruction names one of the two cubes by colour and one of the two bins by
+# side, so every episode has four possible correct futures and only the words
+# say which. A policy that cannot read cannot beat chance: 1/2 on the cube,
+# 1/2 on the bin, 1/4 on both.
+#
+# Everything that is not about the second cube or the instruction is T2's
+# task.yaml unchanged, for the same reason T2 copied T1's: a failure here must
+# only be explainable by not reading the instruction.
+
+name: instructed_pick_place
+sim: robosuite
+robot: Panda
+
+control:
+  hz: 30
+  horizon_seconds: 20.0
+
+cameras:
+  height: 128
+  width: 128
+  mapping:
+    agentview: top
+    robot0_eye_in_hand: wrist
+
+render:
+  camera: frontview
+  height: 256
+  width: 256
+
+scene:
+  # Two cube slots, in front of and behind the table centre, on the line
+  # between the bins. Both carries to either bin are then the same length, so
+  # no (cube, bin) pair is "the easy one". 14 cm apart: the open Panda
+  # gripper is 8 cm wide, so grasping one cube cannot clip the other.
+  cube_slots_xy: [[-0.07, 0.0], [0.07, 0.0]]
+  # Uniform jitter per cube around its slot, and random yaw -- T1's spawn
+  # spread, per cube.
+  cube_jitter_xy: [0.02, 0.02]
+  cube_half_size: [0.020, 0.022]      # Lift's cube, both cubes
+
+  # Each episode draws two distinct colours from this palette and assigns them
+  # to the two slots in random order. Both halves matter. Fixed colours would
+  # let "red" mean "the front cube", a position rule that never reads the
+  # word; a fixed palette order would do the same one step removed.
+  # rgba set on the geom at reset, no texture: Lift's redwood material would
+  # tint every colour towards brown.
+  palette:
+    red:    [0.85, 0.10, 0.10, 1.0]
+    green:  [0.10, 0.70, 0.20, 1.0]
+    blue:   [0.10, 0.25, 0.90, 1.0]
+    yellow: [0.95, 0.85, 0.10, 1.0]
+
+  # T2's bins, geometry and positions exactly. Grey instead of T2's blue: a
+  # blue bin next to "the blue cube" makes the colour word point at two
+  # objects. Bins are named by side, never by colour.
+  bin:
+    inner_half: 0.060
+    wall_half_thickness: 0.006
+    wall_half_height: 0.025
+  bins:
+    - name: right
+      offset_xy: [0.0, 0.20]
+      rgba: [0.55, 0.55, 0.55, 1.0]
+    - name: left
+      offset_xy: [0.0, -0.20]
+      rgba: [0.55, 0.55, 0.55, 1.0]
+
+instruction:
+  # Every training demo uses this one template. One template is the honest
+  # setup for the baselines: the one-hot policy gets an index per
+  # (colour, side) and would learn the same thing from twenty phrasings.
+  template: put the {color} cube in the {side} box
+
+  # Never recorded. Eval-only wordings, to measure what the language backbone
+  # brings that an index cannot: the one-hot policy has no row for these.
+  paraphrases:
+    - place the {color} block into the {side} bin
+    - move the {color} cube to the {side} box
+    - pick up the {color} cube and drop it in the {side} container
+    - the {color} one goes in the {side} box
+
+  # (colour, side) pairs never recorded as the *target*. The colour still
+  # appears in training (as the distractor, and as a target to the other
+  # side), so a held-out pair tests composition -- "yellow" and "left" known
+  # separately, never together -- not an unseen word. Eval reports seen and
+  # held-out pairs as separate rows.
+  held_out: [[yellow, left], [green, right]]
+
+success:
+  # The named cube resting inside the named bin. The other cube is not part of
+  # the predicate: knocking it about is untidy, not wrong.
+  resting_z_margin: 0.05
+
+expert:
+  # T2's (so T1's) values, unchanged.
+  approach_height: 0.10
+  grasp_dz: 0.005
+  lift_height: 0.25
+  drop_height: 0.085
+
+  reach_tolerance: 0.015
+  fine_tolerance: 0.010
+  carry_tolerance: 0.020
+  lift_clearance: 0.03
+  release_opening: 0.85
+
+  grip_settle_window: 4
+  grip_settle_epsilon: 2.5e-3
+
+  phase_timeout_seconds: 5.0
+
+  ik:
+    damping: 0.15
+    max_joint_step: 0.06
+
+failure:
+  lift_threshold: 0.03
+  # wrong_target is split by env.instruction_failure() -- a privileged
+  # method, since StepResult has no info dict -- because the two halves are
+  # the two halves of the instruction:
+  #   wrong_cube -- the distractor was lifted and the target never was
+  #   wrong_bin  -- the target is resting in the other bin
+  # Every other lifted failure is dropped, as T2.

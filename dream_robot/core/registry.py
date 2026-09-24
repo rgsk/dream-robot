@@ -43,6 +43,12 @@ def _robosuite_pick_place_two_bins_fixed(**kwargs):
     return PickPlaceTwoBins(replace(TaskConfig.load(), fixed_cube_pose=True), **kwargs)
 
 
+def _robosuite_instructed_pick_place(**kwargs):
+    from dream_robot.sims.robosuite.tasks.instructed_pick_place.env import InstructedPickPlace
+
+    return InstructedPickPlace(**kwargs)
+
+
 def _robosuite_two_arm_lift(**kwargs):
     from dream_robot.sims.robosuite.tasks.two_arm_lift.env import TwoArmLiftTask
 
@@ -54,6 +60,9 @@ TASKS: dict[str, Callable] = {
     "robosuite/pick_place_two_bins": _robosuite_pick_place_two_bins,
     "robosuite/pick_place_two_bins_fixed": _robosuite_pick_place_two_bins_fixed,
     "robosuite/two_arm_lift": _robosuite_two_arm_lift,
+    # T5. One entry; the eval splits are constructor arguments, not tasks:
+    # pairs="held_out" and/or wording="paraphrase".
+    "robosuite/instructed_pick_place": _robosuite_instructed_pick_place,
 }
 
 
