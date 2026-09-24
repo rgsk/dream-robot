@@ -14,6 +14,10 @@ committed to a side. Then it draws every path over the two bins.
     # if the latent carries the bin choice, the bins should split.
     ... run --policy act --checkpoint ... --sample-z --out experiments/t2/paths/act_sampled_z.json
 
+    # sampling test: one identical start (env seed repeated), only the policy's own noise seed varies
+    ... run --policy flow_matching --checkpoint ... --env robosuite/pick_place_two_bins_fixed \
+        --repeat-seed 1000 --out experiments/t2_fm/paths/fm_repeat1000.json
+
     # plot any number of runs side by side
     uv run python experiments/t2/scripts/rollout_paths.py plot \
         experiments/t2/paths/{expert,bc,act}.json --out scratch/t2/paths.png
@@ -67,9 +71,16 @@ def run(args) -> None:
 
     table_y = float(env.bin_centers[0][1] + env.bin_centers[1][1]) / 2
     episodes = []
-    for seed in EVAL_SEEDS:
+    runs = (
+        [(args.repeat_seed, i) for i in range(len(EVAL_SEEDS))]
+        if args.repeat_seed is not None
+        else [(seed, 0) for seed in EVAL_SEEDS]
+    )
+    for seed, policy_seed in runs:
         obs = env.reset(seed=seed)
         policy.reset()
+        if hasattr(policy, "seed"):                   # sampled policies: vary only their own noise
+            policy.seed(policy_seed)
         rng = np.random.default_rng(seed)             # as core.eval's perturb
         if shift is not None:
             shift.z = torch.randn(1, net.config.latent, generator=gen).to(policy._device)
@@ -98,6 +109,7 @@ def run(args) -> None:
         held = bool(cube[2] > env.bin_centers[0][2] + env._cfg.resting_z_margin)
         episodes.append({
             "seed": seed,
+            "policy_seed": policy_seed,
             "success": bool(result.success),
             "failure_mode": str(result.failure_mode),
             "steps": t + 1,
@@ -108,7 +120,7 @@ def run(args) -> None:
             "expert_target": None if target is None else env.bin_names[target],
             "path": path,
         })
-        print(f"seed {seed}: {where}{' (held)' if held else ''} success={result.success} "
+        print(f"seed {seed}/{policy_seed}: {where}{' (held)' if held else ''} success={result.success} "
               f"steps={t + 1} commit_step={commit}")
     env.close()
 
@@ -118,6 +130,7 @@ def run(args) -> None:
         "noise_sigma": args.noise_sigma,
         "checkpoint": str(args.checkpoint) if args.checkpoint else None,
         "sample_z": bool(args.sample_z),
+        "repeat_seed": args.repeat_seed,
         "bins": {n: [float(c[0]), float(c[1])] for n, c in zip(env.bin_names, env.bin_centers)},
         "bin_inner_half": env._cfg.bins[0].inner_half,
         "summary": summarize(episodes),
@@ -189,6 +202,8 @@ def main() -> None:
     r.add_argument("--noise-sigma", type=float, default=0.0)
     r.add_argument("--checkpoint", type=Path, default=None)
     r.add_argument("--sample-z", action="store_true")
+    r.add_argument("--repeat-seed", type=int, default=None,
+                   help="use this env seed for all 20 episodes; policy.seed(i) varies per episode")
     r.add_argument("--out", type=Path, required=True)
     q = sub.add_parser("plot")
     q.add_argument("runs", nargs="+")

@@ -96,10 +96,19 @@ def _act(env, *, checkpoint: Path | None = None, device: str | None = None):
     return ACTPolicy.load(Path(checkpoint), device=device)
 
 
+def _flow_matching(env, *, checkpoint: Path | None = None, device: str | None = None):
+    from dream_robot.policies.flow_matching.policy import FlowPolicy
+
+    if checkpoint is None:
+        raise ValueError("policy 'flow_matching' needs --checkpoint")
+    return FlowPolicy.load(Path(checkpoint), device=device)
+
+
 POLICIES: dict[str, Callable] = {
     "expert": _expert,
     "bc": _bc,
     "act": _act,
+    "flow_matching": _flow_matching,
 }
 
 

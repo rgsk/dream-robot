@@ -79,8 +79,11 @@ idle pod bills the same as a busy one.
   there is a wrapper that ignores the flag). Also `PYTHONUNBUFFERED=1`.
 - **`pkill -f <pattern>` over ssh kills its own ssh command** when the pattern appears in the
   command line, and the ssh exits with code 1 before killing the target. Kill by PID instead.
-- **One venv per pod**: `/workspace/setup.sh` puts every project's venv at `/root/venv`. Running
-  `uv sync` for llm on the same pod replaces dream-robot's.
+- **One venv per pod by default**: `/workspace/setup.sh` puts every project's venv at `/root/venv`,
+  and any `uv sync`/`uv run` for one project rewrites it for the other — under a running job.
+  When sharing a pod with llm, every dream-robot command sets
+  `UV_PROJECT_ENVIRONMENT=/root/venv-dream-robot` (pod scripts export it after the profile loads;
+  `/etc/profile.d/dream-robot.sh` sorts before `workspace.sh`, so setting it there is overridden).
 - **The network volume is shared by every project.** Only the folder separates dream-robot from llm;
   space and `/workspace/.secrets` are shared.
 - LeRobot's video encoder prints `Svt[info]` lines per episode; filter them out of logs.

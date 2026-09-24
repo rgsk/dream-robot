@@ -1,0 +1,38 @@
+{
+  "task": "robosuite/pick_place_two_bins_fixed",
+  "policy": "act",
+  "episodes": 1,
+  "success_rate": 0.0,
+  "successes": 0,
+  "cycle_time_seconds": null,
+  "mean_steps": 600,
+  "failure_histogram": {
+    "wrong_target": 1
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "selected": "experiments/t2_fm/act_start1010/act_on_robosuite_pick_place_two_bins_fixed/videos/selected.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1010,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    }
+  ],
+  "provenance": {
+    "checkpoint": "experiments/t2_fixed_act_half100/checkpoint.pt",
+    "epoch": 29,
+    "val_l1_rad": 0.00995615014900932,
+    "dataset_repo_id": "dream_robot/pick_place_two_bins",
+    "demonstrations": 95,
+    "held_out_episodes": [
+      5,
+      20,
+      36,
+      82,
+      93
+    ]
+  }
+}

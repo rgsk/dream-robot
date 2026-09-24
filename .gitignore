@@ -46,3 +46,5 @@ MUJOCO_LOG.TXT
 .vscode/settings.json
 
 scratch/
+# watcher contents are per-session
+watch/file.txt
