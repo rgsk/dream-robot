@@ -1,0 +1,54 @@
+{
+  "task": "robosuite/instructed_pick_place",
+  "policy": "smolvla_base_zero_shot",
+  "episodes": 5,
+  "success_rate": 0.0,
+  "successes": 0,
+  "cycle_time_seconds": null,
+  "mean_steps": 600,
+  "failure_histogram": {
+    "no_grasp": 5
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "failures": "experiments/t5/zero_shot/videos/failures.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1000,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1001,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1002,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1003,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1004,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    }
+  ],
+  "provenance": {
+    "checkpoint": "lerobot/smolvla_base",
+    "stats_from": "scratch/t5/smoke",
+    "wall_seconds": 25,
+    "steps_per_second": 121.7
+  }
+}

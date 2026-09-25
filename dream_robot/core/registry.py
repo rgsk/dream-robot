@@ -113,11 +113,22 @@ def _flow_matching(env, *, checkpoint: Path | None = None, device: str | None = 
     return FlowPolicy.load(Path(checkpoint), device=device)
 
 
+def _smolvla(env, *, checkpoint: Path | None = None, device: str | None = None):
+    # A fine-tuned pretrained_model/ dir. Zero-shot on the base checkpoint needs
+    # a dataset for shapes and stats, so it goes through SmolVLAPolicy.load directly.
+    from dream_robot.policies.smolvla.policy import SmolVLAPolicy
+
+    if checkpoint is None:
+        raise ValueError("policy 'smolvla' needs --checkpoint (a pretrained_model/ dir)")
+    return SmolVLAPolicy.load(env, checkpoint=Path(checkpoint), device=device)
+
+
 POLICIES: dict[str, Callable] = {
     "expert": _expert,
     "bc": _bc,
     "act": _act,
     "flow_matching": _flow_matching,
+    "smolvla": _smolvla,
 }
 
 

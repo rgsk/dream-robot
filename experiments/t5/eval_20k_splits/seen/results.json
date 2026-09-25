@@ -1,0 +1,429 @@
+{
+  "task": "robosuite/instructed_pick_place[seen/template]",
+  "policy": "smolvla",
+  "episodes": 60,
+  "success_rate": 0.3667,
+  "successes": 22,
+  "cycle_time_seconds": 7.23,
+  "mean_steps": 459.5,
+  "failure_histogram": {
+    "dropped": 1,
+    "no_grasp": 6,
+    "wrong_target": 31
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "successes": "experiments/t5/eval_20k_splits/seen/videos/successes.mp4",
+    "failures": "experiments/t5/eval_20k_splits/seen/videos/failures.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1000,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1001,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 216
+    },
+    {
+      "seed": 1002,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1003,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1004,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1005,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 207
+    },
+    {
+      "seed": 1006,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1007,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 207
+    },
+    {
+      "seed": 1008,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1009,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 229
+    },
+    {
+      "seed": 1010,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1011,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1012,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 205
+    },
+    {
+      "seed": 1013,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1014,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 207
+    },
+    {
+      "seed": 1015,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1016,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 211
+    },
+    {
+      "seed": 1017,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 206
+    },
+    {
+      "seed": 1018,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 219
+    },
+    {
+      "seed": 1019,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 219
+    },
+    {
+      "seed": 1020,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 230
+    },
+    {
+      "seed": 1021,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1022,
+      "success": false,
+      "failure_mode": "dropped",
+      "steps": 600
+    },
+    {
+      "seed": 1023,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1024,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1025,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1026,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 219
+    },
+    {
+      "seed": 1027,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 216
+    },
+    {
+      "seed": 1028,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1029,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1030,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1031,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 218
+    },
+    {
+      "seed": 1032,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 224
+    },
+    {
+      "seed": 1033,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 209
+    },
+    {
+      "seed": 1034,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1035,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1036,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1037,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1038,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 221
+    },
+    {
+      "seed": 1039,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1040,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 205
+    },
+    {
+      "seed": 1041,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1042,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 232
+    },
+    {
+      "seed": 1043,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1044,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 215
+    },
+    {
+      "seed": 1045,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1046,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1047,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1048,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1049,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1050,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1051,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 225
+    },
+    {
+      "seed": 1052,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1053,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1054,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 231
+    },
+    {
+      "seed": 1055,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1056,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1057,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1058,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1059,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    }
+  ],
+  "provenance": {
+    "checkpoint": "experiments/t5/smolvla_clean_n150/checkpoints/020000/pretrained_model",
+    "split": "seen/template",
+    "t5": {
+      "success": {
+        "success": 22,
+        "episodes": 60
+      },
+      "instruction_failures": {
+        "wrong_cube": 31,
+        "other": 7
+      },
+      "by": {
+        "blue->left": {
+          "success": 0,
+          "episodes": 5
+        },
+        "blue->right": {
+          "success": 3,
+          "episodes": 9
+        },
+        "green->left": {
+          "success": 5,
+          "episodes": 13
+        },
+        "red->left": {
+          "success": 4,
+          "episodes": 11
+        },
+        "red->right": {
+          "success": 4,
+          "episodes": 9
+        },
+        "slot 0": {
+          "success": 14,
+          "episodes": 39
+        },
+        "slot 1": {
+          "success": 8,
+          "episodes": 21
+        },
+        "yellow->right": {
+          "success": 6,
+          "episodes": 13
+        }
+      }
+    }
+  }
+}

@@ -33,6 +33,8 @@ Rung 1 (reach + grasp a rigid cube) is closed in sim for both BC and ACT: record
 | ✅ | two-arm scripted expert — two phase machines and a synchronisation barrier |
 | ✅ | `policies/flow_matching/` — Diffusion Policy with flow matching: action chunks sampled from noise, 5.5M params |
 | ✅ | `watch/watch_file.sh` — live view of runs and results, marks each log in progress / finished |
+| ✅ | `sims/robosuite/tasks/instructed_pick_place/` — T5: two cubes, two bins, a sentence picks one of each |
+| ✅ | `policies/smolvla/` — SmolVLA (450M) fine-tuned with our own training loop; VLM frozen, action expert trains |
 
 `uv run pytest -m "not slow"` runs the core suite without a simulator.
 
@@ -192,6 +194,37 @@ Cameras are ALOHA's set and each has a job: tight overhead for the tray's rotati
 alignment, a wide room view for the whole scene and for height, one wrist camera per arm for the
 close. Full log, including two placement bugs found by looking at renders rather than numbers, is in
 [experiments/t6/notes.md](experiments/t6/notes.md).
+
+## T5: "put the red cube in the left box"
+
+Two cubes and two bins. Each episode draws two colours from {red, green, blue, yellow} and a side, and
+the instruction names one of each. A policy that ignores the words gets 25%. Evaluation has three
+splits: seen colour/side pairs, held-out pairs (yellow→left and green→right never appear in training),
+and paraphrases the policy has never read.
+
+SmolVLA base (450M), fine-tuned on 150 clean demos with the VLM frozen, 60 episodes per split:
+
+| split | zero-shot | 10k steps | 20k steps | right cube, when it picked one |
+|---|---|---|---|---|
+| seen pairs | 0/5 | 22/60 | 22/60 | 45% → 42% |
+| held-out pairs | | 12/60 | 11/60 | 25% → 21% |
+| paraphrases | | 9/60 | 10/60 | 38% → 30% |
+
+**What it says.**
+
+- **The side word is obeyed perfectly.** No wrong-bin placement in 180 episodes, held-out pairs included.
+- **The colour word is at chance.** Doubling the training did not move it, so training length is not
+  the bottleneck.
+- **Longer training fixed the motion.** Never-grasped dropped from 10 to 6 on seen pairs and from 35
+  to 25 on paraphrases. Unseen wordings mostly break the motion before grounding is even tested.
+- **Open question: can it see the colours at all?** The cubes are ~5 px wide in a 128×128 image, and
+  SmolVLA turns each image into 64 tokens of ~16 px. The next run separates the two explanations by
+  giving our own flow-matching policy the target as an index instead of words.
+
+Zero-shot, the base model moves but never approaches a cube: it was pretrained on a different arm.
+LeRobot's config parser breaks on Python 3.14, so the training loop is written out in
+`policies/smolvla/train.py`; 20k steps took 97 min on a rented 4090 (~$1.20). Full log in
+[experiments/t5/notes.md](experiments/t5/notes.md).
 
 ## The shape
 

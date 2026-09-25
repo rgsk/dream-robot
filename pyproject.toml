@@ -26,7 +26,9 @@ dependencies = [
     # LeRobotDataset is the one thing a sim and a policy both agree on.
     # Pinned <0.6 because 0.5.1 is what ../so101-bottlefill and ../robot-vla
     # already resolve against on this machine, including alongside robosuite.
-    "lerobot>=0.5.1,<0.6",
+    # [smolvla]: transformers / accelerate / num2words for SmolVLM, the VLA's
+    # backbone (T5). Only the VLA rung imports them.
+    "lerobot[smolvla]>=0.5.1,<0.6",
 
     # --- the policies ---
     # Declared even though lerobot drags torch in anyway. Rule 1 says policies

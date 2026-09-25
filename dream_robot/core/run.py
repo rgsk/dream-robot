@@ -45,6 +45,9 @@ def checkpoint_provenance(path: Path | None) -> dict:
     """What produced the weights, lifted out of the checkpoint itself."""
     if path is None:
         return {}
+    if Path(path).is_dir():
+        # A LeRobot pretrained_model/ dir (SmolVLA): its provenance is its config.
+        return {"checkpoint": str(path)}
     import torch
 
     blob = torch.load(path, map_location="cpu", weights_only=False)
