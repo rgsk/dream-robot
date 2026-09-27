@@ -15,11 +15,16 @@ choice committed.
 The policy owns its noise: a ``torch.Generator`` seeded at construction, or by
 ``seed()``. The eval harness seeds the env, not torch, so without this a rerun
 of the same eval seeds would roll out different plans.
+
+**A conditioned checkpoint (T5) needs the episode's prompt.** ``prompt`` is a
+callable, read at the first plan after each ``reset()`` -- SmolVLA's pattern:
+the rollout resets the env before the policy, so the draw exists by then.
 """
 
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -28,7 +33,7 @@ import torch
 from dream_robot.core.dataset import frame_to_float_chw
 from dream_robot.core.schema import Observation
 from dream_robot.policies.bc.model import NormalizationStats
-from dream_robot.policies.flow_matching.model import FlowConfig, FlowPolicyNet
+from dream_robot.policies.flow_matching.model import FlowConfig, FlowPolicyNet, condition_vector
 
 
 class FlowPolicy:
@@ -43,7 +48,14 @@ class FlowPolicy:
         execute: int | None = None,
         steps: int | None = None,
         seed: int = 0,
+        prompt: Callable[[], str] | None = None,
     ):
+        if net.config.condition_words and prompt is None:
+            raise ValueError(
+                f"checkpoint is conditioned on {list(net.config.condition_words)}; "
+                "pass prompt (e.g. lambda: env.prompt)"
+            )
+        self._prompt = prompt
         # Actions run from each plan before re-planning; default half the chunk (8 of 16).
         execute = execute or max(1, net.config.chunk // 2)
         if not 1 <= execute <= net.config.chunk:
@@ -66,6 +78,7 @@ class FlowPolicy:
         execute: int | None = None,
         steps: int | None = None,
         seed: int = 0,
+        prompt: Callable[[], str] | None = None,
     ) -> FlowPolicy:
         resolved = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         blob = torch.load(path, map_location=resolved, weights_only=False)
@@ -85,6 +98,7 @@ class FlowPolicy:
             execute=execute,
             steps=steps,
             seed=seed,
+            prompt=prompt,
         )
 
     @property
@@ -97,6 +111,7 @@ class FlowPolicy:
 
     def reset(self) -> None:
         self._queue: deque[np.ndarray] = deque()
+        self._condition: torch.Tensor | None = None
 
     def __call__(self, observation: Observation) -> np.ndarray:
         if not self._queue:
@@ -124,5 +139,11 @@ class FlowPolicy:
             .unsqueeze(0)
             .to(self._device)
         )
-        plan = self._net.sample(images, state, steps=self._steps, generator=self._generator)
+        words = self._net.config.condition_words
+        if words and self._condition is None:
+            vector = condition_vector(self._prompt(), words)
+            self._condition = torch.from_numpy(vector).unsqueeze(0).to(self._device)
+        plan = self._net.sample(
+            images, state, steps=self._steps, generator=self._generator, condition=self._condition
+        )
         return plan[0].cpu().numpy()

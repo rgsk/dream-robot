@@ -110,7 +110,8 @@ def _flow_matching(env, *, checkpoint: Path | None = None, device: str | None = 
 
     if checkpoint is None:
         raise ValueError("policy 'flow_matching' needs --checkpoint")
-    return FlowPolicy.load(Path(checkpoint), device=device)
+    # env.prompt is read only by a conditioned (T5) checkpoint, after each reset.
+    return FlowPolicy.load(Path(checkpoint), device=device, prompt=lambda: env.prompt)
 
 
 def _smolvla(env, *, checkpoint: Path | None = None, device: str | None = None):

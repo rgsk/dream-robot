@@ -4,6 +4,8 @@
         --checkpoint experiments/t5/smolvla_clean_n150/checkpoints/020000/pretrained_model \
         --pairs seen --wording template --episodes 60 --out experiments/t5/eval_20k/seen
 
+    # the one-hot baseline: --policy flow_matching --checkpoint <dir>/checkpoint.pt
+
 ``core.run`` reports the closed FailureMode histogram, where both halves of T5's
 failure are one bucket, WRONG_TARGET. This script drives the same
 ``core.eval.evaluate`` (same seeds, same videos) through a thin tap on the env
@@ -29,7 +31,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from dream_robot.core.eval import EVAL_SEED_START, evaluate, write_results
-from dream_robot.policies.smolvla.policy import SmolVLAPolicy
+from dream_robot.core.registry import POLICIES
 from dream_robot.sims.robosuite.tasks.instructed_pick_place.env import InstructedPickPlace
 
 
@@ -81,6 +83,7 @@ def breakdown(rows: list[dict]) -> dict:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument("--policy", choices=("smolvla", "flow_matching"), default="smolvla")
     p.add_argument("--checkpoint", type=Path, required=True)
     p.add_argument("--pairs", choices=("seen", "held_out"), default="seen")
     p.add_argument("--wording", choices=("template", "paraphrase"), default="template")
@@ -93,12 +96,14 @@ def main() -> int:
     env = InstructedPickPlace(pairs=args.pairs, wording=args.wording)
     tap = _InstructionTap(env)
     try:
-        policy = SmolVLAPolicy.load(env, checkpoint=args.checkpoint)
+        policy = POLICIES[args.policy](env, checkpoint=args.checkpoint)
         split = f"{args.pairs}/{args.wording}"
-        print(f"smolvla on T5 [{split}], {args.episodes} episodes from seed {args.seed_start}\n")
+        print(f"{args.policy} on T5 [{split}], "
+              f"{args.episodes} episodes from seed {args.seed_start}\n")
         result = evaluate(
             tap, policy,
-            task=f"robosuite/instructed_pick_place[{split}]", policy_name="smolvla",
+            task=f"robosuite/instructed_pick_place[{split}]",
+            policy_name=args.policy,
             episodes=args.episodes, seed_start=args.seed_start,
             video_dir=args.out / "videos", video_per_outcome=args.video_per_outcome,
         )

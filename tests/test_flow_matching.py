@@ -118,7 +118,7 @@ class ScriptedNet(torch.nn.Module):
         self.cameras = config.cameras
         self.calls = 0
 
-    def sample(self, images, state, *, steps=None, generator=None):
+    def sample(self, images, state, *, steps=None, generator=None, condition=None):
         plan = torch.zeros(1, self.config.chunk, self.config.action_dim)
         plan[0, :, 0] = self.calls * 100 + torch.arange(self.config.chunk, dtype=torch.float32)
         self.calls += 1

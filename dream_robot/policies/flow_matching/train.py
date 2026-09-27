@@ -21,6 +21,13 @@ chunk dataset (padded steps masked out), same checkpoint layout. Differences:
 quantity BC and ACT report. On a two-mode task it is *meant* to be worse than
 theirs: a sample that picks the other bin than the held-out demo is a correct
 action with a large error. The rollout is the number (``core.run``).
+
+``--film`` additionally feeds that vector into every conv block of the camera
+encoders (``model.FiLMCameraEncoder``) instead of only after them.
+
+``--condition-words`` (T5) turns each frame's prompt into a 0/1 vector over those
+words and feeds it to the net (``model.condition_vector``). Every prompt in the
+dataset must hit at least one word, so a typo fails here, not as silent zeros.
 """
 
 from __future__ import annotations
@@ -38,7 +45,11 @@ from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
 from dream_robot.policies.act.data import ChunkDataset, compute_stats
 from dream_robot.policies.bc.data import make_loader, random_shift, read_spec, split_episodes
 from dream_robot.policies.bc.train import move, pick_device
-from dream_robot.policies.flow_matching.model import FlowConfig, FlowPolicyNet
+from dream_robot.policies.flow_matching.model import (
+    FlowConfig,
+    FlowPolicyNet,
+    condition_vector,
+)
 
 DEFAULT_ROOT = Path("data/robosuite/pick_place_cube")
 DEFAULT_REPO_ID = "dream_robot/pick_place_cube"
@@ -46,6 +57,28 @@ DEFAULT_OUT = Path("experiments/fm_pick_place_cube")
 
 #: Fixed seed for validation noise and times, so val loss moves only when the weights do.
 VAL_SEED = 1234
+
+
+class ConditionedChunks(ChunkDataset):
+    """ACT's chunks plus each frame's prompt as a ``(len(words),)`` vector (empty if no words)."""
+
+    def __init__(self, *args, words: tuple[str, ...], **kwargs):
+        super().__init__(*args, **kwargs)
+        table = self._dataset.hf_dataset
+        tasks = self._dataset.meta.tasks
+        # LeRobot 0.5: a DataFrame indexed by prompt with a task_index column.
+        pairs = zip(tasks.index, tasks["task_index"], strict=True)
+        prompts = {int(i): str(prompt) for prompt, i in pairs}
+        vectors = {i: condition_vector(prompt, words) for i, prompt in prompts.items()}
+        if words:
+            empty = [prompts[i] for i, v in vectors.items() if not v.any()]
+            if empty:
+                raise ValueError(f"prompts matching none of {list(words)}: {empty}")
+        task_index = np.asarray(table["task_index"])
+        self.conditions = np.stack([vectors[int(i)] for i in task_index]).astype(np.float32)
+
+    def __getitem__(self, i: int):
+        return (*super().__getitem__(i), torch.from_numpy(self.conditions[self.indices[i]]))
 
 
 @dataclass(frozen=True)
@@ -61,6 +94,8 @@ class TrainConfig:
     grad_clip: float = 1.0
     seed: int = 0
     workers: int = 4
+    condition_words: tuple[str, ...] = ()
+    film: bool = False
 
 
 def evaluate(net: FlowPolicyNet, loader, device: torch.device) -> tuple[float, float]:
@@ -69,12 +104,12 @@ def evaluate(net: FlowPolicyNet, loader, device: torch.device) -> tuple[float, f
     generator = torch.Generator(device=device).manual_seed(VAL_SEED)
     total_loss = total_raw = count = 0.0
     with torch.no_grad():
-        for images, state, actions, pad in loader:
+        for images, state, actions, pad, condition in loader:
             images, state = move(images, device), state.to(device)
-            actions, pad = actions.to(device), pad.to(device)
+            actions, pad, condition = actions.to(device), pad.to(device), condition.to(device)
             n = state.shape[0]
-            total_loss += float(net.loss(images, state, actions, pad, generator)) * n
-            plan = net.sample(images, state, generator=generator)
+            total_loss += float(net.loss(images, state, actions, pad, generator, condition)) * n
+            plan = net.sample(images, state, generator=generator, condition=condition)
             total_raw += float((plan[:, 0] - actions[:, 0]).abs().mean()) * n
             count += n
     return total_loss / count, total_raw / count
@@ -118,8 +153,13 @@ def train(
     train_episodes, val_episodes = split_episodes(
         spec.episodes, validation=config.validation_episodes, seed=config.seed
     )
-    train_set = ChunkDataset(repo_id, root, spec.cameras, train_episodes, config.chunk)
-    val_set = ChunkDataset(repo_id, root, spec.cameras, val_episodes, config.chunk)
+    words = tuple(config.condition_words)
+    train_set = ConditionedChunks(
+        repo_id, root, spec.cameras, train_episodes, config.chunk, words=words
+    )
+    val_set = ConditionedChunks(
+        repo_id, root, spec.cameras, val_episodes, config.chunk, words=words
+    )
     print(
         f"{spec.repo_id}: {spec.episodes} episodes, {spec.frames} frames, "
         f"cameras {list(spec.cameras)} at {spec.image_hw[0]}x{spec.image_hw[1]}\n"
@@ -136,7 +176,12 @@ def train(
         cameras=spec.cameras,
         image_hw=spec.image_hw,
         chunk=config.chunk,
+        condition_words=words,
+        film=config.film,
     )
+    if words:
+        seen = np.unique(train_set.conditions[train_set.indices], axis=0)
+        print(f"condition words {list(words)}: {len(seen)} distinct vectors in train")
     net = FlowPolicyNet(model_config, stats).to(device)
     ema = AveragedModel(net, multi_avg_fn=get_ema_multi_avg_fn(config.ema_decay), use_buffers=True)
     print(f"model: {net.parameter_count / 1e6:.2f}M parameters on {device}")
@@ -160,14 +205,15 @@ def train(
     for epoch in range(1, config.epochs + 1):
         net.train()
         running = count = 0.0
-        for images, state, actions, pad in train_loader:
+        for images, state, actions, pad, condition in train_loader:
             images = {
                 name: random_shift(frame.to(device, non_blocking=True), config.shift_pad)
                 for name, frame in images.items()
             }
             state, actions, pad = state.to(device), actions.to(device), pad.to(device)
+            condition = condition.to(device)
 
-            loss = net.loss(images, state, actions, pad)
+            loss = net.loss(images, state, actions, pad, condition=condition)
             optimiser.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(net.parameters(), config.grad_clip)
@@ -261,6 +307,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seed", type=int, default=defaults.seed)
     p.add_argument("--workers", type=int, default=defaults.workers)
     p.add_argument("--device", default=None)
+    p.add_argument(
+        "--condition-words", nargs="*", default=[],
+        help="T5: e.g. red green blue yellow left right -- the target as a one-hot",
+    )
+    p.add_argument(
+        "--film", action="store_true",
+        help="also feed the condition into every conv block of the camera encoders",
+    )
     args = p.parse_args(argv)
 
     train(
@@ -278,6 +332,8 @@ def main(argv: list[str] | None = None) -> int:
             ema_decay=args.ema_decay,
             seed=args.seed,
             workers=args.workers,
+            condition_words=tuple(args.condition_words),
+            film=args.film,
         ),
         device=pick_device(args.device),
     )

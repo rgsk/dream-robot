@@ -217,9 +217,27 @@ SmolVLA base (450M), fine-tuned on 150 clean demos with the VLM frozen, 60 episo
   the bottleneck.
 - **Longer training fixed the motion.** Never-grasped dropped from 10 to 6 on seen pairs and from 35
   to 25 on paraphrases. Unseen wordings mostly break the motion before grounding is even tested.
-- **Open question: can it see the colours at all?** The cubes are ~5 px wide in a 128×128 image, and
-  SmolVLA turns each image into 64 tokens of ~16 px. The next run separates the two explanations by
-  giving our own flow-matching policy the target as an index instead of words.
+- **Handing over the target as an index doesn't fix it.** Our flow-matching policy, told colour and
+  side as a one-hot instead of words, picks the right cube 49% of the time (seen 19/60, held-out 13/60).
+  So colour fails before language even comes into it.
+- **The pixels carry the colour; our encoder drops it.** The cubes are ~10 px across in the top camera
+  and plainly coloured. Asked "which slot holds colour c?" on unseen frames:
+
+  | probe | held-out |
+  |---|---|
+  | plain CNN, channels averaged | 100% |
+  | policy's encoder (spatial softmax), one-hot after it | 52% |
+  | policy's encoder, one-hot inside every conv block (FiLM) | 100% |
+
+  Spatial softmax reduces each map to one (x, y) point. With one cube in each slot in every frame, a
+  map that fires on "a cube" gives the same point every time, so nothing pushes it to tell red from
+  green. Side needs no vision at all, since the bins never move, which is why side is perfect.
+- **FiLM fixes the probe but not the policy (yet).** With the one-hot inside the encoders the policy
+  gets 16/60 seen and 5/60 held-out: colour is not clearly better (59% on 27 choices), and grasping
+  got worse (never-grasped 28 and 37).
+
+**Next:** check whether the one-hot changes the policy's actions at all: same start frame, colour
+swapped, see if the planned arm path heads to the other cube. Then film the never-grasped episodes.
 
 Zero-shot, the base model moves but never approaches a cube: it was pretrained on a different arm.
 LeRobot's config parser breaks on Python 3.14, so the training loop is written out in
