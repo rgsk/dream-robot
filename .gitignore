@@ -48,3 +48,6 @@ MUJOCO_LOG.TXT
 scratch/
 # watcher contents are per-session
 watch/file.txt
+
+practice.ipynb
+rough.ipynb

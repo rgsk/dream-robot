@@ -21,7 +21,6 @@ dependencies = [
     # release: 3.8.0 OK, 3.9.0 OK, 3.10.0 TypeError. robosuite declares no upper
     # bound of its own, so without this it floats straight into the break.
     "mujoco>=3.9,<3.10",
-
     # --- the seam ---
     # LeRobotDataset is the one thing a sim and a policy both agree on.
     # Pinned <0.6 because 0.5.1 is what ../so101-bottlefill and ../robot-vla
@@ -29,7 +28,6 @@ dependencies = [
     # [smolvla]: transformers / accelerate / num2words for SmolVLM, the VLA's
     # backbone (T5). Only the VLA rung imports them.
     "lerobot[smolvla]>=0.5.1,<0.6",
-
     # --- the policies ---
     # Declared even though lerobot drags torch in anyway. Rule 1 says policies
     # depend on torch + core and nothing else, so torch is a first-class
@@ -39,9 +37,9 @@ dependencies = [
     # task.yaml is the task; env.py only reads it. Declared because we import
     # it directly, even though lerobot already drags it in transitively.
     "pyyaml>=6",
-
     # --- rule 5: every run writes results.json and a video ---
     "imageio[ffmpeg]>=2.34",
+    "ipywidgets>=8.1.9",
 ]
 
 [dependency-groups]
