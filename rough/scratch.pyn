@@ -1,0 +1,3 @@
+user = (name="rahul", age=26)
+(name=, age=) = user
+print(name, age)
