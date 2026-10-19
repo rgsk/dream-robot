@@ -39,8 +39,7 @@ def test_reset_then_status_round_trips():
     assert reset == status
     assert status["seed"] == 3
     assert status["steps"] == 0
-    assert status["success"] is False
-    assert status["failure_mode"] == "none"
+    assert "success" not in status                    # no tool reports success
 
 
 def test_look_returns_a_png_per_camera():

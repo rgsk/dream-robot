@@ -22,7 +22,7 @@ from dataclasses import dataclass
 import mujoco
 import numpy as np
 
-from dream_robot.core.env_api import FailureMode, StepResult
+from dream_robot.core.env_api import FailureMode, Observation
 from dream_robot.sims.robosuite.ik import DifferentialIK
 from dream_robot.sims.robosuite.tasks.pick_place_cube.expert import (
     EEF_SITE,
@@ -56,7 +56,10 @@ DEFAULT_ABOVE_TABLE = 0.021
 # "commanded closed, and still wide".
 HOLDING_MIN_OPENING = 0.15
 
-Step = Callable[[np.ndarray], StepResult]
+# One control step: the new observation, and whether the episode's time is up. Nothing
+# else -- in particular not the sim's success flag: a real arm does not know whether
+# the task is done, the driver judges that from the cameras.
+Step = Callable[[np.ndarray], tuple[Observation, bool]]
 
 
 @dataclass(frozen=True)
@@ -73,7 +76,7 @@ class SkillResult:
     phase: str                    # the phase it finished in, or failed in
     steps: int
     holding: bool                 # read from the gripper's width at the end
-    episode_over: bool            # the env ended the episode mid-skill
+    episode_over: bool            # time ran out mid-skill
 
     def as_dict(self) -> dict:
         return {
@@ -169,8 +172,8 @@ class ArmSkills:
                                    False, False)
             self._closed = command.gripper < 0.5
             joints = self._ik.solve(command.waypoint, self._hold_rotation)
-            result = step(np.concatenate([joints, [command.gripper]]).astype(np.float32))
-            obs, steps = result.observation, steps + 1
-            if result.terminated or result.truncated:
-                return SkillResult(result.success, result.failure_mode, command.phase, steps,
+            obs, time_up = step(np.concatenate([joints, [command.gripper]]).astype(np.float32))
+            steps += 1
+            if time_up:
+                return SkillResult(False, FailureMode.TIMEOUT, command.phase, steps,
                                    self.holding(obs), True)

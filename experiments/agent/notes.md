@@ -150,9 +150,51 @@ gets cameras + the robot's own sensors; ground truth goes to a scorer outside th
   with a referee env.
 - In debugging: step 9's bar-on-rims and knocked-cereal causes came from sim poses / a
   before-after guess, not frames; seeds chosen by reading targets ahead.
-- Sim-measured constants: pad floor 2.0 cm (pick raises to 2.5) -- a real arm finds the table
-  by touch; place_at's release height trusts the pre-pick height.
+- Not cheats (corrected after review): place_at's release height (rim and object height both
+  come from find_objects, i.e. the camera) and the 2.0 cm pad floor (gripper geometry, a spec
+  or one-time calibration). Robustness gap only: release assumes no slip since pick.
 - Sim-perfect sensing (accepted, stated): noiseless depth, exact calibration, robot self-mask
   from the sim's segmentation render.
 - Plan: drop success signals from tools, verify by looking, record clips per skill (frame grid
-  + review_clip + depth-diff "something else moved"), camera-chosen bins in scripts, table by touch.
+  + review_clip + depth-diff "something else moved"), camera-chosen bins in scripts.
+
+## Step 11 · No sim knowledge in the loop (2026-10-19)
+- Tools no longer report success: `status` = instruction, steps, steps_left, time_up; skills
+  stop only when time is up (never on success); the episode no longer ends on success. The
+  driver judges from images (place_at already returns one).
+- Scoring: `build_scored_server()` -> (server, score); `score()` is the referee (success,
+  failure_mode, the target's spawn xy for checking the naming), never a tool.
+- Scripts are camera-only: bins by image order (find_objects lists left to right as the top
+  camera sees them); T7's target chosen by a rule-based namer over find_objects' fields
+  (colour, footprint, top, size), standing in for the LLM. Smoke: T7 3/3 named right and
+  succeeded; T5 planner 2/2.
+- Bug found and fixed: under pytest, a second find_objects returned nothing (NaN depth, empty
+  robot mask). Each hard reset leaves the old sim's GL context to the garbage collector; its
+  `__del__` frees GPU buffers by id in the *current* (live) context and detaches it. robosuite
+  never re-attaches. Fix (pick_place_cube/env.py): wrap MjRenderContext.render and __del__ to
+  make their own context current first. Plain scripts were unaffected (old sims freed at once),
+  so past evals stand; pytest and any long-lived process with delayed GC were exposed.
+- Per user: no new tests while tools churn; existing ones edited minimally (14/14, 3/3).
+- Deleted `scripts/t7_pick_place.py` (rule-based namer): T7 results come only from an LLM
+  driver (Claude in chat, referee log), never a hand-written matcher.
+
+## Step 12 · Claude drives T7, camera-only, referee blind (2026-10-19)
+- Fresh seeds 2000-2009 (never peeked). Tools only; my verdict written per episode
+  (`scratch/agent/driver_t7.jsonl`) before opening the referee log (`--score-log`).
+- **Referee: 8/10 success. Named the right object 10/10. My own verdict matched 9/10.**
+
+  | seed | target | referee | me |
+  |---|---|---|---|
+  | 2000, 2005 | bread | ok | ok |
+  | 2001 | yellow bar 14.8 cm | fail (on the rims) | fail |
+  | 2002, 2003 | cereal box | ok | ok |
+  | 2004 | can | ok | ok |
+  | 2006 | blue bar 12.8 cm | fail (propped, above the rim) | **ok, medium confidence** -- wrong |
+  | 2007 | yellow ball 5.5 cm | ok | ok |
+  | 2008 | bottle | ok | ok |
+  | 2009 | yellow box | ok | ok |
+- Both failures: bars longer than the 12 cm opening, released at whatever angle pick left them.
+  Same as seed 1006. Fix = place_at turns the held object to fit (e.g. the opening's diagonal).
+- My one wrong verdict: a bar along the diagonal looked "inside" from the wrist camera; one
+  end was propped on a wall. Images at 128 px don't show a 1-2 cm lift -> verification needs a
+  better check than a glance (side view, or depth: is the object's top below the rim?).

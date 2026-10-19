@@ -11,28 +11,30 @@ pytest.importorskip("robosuite")
 
 from mcp import Client  # noqa: E402
 
-from dream_robot.agent.server import build_server  # noqa: E402
+from dream_robot.agent.server import build_scored_server  # noqa: E402
 from dream_robot.core.registry import make_env  # noqa: E402
 
 
 def _drive(calls, task="robosuite/instructed_pick_place"):
-    """Run (tool, args) calls in order on one fresh server; return each result."""
+    """Run (tool, args) calls in order on one fresh server; return each result, then the
+    referee's verdict."""
+    server, score = build_scored_server(lambda: make_env(task))
 
     async def go():
-        async with Client(build_server(lambda: make_env(task))) as c:
+        async with Client(server) as c:
             out = []
             for name, args in calls:
                 r = await c.call_tool(name, args(out) if callable(args) else args)
                 out.append(r.content[0].text if r.is_error else json.loads(r.content[0].text))
             return out
 
-    return asyncio.run(go())
+    return [*asyncio.run(go()), score()]
 
 
 def _container(things, side):
-    """The found container on ``side`` ("left" is -y), as a planner reads the image."""
+    """The container on ``side``, as the top camera sees it: entries come left to right."""
     bins = [t for t in things["things"] if t["kind"] == "container"]
-    return max(bins, key=lambda t: (1 if side == "right" else -1) * t["centre"][1])
+    return bins[0] if side == "left" else bins[-1]
 
 
 def test_t5_find_by_colour_pick_place_at_completes_seed_1000():
@@ -43,7 +45,6 @@ def test_t5_find_by_colour_pick_place_at_completes_seed_1000():
         ("find_objects", {}),
         ("pick", lambda out: {"grasp": out[1]["grasp"]}),
         ("place_at", lambda out: {"point": _container(out[2], "right")["drop_point"]}),
-        ("status", {}),
     ])
     assert reset["instruction"] == "put the yellow cube in the right box"
     assert picked["ok"] and picked["holding"]
@@ -65,7 +66,6 @@ def test_t7_find_objects_pick_place_at_completes_seed_1000():
         ("find_objects", {}),
         ("pick", red_box),
         ("place_at", lambda out: {"point": _container(out[1], "left")["drop_point"]}),
-        ("status", {}),
     ], task="robosuite/assorted_pick_place")
     assert reset["instruction"] == "put the red box in the left bin"
     assert sum(t["kind"] == "container" for t in things["things"]) == 2
@@ -75,7 +75,7 @@ def test_t7_find_objects_pick_place_at_completes_seed_1000():
 
 
 def test_failures_are_reported_not_raised():
-    placed, picked = _drive([
+    placed, picked, _ = _drive([
         ("place_at", {"point": [0.0, -0.2, 0.85]}),                 # nothing held
         ("pick", {"grasp": {"point": [0.0, 0.1, 0.83]}}),           # empty table
     ])

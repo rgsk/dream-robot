@@ -10,6 +10,11 @@ learns which cameras this task has, and the camera list is part of ``look``'s
 schema: an enum, so the Inspector shows a dropdown and an LLM cannot ask for a
 camera that is not there. A ``reset`` call then starts a real episode.
 
+**No tool reports success.** The sim knows whether the named object is in the
+named bin; a real robot does not. So the episode does not end when the task is
+done, and nothing the driver sees says it is: the driver judges from the images.
+Scoring is a referee's job, outside the tools (``build_scored_server``).
+
 **Tools return plain dicts and images.** A dict is what both MCP clients and
 OpenAI function calling hand straight to the model, so the tool layer needs no
 second adapter per planner.
@@ -28,6 +33,7 @@ import argparse
 import asyncio
 import contextlib
 import functools
+import json
 import os
 import sys
 from collections.abc import Callable
@@ -42,7 +48,7 @@ from pydantic import BaseModel, Field
 
 from dream_robot.agent import tabletop
 from dream_robot.agent.perception import COLOURS, colour_mask, find, overlay
-from dream_robot.core.env_api import Env, FailureMode, StepResult
+from dream_robot.core.env_api import Env, StepResult
 
 INSTRUCTIONS = """\
 A simulated robot arm (Franka Panda) at a table. Call `reset` to start an episode;
@@ -50,8 +56,9 @@ it returns the task instruction. `look` shows the scene from a camera.
 `find_objects` finds everything on the table -- objects, each with a grasp, and
 containers, each with a drop point -- numbered on an image. `find_by_colour` locates
 objects of one colour. `pick` takes a grasp and lifts; `place_at` puts what is held
-down at a point. Both report ok or how they failed. `status` reports the episode:
-steps, and whether the task succeeded.
+down at a point. Both report whether the motion went as planned, never whether the
+task is done: judge that from the images. `status` reports the instruction and the
+steps left before time runs out.
 
 Points are in metres, world frame: x, y from the table centre, z up from the floor
 (the table top is at about z = 0.8).
@@ -87,7 +94,10 @@ class RobotSession:
     Construct it on the sim thread -- the constructor builds the sim.
     """
 
-    def __init__(self, make_env: Callable[[], Env], *, viewer: str | None = None):
+    def __init__(
+        self, make_env: Callable[[], Env], *, viewer: str | None = None,
+        score_log: str | None = None,
+    ):
         if viewer:
             from dream_robot.agent.viewer import find_display
 
@@ -111,8 +121,11 @@ class RobotSession:
         self._last: StepResult | None = None
         self._steps = 0
         self._seed: int | None = None
+        self._score_log = score_log
+        self._started = False                     # a real episode (not the warm-up) is running
 
     def reset(self, seed: int | None) -> dict[str, Any]:
+        self.log_score()                           # the episode that is ending
         with _quiet():
             self._obs = self.env.reset(seed=seed)
         if self.arm is not None:
@@ -120,7 +133,23 @@ class RobotSession:
         if self.viewer is not None:
             self.viewer.open()                     # the reset built a new model
         self._last, self._steps, self._seed = None, 0, seed
+        self._started = True
         return self.status()
+
+    def log_score(self) -> None:
+        """Append the referee's verdict on the current episode to ``score_log``.
+
+        For a driver that talks to this server over stdio (Claude Code, an LLM): the
+        verdict goes to a file, not through any tool, and is read only after the run.
+        Written after every skill and at reset, so the file is never behind; a reader
+        takes the last line per episode.
+        """
+        if not (self._score_log and self._started):
+            return
+        verdict = {"seed": self._seed, "instruction": getattr(self.env, "prompt", None),
+                   **self.score()}
+        with open(self._score_log, "a") as f:
+            f.write(json.dumps(verdict) + "\n")
 
     def frame(self, camera: str) -> np.ndarray:
         if camera == SCENE:
@@ -152,16 +181,26 @@ class RobotSession:
         things = tabletop.find_objects(frame, self.env.table_xy, self.env.robot_mask("top"))
         return [t.as_dict(i) for i, t in enumerate(things, start=1)], tabletop.overlay(frame, things)
 
-    def step(self, action: np.ndarray) -> StepResult:
-        """The one place the episode advances. Skills step through here."""
-        if self._last is not None and (self._last.terminated or self._last.truncated):
-            raise ToolError("the episode is over: call reset")
+    def step(self, action: np.ndarray) -> tuple[Any, bool]:
+        """The one place the episode advances. Skills step through here and get the
+        observation and whether time is up -- not the env's success or termination."""
+        self._check_running()
         self._last = self.env.step(action)
         self._obs = self._last.observation
         self._steps += 1
         if self.viewer is not None:
             self.viewer.sync()
-        return self._last
+        return self._obs, self.time_up
+
+    @property
+    def time_up(self) -> bool:
+        """The episode's only end: the clock. Not the task being done."""
+        horizon = getattr(self.env, "horizon_steps", None)
+        if horizon is not None:
+            return self._steps >= horizon
+        # No clock exposed (RoboCasa, parked): fall back on the env's own end,
+        # which does leak success. Fix when that env is driven again.
+        return bool(self._last and (self._last.terminated or self._last.truncated))
 
     def pick(self, grasp: GraspIn) -> tuple[dict[str, Any], np.ndarray]:
         from dream_robot.sims.robosuite.skills import Grasp
@@ -170,16 +209,18 @@ class RobotSession:
         yaw = None if grasp.yaw_deg is None else float(np.deg2rad(grasp.yaw_deg))
         g = Grasp(np.asarray(grasp.point, dtype=float), yaw, grasp.above_table)
         result = self.arm.pick(g, self._obs, self.step)
+        self.log_score()
         return result.as_dict(), np.asarray(self.env.render())
 
     def place_at(self, point: list[float]) -> tuple[dict[str, Any], np.ndarray]:
         self._check_running()
         result = self.arm.place_at(np.asarray(point, dtype=float), self._obs, self.step)
+        self.log_score()
         return result.as_dict(), np.asarray(self.env.render())
 
     def _check_running(self) -> None:
-        if self._last is not None and (self._last.terminated or self._last.truncated):
-            raise ToolError("the episode is over: call reset")
+        if self.time_up:
+            raise ToolError("time is up: call reset")
 
     def paint(self, colors: tuple[str, str]) -> None:
         self._obs = self.env.paint(colors)
@@ -187,21 +228,56 @@ class RobotSession:
             self.viewer.sync(pace=False)
 
     def status(self) -> dict[str, Any]:
-        last = self._last
+        horizon = getattr(self.env, "horizon_steps", None)
         return {
             "instruction": getattr(self.env, "prompt", None),
             "seed": self._seed,
             "steps": self._steps,
-            "success": bool(last and last.success),
-            "done": bool(last and (last.terminated or last.truncated)),
-            "failure_mode": str(last.failure_mode if last else FailureMode.NONE),
+            "steps_left": None if horizon is None else max(0, horizon - self._steps),
+            "time_up": self.time_up,
         }
+
+    def _diagnose(self):
+        # T5's _diagnose takes the cube's position; T7's reads its own target.
+        if hasattr(self.env, "instruction_failure"):
+            return self.env._diagnose(self.env.cube_pos)
+        return self.env._diagnose()
+
+    def score(self) -> dict[str, Any]:
+        """The referee's verdict, from the sim's ground truth. Never a tool."""
+        last = self._last
+        diagnose = getattr(self.env, "_diagnose", None)
+        success = bool(last and last.success)
+        verdict = {
+            "success": success,
+            "failure_mode": "none" if success or diagnose is None else str(self._diagnose()),
+            "steps": self._steps,
+        }
+        if hasattr(self.env, "target_pos"):         # T7: lets a scorer check the naming
+            # Where it started (spawn, table-centred = world xy), not where it is now.
+            verdict["target_xy"] = [round(float(c), 4) for c in self.env.target.xy]
+            verdict["target_kind"] = self.env.target.kind
+        return verdict
 
 
 def build_server(
-    make_env: Callable[[], Env], *, debug: bool = False, viewer: str | None = None
+    make_env: Callable[[], Env], *, debug: bool = False, viewer: str | None = None,
+    score_log: str | None = None,
 ) -> MCPServer:
-    """``debug`` adds tools that edit the world, for building test scenes by hand.
+    """The MCP server. See ``build_scored_server`` for the same plus a referee."""
+    return build_scored_server(make_env, debug=debug, viewer=viewer, score_log=score_log)[0]
+
+
+def build_scored_server(
+    make_env: Callable[[], Env], *, debug: bool = False, viewer: str | None = None,
+    score_log: str | None = None,
+) -> tuple[MCPServer, Callable[[], dict[str, Any]]]:
+    """The server, and ``score()``: the referee's verdict on the current episode.
+
+    ``score`` is for whoever evaluates the driver (a script, a test), in the same
+    process -- it is deliberately not a tool, so no driver can call it.
+
+    ``debug`` adds tools that edit the world, for building test scenes by hand.
     Never give them to a planner: a planner that can repaint the scene can
     "succeed" by changing the task instead of doing it.
 
@@ -209,7 +285,9 @@ def build_server(
     sim and paces it to real time -- for a human watching, never for an eval."""
     sim = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sim")
     with _quiet():
-        session = sim.submit(lambda: RobotSession(make_env, viewer=viewer)).result()
+        session = sim.submit(
+            lambda: RobotSession(make_env, viewer=viewer, score_log=score_log)
+        ).result()
     server = MCPServer("dream-robot", instructions=INSTRUCTIONS)
     on_sim = _on_sim_thread(sim)
     Camera = Literal[session.cameras]
@@ -251,7 +329,8 @@ def build_server(
         def find_objects() -> list:
             """Everything on the table, from the top camera's depth: no colour or name needed.
 
-            Each entry has an ``id`` (drawn on the returned image), ``kind`` ("object" or
+            Entries are in image order, left to right as the top camera sees them. Each has
+            an ``id`` (drawn on the returned image), ``kind`` ("object" or
             "container"), ``centre`` (top centre, metres), ``size`` (footprint length and
             width, height), ``footprint`` ("round" / "rectangular"), ``top`` ("flat" /
             "domed") and ``colour``. Objects carry a ``grasp``: ``point`` where the finger
@@ -310,10 +389,11 @@ def build_server(
     @server.tool()
     @on_sim
     def status() -> dict[str, Any]:
-        """The instruction, steps taken, and whether the episode succeeded or how it failed."""
+        """The instruction, steps taken, and steps left before time runs out. Says nothing
+        about success: judge that from the images."""
         return session.status()
 
-    return server
+    return server, lambda: sim.submit(session.score).result()
 
 
 def _arm_skills(env):
@@ -397,6 +477,10 @@ def main() -> None:
         "resets; the default), docked (right third, a bit soft) or sharp (full resolution, "
         "GNOME maximises it)",
     )
+    parser.add_argument(
+        "--score-log", help="append the referee's verdict per episode to this JSONL file "
+        "(on each reset and at exit); never exposed as a tool",
+    )
     args = parser.parse_args()
 
     from dream_robot.core.registry import task_factory
@@ -405,7 +489,10 @@ def main() -> None:
         factory = task_factory(args.env)
     except KeyError as exc:
         parser.error(str(exc))
-    build_server(factory, debug=args.debug, viewer=args.viewer).run("stdio")
+    server, _ = build_scored_server(
+        factory, debug=args.debug, viewer=args.viewer, score_log=args.score_log
+    )
+    server.run("stdio")
     # The transport has handed fd 1 back to the wire. C libraries flush their
     # buffered stdout at exit (the viewer's GL warnings), so point it at stderr.
     os.dup2(2, 1)

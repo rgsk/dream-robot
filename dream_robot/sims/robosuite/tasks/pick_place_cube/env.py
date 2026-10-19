@@ -27,6 +27,7 @@ import numpy as np
 import robosuite as suite
 import yaml
 from robosuite.environments.manipulation.lift import Lift
+from robosuite.utils.binding_utils import MjRenderContext
 from robosuite.utils.mjcf_utils import array_to_string, new_body, new_geom
 
 from dream_robot.core.camera import RGBD
@@ -38,6 +39,35 @@ from dream_robot.core.schema import (
     build_observation,
     validate_action,
 )
+
+def _own_context(method):
+    """Make this render context's GL context current, then run ``method``.
+
+    robosuite never does, and every hard reset leaves the old sim's context for the
+    garbage collector. Its ``__del__`` then frees GL buffers by id in whatever
+    context is current -- the live one, whose buffers share those ids -- and
+    detaches it. Renders after a delayed free read garbage: NaN depth, empty masks.
+    Seen under pytest, where old sims live longer. Wrapping ``__del__`` frees the
+    right buffers; wrapping ``render`` re-attaches the live context. Both cheap.
+    """
+
+    def wrapped(self, *args, **kwargs):
+        try:
+            self.gl_ctx.make_current()
+        except Exception:
+            if method.__name__ != "__del__":
+                raise
+            # At interpreter exit EGL may already be gone; nothing left to protect.
+        return method(self, *args, **kwargs)
+
+    wrapped.__wrapped__ = method
+    return wrapped
+
+
+for _name in ("render", "__del__"):
+    if not hasattr(getattr(MjRenderContext, _name), "__wrapped__"):
+        setattr(MjRenderContext, _name, _own_context(getattr(MjRenderContext, _name)))
+
 
 TASK_YAML = Path(__file__).with_name("task.yaml")
 
@@ -196,6 +226,11 @@ class PickPlaceCube:
     @property
     def embodiment(self) -> Embodiment:
         return PANDA
+
+    @property
+    def horizon_steps(self) -> int:
+        """Steps until the episode times out: the harness's clock, not a task fact."""
+        return self._cfg.horizon_steps
 
     @property
     def control_hz(self) -> float:

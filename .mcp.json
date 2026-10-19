@@ -75,7 +75,9 @@
         "--env",
         "robosuite/assorted_pick_place",
         "--viewer",
-        "own"
+        "own",
+        "--score-log",
+        "scratch/agent/referee_t7.jsonl"
       ],
       "env": {
         "MUJOCO_GL": "egl"
