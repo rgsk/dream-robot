@@ -38,24 +38,43 @@ import imageio.v3 as iio
 import numpy as np
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from pydantic import Field
+from pydantic import BaseModel, Field
 
+from dream_robot.agent import tabletop
 from dream_robot.agent.perception import COLOURS, colour_mask, find, overlay
 from dream_robot.core.env_api import Env, FailureMode, StepResult
 
 INSTRUCTIONS = """\
 A simulated robot arm (Franka Panda) at a table. Call `reset` to start an episode;
-it returns the task instruction. `look` shows the scene from a camera. `find_by_colour`
-locates objects of a colour and returns their 3D points. `pick` grasps at such a point
-and lifts; `place` puts what is held into a bin. Both report ok or how they failed.
-`status` reports the episode: steps, and whether the task succeeded.
+it returns the task instruction. `look` shows the scene from a camera.
+`find_objects` finds everything on the table -- objects, each with a grasp, and
+containers, each with a drop point -- numbered on an image. `find_by_colour` locates
+objects of one colour. `pick` takes a grasp and lifts; `place_at` puts what is held
+down at a point. Both report ok or how they failed. `status` reports the episode:
+steps, and whether the task succeeded.
 
-Points are in metres, in the world frame: origin at the table centre, z up.
+Points are in metres, world frame: x, y from the table centre, z up from the floor
+(the table top is at about z = 0.8).
 """
 
-# [x, y, z] in metres, world frame: the shape find_by_colour returns, so its
-# ``point`` passes straight into pick's.
+# [x, y, z] in metres, world frame.
 Point = Annotated[list[float], Field(min_length=3, max_length=3)]
+
+# find_by_colour's top face is a cube's centre this much higher (Lift's cubes:
+# 2.0-2.2 cm half-size). It knows colour, not shape, so its grasps assume a cube.
+CUBE_TOP_TO_CENTRE = 0.021
+
+
+class GraspIn(BaseModel):
+    """A grasp as find_objects returns it; pass it to pick unchanged. Extra fields are ignored."""
+
+    point: Point = Field(description="where the finger pads close, metres, world frame")
+    yaw_deg: float | None = Field(
+        None, description="world direction the fingers close along; null keeps the wrist as is"
+    )
+    above_table: float | None = Field(
+        None, description="point's height over the table: how far the object hangs when lifted"
+    )
 
 # The wide render view, env.render(). Not "front": that is a canonical
 # observation camera (schema.CANONICAL_CAMERAS), and a task may record one.
@@ -113,7 +132,9 @@ class RobotSession:
         found = find(frame, colour_mask(frame.rgb, colour))
         # One shape for every outcome, so a planner reads the same fields each time.
         candidates = [
-            {"id": i, "point": [round(float(c), 4) for c in f.point], "pixels": f.pixels}
+            {"id": i, "point": [round(float(c), 4) for c in f.point], "pixels": f.pixels,
+             "grasp": {"point": [round(float(c), 4) for c in f.point - [0, 0, CUBE_TOP_TO_CENTRE]],
+                       "yaw_deg": None, "above_table": None}}
             for i, f in enumerate(found, start=1)
         ]
         result = {
@@ -121,9 +142,15 @@ class RobotSession:
             "found": len(found) == 1,
             "ambiguous": len(found) > 1,
             "point": candidates[0]["point"] if len(found) == 1 else None,
+            "grasp": candidates[0]["grasp"] if len(found) == 1 else None,
             "candidates": candidates,
         }
         return result, overlay(frame, found)
+
+    def find_objects(self) -> tuple[list[dict[str, Any]], np.ndarray]:
+        frame = self.env.rgbd("top")
+        things = tabletop.find_objects(frame, self.env.table_xy, self.env.robot_mask("top"))
+        return [t.as_dict(i) for i, t in enumerate(things, start=1)], tabletop.overlay(frame, things)
 
     def step(self, action: np.ndarray) -> StepResult:
         """The one place the episode advances. Skills step through here."""
@@ -136,14 +163,18 @@ class RobotSession:
             self.viewer.sync()
         return self._last
 
-    def pick(self, point: list[float]) -> tuple[dict[str, Any], np.ndarray]:
+    def pick(self, grasp: GraspIn) -> tuple[dict[str, Any], np.ndarray]:
+        from dream_robot.sims.robosuite.skills import Grasp
+
         self._check_running()
-        result = self.arm.pick(np.asarray(point, dtype=float), self._obs, self.step)
+        yaw = None if grasp.yaw_deg is None else float(np.deg2rad(grasp.yaw_deg))
+        g = Grasp(np.asarray(grasp.point, dtype=float), yaw, grasp.above_table)
+        result = self.arm.pick(g, self._obs, self.step)
         return result.as_dict(), np.asarray(self.env.render())
 
-    def place(self, bin_name: str) -> tuple[dict[str, Any], np.ndarray]:
+    def place_at(self, point: list[float]) -> tuple[dict[str, Any], np.ndarray]:
         self._check_running()
-        result = self.arm.place(bin_name, self._obs, self.step)
+        result = self.arm.place_at(np.asarray(point, dtype=float), self._obs, self.step)
         return result.as_dict(), np.asarray(self.env.render())
 
     def _check_running(self) -> None:
@@ -204,39 +235,61 @@ def build_server(
         def find_by_colour(colour: Colour) -> list:
             """Locate objects of one colour in the top camera.
 
-            Knows colour only -- not shape, size or position. ``found`` and ``point`` are set
-            only when exactly one object matches. When several do, ``ambiguous`` is true
-            and ``point`` is null: choose from ``candidates`` (each with a 3D point in
-            metres, top-face centre), whose ids are drawn on the returned image.
+            Knows colour only -- not shape, size or position. ``found``, ``point`` and
+            ``grasp`` are set only when exactly one object matches. When several do,
+            ``ambiguous`` is true and they are null: choose from ``candidates`` (each with
+            a 3D point in metres, top-face centre, and a grasp), whose ids are drawn on the
+            returned image. Its grasps assume a ~4 cm cube; find_objects measures instead.
             """
             result, img = session.find_by_colour(colour)
             return [result, _png(img)]
 
-    if session.arm is not None:
-        Bin = Literal[session.arm.bins]
+    if all(hasattr(session.env, a) for a in ("rgbd", "table_xy", "robot_mask")):
 
         @server.tool()
         @on_sim
-        def pick(point: Point) -> list:
-            """Grasp the object whose top-face centre is at ``point`` and lift it.
+        def find_objects() -> list:
+            """Everything on the table, from the top camera's depth: no colour or name needed.
 
-            ``point`` is [x, y, z] in metres: pass find_by_colour's ``point`` as it is.
+            Each entry has an ``id`` (drawn on the returned image), ``kind`` ("object" or
+            "container"), ``centre`` (top centre, metres), ``size`` (footprint length and
+            width, height), ``footprint`` ("round" / "rectangular"), ``top`` ("flat" /
+            "domed") and ``colour``. Objects carry a ``grasp``: ``point`` where the finger
+            pads close, ``yaw_deg`` the world direction they close along (across the narrow
+            side), ``width``, and ``too_wide`` if it may not fit the 8 cm gripper.
+            Containers carry ``drop_point`` (centre of the opening, rim height) and
+            ``opening`` (inside size). Things touching each other come back as one entry.
+            """
+            things, img = session.find_objects()
+            return [{"things": things}, _png(img)]
+
+    if session.arm is not None:
+
+        @server.tool()
+        @on_sim
+        def pick(grasp: GraspIn) -> list:
+            """Turn the wrist, grasp, and lift, as ``grasp`` says.
+
+            Pass an object's ``grasp`` from find_objects (or find_by_colour) as it is.
             Returns ok, or failure: "no_grasp" (closed on nothing), "timeout" (a motion
             phase stalled). ``holding`` is read from the gripper's width. Also returns
             the scene afterwards.
             """
-            result, img = session.pick(point)
+            result, img = session.pick(grasp)
             return [result, _png(img)]
 
         @server.tool()
         @on_sim
-        def place(bin: Bin) -> list:
-            """Carry what the gripper holds over a bin, lower it, release, and retreat.
+        def place_at(point: Point) -> list:
+            """Carry what the gripper holds above ``point``, lower it until its bottom is just
+            over the point, release, and retreat.
 
-            Returns ok, or failure: "dropped" (lost it on the way), "no_grasp" (nothing
-            was held), "timeout". Also returns the scene afterwards.
+            ``point`` is where the object should land: a container's ``drop_point`` from
+            find_objects, or a spot on the table. Returns ok, or failure: "dropped" (lost
+            it on the way), "no_grasp" (nothing was held), "timeout". Also returns the
+            scene afterwards.
             """
-            result, img = session.place(bin)
+            result, img = session.place_at(point)
             return [result, _png(img)]
 
     if debug and hasattr(session.env, "paint"):
@@ -269,7 +322,7 @@ def _arm_skills(env):
     Imported lazily, as registry.py does: a server over a non-robosuite env must
     not need robosuite installed.
     """
-    if not (hasattr(env, "mujoco") and hasattr(env, "bin_names")):
+    if not (hasattr(env, "mujoco") and hasattr(env, "arm_qpos_idx")):
         return None
     from dream_robot.sims.robosuite.skills import ArmSkills
 

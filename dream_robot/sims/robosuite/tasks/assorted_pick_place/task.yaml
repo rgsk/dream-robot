@@ -1,0 +1,98 @@
+# assorted_pick_place -- robosuite / Panda. ROADMAP task T7, the agent stack's first
+# generalization test.
+#
+# T5's table and bins, but the two same-sized cubes become 2-3 assorted objects:
+# random shape, size, colour and yaw, plus a few of robosuite's meshes (can,
+# bottle, milk, cereal, bread). The instruction names one of them by what it
+# looks like. Nothing about the objects is fixed, so no executor can lean on
+# "it is a 4 cm cube": a grasp depth, a wrist yaw or a width that worked on T5
+# is now a hidden assumption that shows up as a failure by shape or size.
+#
+# Objects are spaced apart (min_gap). Touching objects are a later step: they
+# need a segmenter that separates them, not a table-plane cut.
+
+name: assorted_pick_place
+sim: robosuite
+robot: Panda
+
+control:
+  hz: 30
+  horizon_seconds: 30.0          # T5's 20 s, plus room for a planner's retries
+
+cameras:
+  height: 128
+  width: 128
+  mapping:
+    agentview: top
+    robot0_eye_in_hand: wrist
+
+render:
+  camera: frontview
+  height: 256
+  width: 256
+
+scene:
+  count: [2, 3]                  # objects per episode, inclusive
+
+  # Where object centres may go, relative to the table centre. x spans the
+  # robot's comfortable reach; y stops short of the bins (outer edge at
+  # +-0.134), with each object's footprint radius kept inside these bounds.
+  region_x: [-0.16, 0.16]
+  region_y: [-0.115, 0.115]
+  # Clear table between two footprints: the open gripper is 8 cm and each
+  # finger ~2 cm thick, so 4 cm lets a finger land beside an object without
+  # touching its neighbour.
+  min_gap: 0.04
+
+  # Each object draws a kind uniformly from this list. Primitives draw their
+  # dimensions (metres, half-extents) uniformly per axis from the ranges and a
+  # colour from the palette; meshes keep their own size and texture. Ranges
+  # are chosen so a few objects are wider than the 8 cm gripper on every side
+  # (big boxes, the cereal box): those are meant to be flagged, not picked.
+  primitives:
+    box:       {half_x: [0.015, 0.042], half_y: [0.015, 0.042], half_z: [0.015, 0.035]}
+    bar:       {half_x: [0.050, 0.080], half_y: [0.012, 0.025], half_z: [0.012, 0.025]}
+    cylinder:  {radius: [0.015, 0.035], half_height: [0.020, 0.050]}
+    ball:      {radius: [0.020, 0.035]}
+  meshes:                        # robosuite object class, and how the instruction names it
+    can:       {cls: CanObject, name: can}
+    bottle:    {cls: BottleObject, name: bottle}
+    milk:      {cls: MilkObject, name: milk carton}
+    cereal:    {cls: CerealObject, name: cereal box}
+    bread:     {cls: BreadObject, name: bread}
+  # Primitives only; meshes are as dense as their XML says. ~cardboard-to-wood,
+  # so a big box weighs ~0.5 kg, not the 1.2 kg of solid water.
+  primitive_density: 400
+
+  # T5's palette. A primitive's name is "{colour} {shape}", e.g. "red ball".
+  palette:
+    red:    [0.85, 0.10, 0.10, 1.0]
+    green:  [0.10, 0.70, 0.20, 1.0]
+    blue:   [0.10, 0.25, 0.90, 1.0]
+    yellow: [0.95, 0.85, 0.10, 1.0]
+
+  # T5's bins, unchanged.
+  bin:
+    inner_half: 0.060
+    wall_half_thickness: 0.006
+    wall_half_height: 0.025
+  bins:
+    - name: right
+      offset_xy: [0.0, 0.20]
+      rgba: [0.55, 0.55, 0.55, 1.0]
+    - name: left
+      offset_xy: [0.0, -0.20]
+      rgba: [0.55, 0.55, 0.55, 1.0]
+
+instruction:
+  # "bin", not T5's "box": a box is now one of the objects.
+  template: put the {object} in the {side} bin
+
+success:
+  # The named object resting inside the named bin: its centre within
+  # inner_half of the bin centre in xy, and no higher than its own upright
+  # resting height plus this margin (so a tipped-over object counts too).
+  resting_z_margin: 0.03
+
+failure:
+  lift_threshold: 0.03

@@ -63,3 +63,96 @@ then an OpenAI planner.
   before the sim build; C prints (GLFW, GL warnings) on stdout broke stdio -> fd-level guard;
   robosuite's collision shapes (geom group 0) drew a green arm -> hidden.
 - Once: own window went grey mid-session; not reproduced (7 read-backs via `snapshot()` clean).
+
+## Step 6 · T7 scene: assorted objects on T5's table (2026-10-19)
+- `sims/robosuite/tasks/assorted_pick_place/` (registry: `robosuite/assorted_pick_place`).
+  2-3 objects per episode, each a random kind: box, bar, cylinder, ball (random size, palette
+  colour) or a robosuite mesh (can, bottle, milk carton, cereal box, bread). Random yaw.
+  Instruction: "put the {object} in the {side} bin" ("bin", since a box is now an object).
+  Names unique per scene. Success: the named object resting in the named bin.
+- The MJCF is redrawn every reset (`_load_model`); placement is ours: rejection sampling with
+  4 cm of clear table between footprints (open gripper 8 cm + fingers).
+- Bug found: robosuite's mesh metadata is wrong. Stated bottoms put meshes 2-3 cm in the air
+  (they fell 19-27 mm at spawn); the bottle's footprint is 4.0 cm, not the listed 2.5.
+  Fix: compile each object alone, measure footprint and resting height from its geoms.
+- `scripts/t7_scenes.py`, seeds 1000-1029: all 9 kinds drawn (5-10 each); max movement over 1 s
+  of holding still **2.4 mm** (= the 2 mm spawn gap). Nothing rolls or tips.
+
+## Step 7 · find_objects: everything on the table, from depth (2026-10-19)
+- `agent/tabletop.py` + MCP tool `find_objects()`. Top-camera depth -> world points; table
+  height = most common z (sensed); foreground above it; clusters on a 4 mm xy grid (so a tall
+  object hiding its neighbour in the image still separates); per cluster: min-area rectangle,
+  height, round/rectangular, flat/domed, colour, and kind.
+- Bins are perceived, not known (user decision): a container's points fill a ring of its
+  footprint. Fill on 30 seeds: objects 0.96-1.27, bins 0.32-0.36 -> threshold 0.5.
+  Containers return `drop_point` + `opening`; objects return `grasp` (point, closing yaw
+  across the narrow side, width, `too_wide` > 7.5 cm). `place(bin)` will retire for `place_at`.
+- Given, as on a real cell: the table's extent, and a robot self-mask (segmentation render of the
+  arm's own geoms). Without the mask the gripper fingers came back as 2 objects: 7/30 -> 30/30.
+- `scripts/find_objects_accuracy.py`, seeds 1000-1029: **30/30 scenes counted right** (every
+  object + both bins, right kind). Primitives, median/max:
+
+  | kind | xy mm | height mm | width mm | axis deg |
+  |---|---|---|---|---|
+  | box (6) | 0.6/0.7 | 2.0/2.1 | 0.0/0.2 | 0.0/0.0 |
+  | bar (9) | 0.6/0.7 | 2.0/2.1 | 0.0/0.1 | 0.0/0.0 |
+  | cylinder (8) | 0.5/1.0 | 2.0/2.1 | 2.1/3.1 | - |
+  | ball (7) | 4.8/7.0 | 1.6/1.7 | 11.1/14.2 | - |
+
+  Height +2 mm = the spawn gap (scored before anything settles). Colour 30/30 on primitives.
+  Bins: centre and size within 0.5 mm, opening 11.8-12.1 cm (true 12.0).
+- Known limits: a ball's far half is hidden from the oblique camera -> width 1.1 cm short,
+  centre 5 mm towards the camera (within pick's 15 mm reach tolerance). Touching things merge.
+  Shape words for meshes: can round/flat, bottle round/domed, milk mostly rectangular/domed,
+  cereal and bread rectangular/flat.
+- Overlay: outlines, not tints (the planner must see true colours); ids in boxed labels;
+  yellow bar = grasp closing direction.
+
+## Step 8 · pick(grasp) + place_at(point); place(bin) retired (2026-10-19)
+- `skills.py`: pick turns the wrist about vertical so the fingers close along the grasp's
+  `yaw_deg` (short way, <= 90 deg) and lands the pads on the grasp point; place_at lowers until
+  the held object's bottom (from the grasp's `above_table`) is 2 cm over the point, releases.
+  Carry keeps the pick's wrist. `place(bin)` retired (special case of place_at; user rule).
+- find_by_colour now also returns a `grasp` (its old cube assumption: top - 2.1 cm, wrist as
+  reset), so T5 still runs: find_by_colour -> pick -> find_objects (bin) -> place_at.
+- Wrist check, the 5 bar targets in seeds 1000-1029: fingers close within **2.0 deg** of the
+  grasp yaw; all 5 lifted ~24 cm.
+- Found: the pads cannot go below **2.0 cm** over the table (fingertips touch; descend stalls
+  at z 0.820). A 3 cm box's mid-height asks for 1.5 cm -> pick raises any grasp to 2.5 cm.
+- Smoke: `scripts/t7_pick_place.py` (tools only; target matched by a referee env, not an LLM)
+  seeds 1000-1002: 3/3 (box, can, bread). Tests: `tests/test_arm_skills.py` 3/3 (T5, T7,
+  failure paths); `tests/test_agent_server.py` 14/14.
+- `.mcp.json`: new `dream-robot-t7` server (T7, live viewer).
+
+## Step 9 · Claude drives T7 by hand through MCP (2026-10-19)
+- Server `dream-robot-t7` (live viewer). Per episode: reset -> find_objects -> choose ids from the
+  numbered image + fields -> pick(grasp) -> place_at(container drop_point) -> status.
+- **5/7 task success.** Naming was right in all 7, including look-alikes (two yellows:
+  bar 11.4 cm vs box 7.4 cm; three reds: can / cereal / box; milk vs bottle).
+
+  | seed | target | result |
+  |---|---|---|
+  | 1006 | yellow bar | fail: carried at ~20 deg to the walls = 12.1 cm across a 12.0 cm opening -> rests on the rims |
+  | 1009 | blue cylinder | ok |
+  | 1000 | red box | ok, but the arm knocked the cereal box over on the way (motion avoids nothing) |
+  | 1004 | bottle (neck grasp) | ok, stands in the bin |
+  | 1013 | red ball (4.2 cm) | fail: pick raises the grasp to 2.5 cm, above its 2.1 cm equator -> slipped while lowering, wedged on the bin's inner edge; touching the bin it merged into it -> no retry possible |
+  | 1025 | cereal box | ok, upright |
+  | 1017 | milk carton | ok, upright |
+- Open: place_at ignores fit (rotate held object to the opening, e.g. its diagonal); small
+  balls below the pad floor; collision-blind approach; touching objects merge (segmenter).
+
+## Step 10 · Audit: where driving still cheats (2026-10-19)
+User caught it: a real robot has cameras only. Rule from now: the driver (me, an LLM, a person)
+gets cameras + the robot's own sensors; ground truth goes to a scorer outside the tools.
+- In the loop: `status.success` read from the sim; episode ends on success and `place_at`
+  reports `episode_over`; scripts pick bins by "left = -y"; t7_pick_place matches the target
+  with a referee env.
+- In debugging: step 9's bar-on-rims and knocked-cereal causes came from sim poses / a
+  before-after guess, not frames; seeds chosen by reading targets ahead.
+- Sim-measured constants: pad floor 2.0 cm (pick raises to 2.5) -- a real arm finds the table
+  by touch; place_at's release height trusts the pre-pick height.
+- Sim-perfect sensing (accepted, stated): noiseless depth, exact calibration, robot self-mask
+  from the sim's segmentation render.
+- Plan: drop success signals from tools, verify by looking, record clips per skill (frame grid
+  + review_clip + depth-diff "something else moved"), camera-chosen bins in scripts, table by touch.

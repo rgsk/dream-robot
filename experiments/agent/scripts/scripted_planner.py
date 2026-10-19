@@ -1,5 +1,6 @@
-"""A stand-in planner: parse "put the {colour} cube in the {side} box", then
-find_by_colour -> pick -> place, all through the MCP server over stdio.
+"""A stand-in planner for T5: parse "put the {colour} cube in the {side} box", then
+find_by_colour -> pick(grasp) -> find_objects for the bin -> place_at, all through
+the MCP server over stdio. The side picks the found container by its y (left = -y).
 
 No LLM: this checks the tools, not the planning. Prints one line per episode.
 """
@@ -35,13 +36,16 @@ async def episode(c, seed):
     found = data(await c.call_tool("find_by_colour", {"colour": colour}))
     if not found["found"]:
         return f"find: {found}"
-    pick = await c.call_tool("pick", {"point": found["point"]})
+    pick = await c.call_tool("pick", {"grasp": found["grasp"]})
     if pick.is_error:
         return f"pick error: {pick.content[0].text}"
     picked = data(pick)
     if not picked["ok"]:
         return f"pick {picked}"
-    place = await c.call_tool("place", {"bin": side})
+    things = data(await c.call_tool("find_objects", {}))["things"]
+    bins = [t for t in things if t["kind"] == "container"]
+    bin_ = max(bins, key=lambda t: (1 if side == "right" else -1) * t["centre"][1])
+    place = await c.call_tool("place_at", {"point": bin_["drop_point"]})
     placed = data(place)
     open(f"{args.save}_{seed}.png", "wb").write(base64.b64decode(place.content[1].data))
     final = (await c.call_tool("status", {})).structured_content

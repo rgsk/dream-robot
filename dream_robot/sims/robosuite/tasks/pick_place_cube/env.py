@@ -281,6 +281,37 @@ class PickPlaceCube:
         T[:3, 3] = sim.data.cam_xpos[cam_id]
         return RGBD(rgb=np.ascontiguousarray(rgb), depth=metres, K=K, cam_to_world=T)
 
+    @property
+    def table_xy(self) -> tuple[float, float, float, float]:
+        """(x_min, x_max, y_min, y_max) of the table top, world frame: the workspace.
+
+        Not privileged: where the robot works is set up, not sensed, on a real
+        cell too. Everything *on* the table is for perception to find.
+        """
+        (cx, cy, _), (sx, sy, _) = self._env.table_offset, self._env.table_full_size
+        return (cx - sx / 2, cx + sx / 2, cy - sy / 2, cy + sy / 2)
+
+    def robot_mask(self, camera: str = "top", hw: tuple[int, int] = (256, 256)) -> np.ndarray:
+        """(H, W) bool: the pixels showing the robot itself, rows top-down as rgbd's.
+
+        Self-filtering, as a real cell does it: the arm's model and joint angles
+        are known, so where it appears in a calibrated camera is too. Says
+        nothing about anything else in the scene.
+        """
+        backend = {v: k for k, v in self._cfg.camera_mapping.items()}[camera]
+        sim = self._env.sim
+        h, w = hw
+        seg = sim.render(width=w, height=h, camera_name=backend, segmentation=True)[::-1]
+        m = sim.model._model
+        robot_roots = {
+            int(m.body_rootid[sim.model.body_name2id(r.robot_model.root_body)])
+            for r in self._env.robots
+        }
+        is_robot_geom = np.isin(m.body_rootid[m.geom_bodyid], list(robot_roots))
+        geom = seg[..., 1]
+        is_geom = seg[..., 0] == int(mujoco.mjtObj.mjOBJ_GEOM)
+        return is_geom & is_robot_geom[np.clip(geom, 0, m.ngeom - 1)]
+
     def close(self) -> None:
         self._env.close()
 

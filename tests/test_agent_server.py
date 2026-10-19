@@ -166,7 +166,7 @@ def test_find_of_an_absent_object_says_so():
     text, _ = _call_find("red").content
     assert json.loads(text.text) == {
         "colour": "red", "found": False, "ambiguous": False,
-        "point": None, "candidates": [],
+        "point": None, "grasp": None, "candidates": [],
     }
 
 
@@ -219,9 +219,9 @@ def test_debug_tools_exist_only_on_a_debug_server():
     assert "debug_paint" in asyncio.run(tools(True))
 
 
-def test_pick_and_place_are_offered_only_for_an_arm_with_bins():
+def test_pick_place_and_find_objects_are_offered_only_for_a_robosuite_arm():
     async def tools():
         async with Client(build_server(DepthFakeEnv)) as client:
             return {t.name for t in (await client.list_tools()).tools}
 
-    assert not {"pick", "place"} & asyncio.run(tools())
+    assert not {"pick", "place_at", "find_objects"} & asyncio.run(tools())

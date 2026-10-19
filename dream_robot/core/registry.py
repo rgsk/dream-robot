@@ -49,6 +49,12 @@ def _robosuite_instructed_pick_place(**kwargs):
     return InstructedPickPlace(**kwargs)
 
 
+def _robosuite_assorted_pick_place(**kwargs):
+    from dream_robot.sims.robosuite.tasks.assorted_pick_place.env import AssortedPickPlace
+
+    return AssortedPickPlace(**kwargs)
+
+
 def _robosuite_two_arm_lift(**kwargs):
     from dream_robot.sims.robosuite.tasks.two_arm_lift.env import TwoArmLiftTask
 
@@ -63,6 +69,8 @@ TASKS: dict[str, Callable] = {
     # T5. One entry; the eval splits are constructor arguments, not tasks:
     # pairs="held_out" and/or wording="paraphrase".
     "robosuite/instructed_pick_place": _robosuite_instructed_pick_place,
+    # T7. Assorted objects, one named; the agent stack's generalization test.
+    "robosuite/assorted_pick_place": _robosuite_assorted_pick_place,
 }
 
 
