@@ -54,6 +54,19 @@ MAX_GRASP_WIDTH = 0.075
 # things (a ball's equator), no deeper for tall ones.
 MAX_GRASP_DEPTH = 0.03
 
+# Containers: the rim is the top band (TOP_BAND) seen as a ring, fitted with a circle.
+# A rim grasp closes on the wall -- one finger inside, one outside -- this far below the
+# rim (no deeper than half the height). Footprint points this far outside the rim circle
+# and below the rim are a handle, if there are at least HANDLE_MIN_POINTS of them.
+RIM_GRASP_DEPTH = 0.02
+HANDLE_GAP = 0.004
+HANDLE_MIN_POINTS = 40
+# A handle grasp pinches the handle's loop across its thin side (fingers either side of
+# the loop's plane), this far out along the handle's reach -- clear of the wall -- and
+# this far below the handle's top (no deeper than half what is seen of it).
+HANDLE_GRASP_OUT = 0.6
+HANDLE_GRASP_DEPTH = 0.015
+
 
 @dataclass(frozen=True)
 class Thing:
@@ -70,6 +83,8 @@ class Thing:
     pixels: np.ndarray         # (H, W) bool, this thing in the image
     table_z: float
     filled_area: float         # xy area the thing's own points cover
+    rim: dict | None = None    # containers: circle fitted to the top ring
+    handle: dict | None = None # containers: points outside the rim, below it
 
     @property
     def opening(self) -> tuple[float, float]:
@@ -112,6 +127,12 @@ class Thing:
             # The centre of the opening, at rim height. the driver aims a place at this point.
             d["drop_point"] = _r(self.centre)
             length, width = self.opening
+            if self.rim is not None:
+                d["rim"] = {k: v for k, v in self.rim.items() if k != "grasp"}
+                d["rim_grasp"] = self.rim["grasp"]
+            if self.handle is not None:
+                d["handle"] = {k: v for k, v in self.handle.items() if k != "grasp"}
+                d["handle_grasp"] = self.handle["grasp"]
             d["opening"] = {
                 "length": round(length, 3), "width": round(width, 3),
                 "diagonal": round(float(np.hypot(length, width)), 3),
@@ -214,6 +235,10 @@ def _describe(frame, pts, pixels, cells, table_z, origin) -> Thing | None:
     top_pts = pts[:, 2] >= top_z - TOP_BAND
     top = "flat" if _hull_area(xy[top_pts]) / max(hull_area, 1e-9) > 0.5 else "domed"
 
+    rim = handle = None
+    if kind == "container":
+        rim, handle = _rim_and_handle(frame, pts, top_pts, top_z, table_z, height)
+
     top_pixels = np.zeros_like(pixels)
     top_pixels[pixels] = top_pts
     rgb = frame.rgb[top_pixels if top_pixels.sum() >= 10 else pixels]
@@ -232,7 +257,63 @@ def _describe(frame, pts, pixels, cells, table_z, origin) -> Thing | None:
         pixels=pixels,
         table_z=table_z,
         filled_area=float(occupied),
+        rim=rim,
+        handle=handle,
     )
+
+
+def _rim_and_handle(frame, pts, top_pts, top_z, table_z, height):
+    """The rim as a circle (centre, mid-wall radius, wall thickness), a grasp on its
+    wall, and a handle if one sticks out. Least-squares circle: works on a partial arc."""
+    xy = pts[top_pts, :2]
+    if len(xy) < 20:
+        return None, None
+    # x^2 + y^2 = a x + b y + c  ->  centre (a/2, b/2), radius^2 = c + |centre|^2
+    A = np.column_stack([xy, np.ones(len(xy))])
+    (a, b, c), *_ = np.linalg.lstsq(A, (xy**2).sum(axis=1), rcond=None)
+    centre = np.array([a / 2, b / 2])
+    r = np.linalg.norm(xy - centre, axis=1)
+    inner, outer = float(np.percentile(r, 5)), float(np.percentile(r, 95))
+    mid = (inner + outer) / 2
+
+    handle = None
+    d_all = np.linalg.norm(pts[:, :2] - centre, axis=1)
+    out = (d_all > outer + HANDLE_GAP) & (pts[:, 2] < top_z - TOP_BAND)
+    if out.sum() >= HANDLE_MIN_POINTS:
+        h = pts[out]
+        off = h[:, :2].mean(axis=0) - centre
+        a = float(np.arctan2(off[1], off[0]))
+        radial, tangent = np.array([np.cos(a), np.sin(a)]), np.array([-np.sin(a), np.cos(a)])
+        reach = float(np.percentile(d_all[out], 95) - outer)
+        across = (h[:, :2] - centre) @ tangent
+        thick = float(np.percentile(across, 95) - np.percentile(across, 5))
+        top, bottom = float(np.percentile(h[:, 2], 98)), float(np.percentile(h[:, 2], 2))
+        gz = top - min(HANDLE_GRASP_DEPTH, (top - bottom) / 2)
+        gxy = centre + radial * (outer + HANDLE_GRASP_OUT * reach) + tangent * float(np.median(across))
+        handle = {"direction_deg": round(float(np.rad2deg(a)), 1),
+                  "point": _r([*h[:, :2].mean(axis=0), np.median(h[:, 2])]),
+                  "reach": round(reach, 3), "thickness": round(thick, 4),
+                  "top_z": round(top, 4),
+                  "grasp": {"point": _r([*gxy, gz]),
+                            # across the loop: the fingers come down either side of it
+                            "yaw_deg": round(float(np.rad2deg(_wrap_half_turn(a + np.pi / 2))), 1),
+                            "above_table": round(float(gz - table_z), 4),
+                            "width": round(thick, 4)}}
+
+    if handle is not None:                    # the far side from the handle
+        side = np.deg2rad(handle["direction_deg"]) + np.pi
+    else:                                     # the side the camera sees
+        cam = frame.cam_to_world[:2, 3] - centre
+        side = float(np.arctan2(cam[1], cam[0]))
+    z = top_z - min(RIM_GRASP_DEPTH, height / 2)
+    point = np.array([*(centre + mid * np.array([np.cos(side), np.sin(side)])), z])
+    grasp = {"point": _r(point),
+             "yaw_deg": round(float(np.rad2deg(_wrap_half_turn(side))), 1),  # radial: across the wall
+             "above_table": round(float(z - table_z), 4),
+             "wall": round(outer - inner, 4)}
+    rim = {"centre": _r([*centre, top_z]), "radius": round(mid, 4),
+           "wall": round(outer - inner, 4), "grasp": grasp}
+    return rim, handle
 
 
 def _colour_name(rgb: np.ndarray) -> str:

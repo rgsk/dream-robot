@@ -1,6 +1,6 @@
 """Token and time cost of an LLM driving the robot, read from a Claude Code session transcript.
 
-For every robot tool call (an MCP tool whose name contains --server, default t7):
+For every robot tool call (a tool whose name contains --server, default any MCP tool):
   context  -- tokens the model read to make this call (input + cache write + cache read)
   added    -- context growth since the previous call: the tool result + the model's own text
   image    -- the returned image's size, and its estimated tokens (w * h / 750)
@@ -31,7 +31,7 @@ def ts(s: str) -> float:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("transcript")
-    ap.add_argument("--server", default="t7")
+    ap.add_argument("--server", default="mcp__")
     ap.add_argument("--from-reset", type=int, default=None, help="start at reset(seed=...)")
     args = ap.parse_args()
 

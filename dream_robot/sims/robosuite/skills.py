@@ -37,10 +37,12 @@ TURN_CHUNK = np.deg2rad(45)   # turn in steps no bigger than this, so the IK kee
 
 
 # Gripper opening (0 shut .. 1 open) above which *closed* fingers are on something.
-# Shut on nothing reads ~0; shut on a 4 cm cube, about half the 8 cm span. Width
-# alone means nothing: an open, empty gripper is the widest of all. Holding is
-# "commanded closed, and still wide".
-HOLDING_MIN_OPENING = 0.15
+# Shut on nothing reads 1.4-2.0 mm (kitchen, T7); shut on a mug's 3.5 mm rim wall,
+# 6.6 mm -- that mug then lifted 14 cm. 0.15 (12 mm) called the rim "nothing", so 0.05
+# (4 mm): a wall thinner than ~2 mm still cannot be told from air. Width alone means
+# nothing: an open, empty gripper is the widest of all. Holding is "commanded closed,
+# and still wider than shut".
+HOLDING_MIN_OPENING = 0.05
 
 # One control step: the new observation, and whether the episode's time is up. Nothing
 # else -- in particular not the sim's success flag: a real arm does not know whether
@@ -73,6 +75,8 @@ class ArmSkills:
         self._ik: DifferentialIK | None = None
         self._down: np.ndarray | None = None     # reset orientation: gripper pointing down
         self._hold_rotation: np.ndarray | None = None
+        self._yaw_rotation: np.ndarray | None = None   # the hold rotation before any tilt
+        self._tilt = 0.0                         # commanded tilt, radians: 0 = pointing down
         self._closed = False                     # last gripper command was "close"
 
     def on_reset(self) -> None:
@@ -84,6 +88,8 @@ class ArmSkills:
         )
         self._down = self._ik.site_mat
         self._hold_rotation = self._down
+        self._yaw_rotation = self._down
+        self._tilt = 0.0
         self._finger_direction0 = self._finger_direction()
         self._turned = 0.0                       # total commanded turn since reset, radians
         self._commanded_pos = self._ik.site_pos  # where the pads were last sent
@@ -102,6 +108,7 @@ class ArmSkills:
         return {
             "point": [round(float(c), 4) for c in self._ik.site_pos],
             "yaw_deg": round(float(np.rad2deg(self._finger_direction())), 1),
+            "tilt_deg": round(float(np.rad2deg(self._measured_tilt())), 1),
             "wrist_room_deg": {"ccw": round(float(np.rad2deg(ccw)), 1),
                                "cw": round(float(np.rad2deg(cw)), 1)},
             "opening_m": round(float(obs.state[-1]) * self._env._gripper_span, 4),
@@ -109,9 +116,14 @@ class ArmSkills:
         }
 
     def move_to(self, point: np.ndarray | None, obs, step: Step,
-                yaw: float | None = None) -> SkillResult:
+                yaw: float | None = None, tilt: float | None = None) -> SkillResult:
         """Move the finger pads to ``point`` (None: stay) with the fingers pointing along
-        world direction ``yaw`` (None: keep the wrist).
+        world direction ``yaw`` (None: keep the wrist), the hand tilted by ``tilt``
+        (radians, None: keep it).
+
+        ``tilt`` turns the hand about its closing direction: 0 points the fingers straight
+        down, +pi/2 horizontal toward yaw + 90 deg (-pi/2: toward yaw - 90). The closing
+        direction stays horizontal, so ``yaw`` means the same at any tilt.
 
         ``yaw`` is a direction, not an axis: 30 and 210 deg are different poses. The arm
         turns whichever way keeps its last wrist joint inside its stops; if no way does,
@@ -131,7 +143,8 @@ class ArmSkills:
             fits = [t for t in options if -cw <= t <= ccw]
             turn = min(fits, key=abs) if fits else max(
                 options, key=lambda t: (ccw if t > 0 else cw) - abs(t))
-        return self._turn_and_move(point, turn, obs, step)
+        dtilt = 0.0 if tilt is None else float(tilt) - self._tilt
+        return self._turn_and_move(point, turn, obs, step, dtilt=dtilt)
 
     def move_by(self, delta: np.ndarray, obs, step: Step, dyaw: float = 0.0) -> SkillResult:
         """Move the pads by ``delta`` and turn the wrist by exactly ``dyaw`` (radians,
@@ -142,7 +155,7 @@ class ArmSkills:
         target = self._commanded_pos + np.asarray(delta, dtype=float)
         return self._turn_and_move(target, dyaw, obs, step)
 
-    def _turn_and_move(self, point, turn: float, obs, step: Step) -> SkillResult:
+    def _turn_and_move(self, point, turn: float, obs, step: Step, dtilt: float = 0.0) -> SkillResult:
         """Turn by ``turn``, always that way round, moving the pads to ``point`` meanwhile.
 
         In chunks of at most TURN_CHUNK: the IK alone would take the short way round. Each
@@ -151,7 +164,12 @@ class ArmSkills:
         """
         target = self._commanded_pos if point is None else np.asarray(point, dtype=float)
         remaining, steps, limited = turn, 0, False
+        tilt_left = dtilt
         while True:
+            # Tilt in chunks too, alongside the yaw ones: the IK follows small changes.
+            tilt_chunk = float(np.sign(tilt_left) * min(abs(tilt_left), TURN_CHUNK))
+            tilt_left -= tilt_chunk
+            self._tilt += tilt_chunk
             chunk = 0.0
             if abs(remaining) > 1e-6:
                 ccw, cw = self._wrist_room()
@@ -159,9 +177,10 @@ class ArmSkills:
                 chunk = float(np.sign(remaining) * min(abs(remaining), TURN_CHUNK, room))
                 if abs(chunk) < np.deg2rad(0.5):
                     limited, chunk = True, 0.0
-            self._hold_rotation = _rot_z(chunk) @ self._hold_rotation
+            self._yaw_rotation = _rot_z(chunk) @ self._yaw_rotation
             self._turned += chunk
             remaining -= chunk
+            self._hold_rotation = self._tilted(self._yaw_rotation)
             result = self._servo(target, obs, step)
             steps += result.steps
             obs = self._last_obs
@@ -169,7 +188,7 @@ class ArmSkills:
                 self._commanded_pos = self._ik.site_pos      # where it stopped
                 return SkillResult(False, result.failure, result.phase, steps,
                                    result.holding, result.episode_over)
-            if chunk == 0.0:
+            if chunk == 0.0 and abs(tilt_left) < 1e-6:
                 break
         self._commanded_pos = target
         if limited:
@@ -232,6 +251,16 @@ class ArmSkills:
         """World direction right finger -> left finger once the commanded wrist is reached."""
         return self._finger_direction0 + self._turned
 
+    def _tilted(self, yaw_rotation: np.ndarray) -> np.ndarray:
+        """``yaw_rotation`` turned by the commanded tilt about the closing direction."""
+        d = self._commanded_direction()
+        return _rot_axis(np.array([np.cos(d), np.sin(d), 0.0]), self._tilt) @ yaw_rotation
+
+    def _measured_tilt(self) -> float:
+        """Angle between where the fingers point (the grip site's z axis) and straight down."""
+        approach = self._ik.site_mat[:, 2]
+        return float(np.arccos(np.clip(-approach[2], -1.0, 1.0)))
+
     def _finger_direction(self) -> float:
         model, data = self._env.mujoco
         left, right = (data.xpos[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f)]
@@ -272,6 +301,13 @@ def _rot_z(a: float) -> np.ndarray:
     """A world-frame turn about vertical; applied on the left of a hand orientation."""
     c, s = np.cos(a), np.sin(a)
     return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+
+
+def _rot_axis(axis: np.ndarray, a: float) -> np.ndarray:
+    """A world-frame rotation by ``a`` about unit ``axis`` (Rodrigues)."""
+    k = axis / np.linalg.norm(axis)
+    K = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
+    return np.eye(3) + np.sin(a) * K + (1 - np.cos(a)) * K @ K
 
 
 def _wrap_full_turn(a: float) -> float:

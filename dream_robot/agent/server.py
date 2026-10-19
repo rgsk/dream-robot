@@ -69,6 +69,7 @@ Point = Annotated[list[float], Field(min_length=3, max_length=3)]
 class MoveToStep(BaseModel):
     point: Point | None = Field(None, description="as move_to: finger pads to here; null stays put")
     yaw_deg: float | None = Field(None, description="as move_to: finger direction; null keeps it")
+    tilt_deg: float | None = Field(None, description="as move_to: hand tilt; null keeps it")
 
 
 class MoveByStep(BaseModel):
@@ -127,7 +128,8 @@ class RobotSession:
         self._score_log = score_log
         self._started = False                     # a real episode (not the warm-up) is running
         self.recorder = (
-            recorder.Recorder(self.env.frame, self.env.control_hz, out_dir=clips_dir)
+            recorder.Recorder(self.env.frame, self.env.control_hz, out_dir=clips_dir,
+                              cameras=(SCENE, *self._obs.images))
             if hasattr(self.env, "frame") else None
         )
 
@@ -222,14 +224,16 @@ class RobotSession:
         return bool(self._last and (self._last.terminated or self._last.truncated))
 
     def move_to(
-        self, point: list[float] | None, yaw_deg: float | None
+        self, point: list[float] | None, yaw_deg: float | None, tilt_deg: float | None = None
     ) -> tuple[dict[str, Any], np.ndarray]:
         self._check_running()
-        if point is None and yaw_deg is None:
-            raise ToolError("give a point, a yaw_deg, or both")
+        if point is None and yaw_deg is None and tilt_deg is None:
+            raise ToolError("give a point, a yaw_deg, a tilt_deg, or several")
         p = None if point is None else np.asarray(point, dtype=float)
         yaw = None if yaw_deg is None else float(np.deg2rad(yaw_deg))
-        return self._recorded("move_to", lambda: self.arm.move_to(p, self._obs, self.step, yaw=yaw))
+        tilt = None if tilt_deg is None else float(np.deg2rad(tilt_deg))
+        return self._recorded("move_to", lambda: self.arm.move_to(
+            p, self._obs, self.step, yaw=yaw, tilt=tilt))
 
     def move_by(self, delta: list[float], dyaw_deg: float) -> tuple[dict[str, Any], np.ndarray]:
         self._check_running()
@@ -255,13 +259,14 @@ class RobotSession:
                 raise ToolError(f"step {i}: give exactly one of move_to, move_by, gripper")
             kind = given[0]
             if kind == "move_to":
-                p, yaw = st.move_to.point, st.move_to.yaw_deg
-                if p is None and yaw is None:
-                    raise ToolError(f"step {i}: move_to needs a point, a yaw_deg, or both")
+                p, yaw, tilt = st.move_to.point, st.move_to.yaw_deg, st.move_to.tilt_deg
+                if p is None and yaw is None and tilt is None:
+                    raise ToolError(f"step {i}: move_to needs a point, a yaw_deg or a tilt_deg")
                 p = None if p is None else np.asarray(p, dtype=float)
                 yaw = None if yaw is None else float(np.deg2rad(yaw))
-                runs.append(("move_to", lambda p=p, yaw=yaw: self.arm.move_to(
-                    p, self._obs, self.step, yaw=yaw)))
+                tilt = None if tilt is None else float(np.deg2rad(tilt))
+                runs.append(("move_to", lambda p=p, yaw=yaw, tilt=tilt: self.arm.move_to(
+                    p, self._obs, self.step, yaw=yaw, tilt=tilt)))
             elif kind == "move_by":
                 m = st.move_by
                 runs.append(("move_by", lambda m=m: self.arm.move_by(
@@ -420,7 +425,17 @@ def build_scored_server(
                 make_env, viewer=viewer, score_log=score_log, clips_dir=clips_dir
             )
         ).result()
+    if not hasattr(session.env, "table_xy"):
+        # find_objects needs a known table; without one, aim with object_at / point_at.
+        hide_tools = (*hide_tools, "find_objects")
     instructions = INSTRUCTIONS
+    cell = getattr(session.env, "cell_prompt", None)
+    if cell:
+        # The env describes its own cell; the rest of the prompt (gripper, primitives,
+        # recipes, judging) is the robot's, the same everywhere.
+        start, end = instructions.index("## The cell"), instructions.index("## The gripper")
+        instructions = (instructions[:start].replace(" at a table,", ",")
+                        + cell.rstrip() + "\n\n" + instructions[end:])
     if hide_tools:
         instructions += ("\n\n## Not available in this cell\n"
                          + ", ".join(f"`{t}`" for t in hide_tools)
@@ -452,7 +467,12 @@ def build_scored_server(
         """An image of the scene. "scene" is a wide view; the rest are the robot's own cameras."""
         return _png(session.frame(camera))
 
-    if all(hasattr(session.env, a) for a in ("rgbd", "table_xy", "robot_mask")):
+    # Cameras with calibrated depth, for point_at / object_at: T7's top + wrist unless
+    # the env names its own (a kitchen has no top camera).
+    DEPTH_CAMERAS = tuple(getattr(session.env, "depth_cameras", ("top", "wrist")))
+    DepthCamera = Literal[DEPTH_CAMERAS]
+
+    if all(hasattr(session.env, a) for a in ("rgbd", "robot_mask")):
 
         @tools.tool()
         @on_sim
@@ -475,7 +495,7 @@ def build_scored_server(
         @tools.tool()
         @on_sim
         def point_at(
-            camera: Literal["top", "wrist"] = "top",
+            camera: DepthCamera = DEPTH_CAMERAS[0],
             pixels: Annotated[list[Pixel] | None, Field(
                 description="[u, v] pixels in this camera's 512 x 512 image, u right, v down "
                 "from the top-left corner; omit to get the image to read them from"
@@ -498,7 +518,7 @@ def build_scored_server(
             pixel: Annotated[Pixel, Field(
                 description="[u, v] on the thing, in point_at's 512 x 512 image of this camera"
             )],
-            camera: Literal["top", "wrist"] = "top",
+            camera: DepthCamera = DEPTH_CAMERAS[0],
         ) -> list:
             """The thing under one pixel, measured: point at it, get what find_objects
             gives for it -- ``kind``, ``centre`` (top centre), ``size``, ``footprint``,
@@ -525,6 +545,11 @@ def build_scored_server(
                 description="world direction from the right finger to the left, -180..180; "
                 "null keeps the wrist"
             )] = None,
+            tilt_deg: Annotated[float | None, Field(
+                description="hand tilt about the closing direction: 0 = fingers straight "
+                "down, 90 = horizontal, pointing toward yaw_deg + 90 (-90: toward yaw_deg - 90); "
+                "null keeps it"
+            )] = None,
         ) -> list:
             """Move the hand so the finger pads are at ``point``, with the fingers pointing
             along ``yaw_deg``. Either may be left out: ``yaw_deg`` alone turns on the spot.
@@ -537,7 +562,7 @@ def build_scored_server(
             Stops by itself if the hand stalls short of the target -- pressing on the table
             or an object -- with failure "blocked"; ``hand`` then says where it stopped.
             """
-            result, img = session.move_to(point, yaw_deg)
+            result, img = session.move_to(point, yaw_deg, tilt_deg)
             return [result, _png(img)]
 
         @tools.tool()
@@ -578,7 +603,7 @@ def build_scored_server(
             return [result, _png(img)]
 
         if session.recorder is not None:
-            ClipCamera = Literal[recorder.CAMERAS]
+            ClipCamera = Literal[session.recorder.cameras]
 
             @tools.tool()
             @on_sim

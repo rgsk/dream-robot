@@ -22,7 +22,7 @@ import imageio.v3 as iio
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-CAMERAS = ("scene", "top", "wrist")
+CAMERAS = ("scene", "top", "wrist")       # T7's; an env may name its own
 FRAME_HW = (512, 512)     # sharp enough to see a 1-2 cm lift at the bin
 STRIDE = 3                # record every 3rd control step: 10 fps at 30 Hz
 
@@ -33,7 +33,7 @@ class Clip:
     skill: str
     fps: float
     times: list[float] = field(default_factory=list)              # seconds from clip start
-    jpegs: dict[str, list[bytes]] = field(default_factory=lambda: {c: [] for c in CAMERAS})
+    jpegs: dict[str, list[bytes]] = field(default_factory=dict)       # camera -> frames
     videos: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -45,15 +45,17 @@ class Clip:
 
     def summary(self) -> dict:
         return {"clip": self.id, "skill": self.skill, "seconds": round(self.seconds, 2),
-                "frames": len(self.times), "cameras": list(CAMERAS),
+                "frames": len(self.times), "cameras": list(self.jpegs),
                 **({"videos": self.videos} if self.videos else {})}
 
 
 class Recorder:
     """Records the cameras while a skill runs. ``start`` -> ``tick`` per step -> ``stop``."""
 
-    def __init__(self, grab, control_hz: float, out_dir: str | None = None):
+    def __init__(self, grab, control_hz: float, out_dir: str | None = None,
+                 cameras: tuple[str, ...] = CAMERAS):
         self._grab = grab                    # (camera, hw) -> RGB frame
+        self.cameras = tuple(cameras)
         self._hz = control_hz
         self._out = Path(out_dir) if out_dir else None
         self.clips: dict[str, Clip] = {}
@@ -67,7 +69,7 @@ class Recorder:
 
     def start(self, skill: str) -> None:
         cid = f"{self._episode}-{len(self.clips) + 1}-{skill}"
-        self._clip = Clip(cid, skill, fps=self._hz / STRIDE)
+        self._clip = Clip(cid, skill, fps=self._hz / STRIDE, jpegs={c: [] for c in self.cameras})
         self._step = 0
         self._capture()
 
@@ -86,7 +88,7 @@ class Recorder:
             self._clip = None
         if self._out is not None:
             self._out.mkdir(parents=True, exist_ok=True)
-            for cam in CAMERAS:
+            for cam in self.cameras:
                 path = self._out / f"{clip.id}-{cam}.mp4"
                 frames = np.stack([clip.frame(cam, i) for i in range(len(clip.times))])
                 iio.imwrite(path, frames, fps=clip.fps, codec="libx264", macro_block_size=8)
@@ -97,7 +99,7 @@ class Recorder:
     def _capture(self) -> None:
         clip = self._clip
         clip.times.append(self._step / self._hz)
-        for cam in CAMERAS:
+        for cam in self.cameras:
             buf = io.BytesIO()
             Image.fromarray(self._grab(cam, FRAME_HW)).save(buf, format="JPEG", quality=90)
             clip.jpegs[cam].append(buf.getvalue())
