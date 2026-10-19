@@ -175,11 +175,25 @@ class ExpertCommand:
     timed_out: bool = False
 
 
-class ScriptedExpert:
-    """The phase machine. Pure: numbers in, waypoint out."""
+# The two halves of the task, as the agent's pick and place skills run them.
+PICK_PHASES, PLACE_PHASES = PHASES[:4], PHASES[4:]
 
-    def __init__(self, config: ExpertConfig | None = None, *, control_hz: float = 30.0):
+
+class ScriptedExpert:
+    """The phase machine. Pure: numbers in, waypoint out.
+
+    ``phases`` defaults to the whole task; the agent's skills run one half each.
+    """
+
+    def __init__(
+        self,
+        config: ExpertConfig | None = None,
+        *,
+        control_hz: float = 30.0,
+        phases: tuple[Phase, ...] = PHASES,
+    ):
         self._cfg = config or ExpertConfig.load()
+        self._phases = phases
         self._timeout_steps = int(round(self._cfg.phase_timeout_seconds * control_hz))
         self._widths: list[float] = []
         self.reset()
@@ -195,7 +209,7 @@ class ScriptedExpert:
 
     @property
     def phase(self) -> str:
-        return PHASES[self._i].name if self._i < len(PHASES) else "done"
+        return self._phases[self._i].name if self._i < len(self._phases) else "done"
 
     def grip_settled(self, opening: float) -> bool:
         """True once the recorded opening has stopped changing.
@@ -210,8 +224,8 @@ class ScriptedExpert:
         return bool(np.ptp(self._widths[-window:]) < self._cfg.grip_settle_epsilon)
 
     def __call__(self, ctx: ExpertContext) -> ExpertCommand:
-        if self._i >= len(PHASES):
-            last = PHASES[-1]
+        if self._i >= len(self._phases):
+            last = self._phases[-1]
             return ExpertCommand(
                 waypoint=np.asarray(last.waypoint(ctx, self._cfg), dtype=float),
                 gripper=last.gripper,
@@ -219,7 +233,7 @@ class ScriptedExpert:
                 finished=True,
             )
 
-        phase = PHASES[self._i]
+        phase = self._phases[self._i]
         target = np.asarray(phase.waypoint(ctx, self._cfg), dtype=float)
         self._steps_in_phase += 1
 
@@ -228,7 +242,7 @@ class ScriptedExpert:
             self._steps_in_phase = 0
             self._widths = []
             return ExpertCommand(target, phase.gripper, phase.name,
-                                 finished=self._i >= len(PHASES))
+                                 finished=self._i >= len(self._phases))
 
         if self._steps_in_phase >= self._timeout_steps:
             return ExpertCommand(target, phase.gripper, phase.name, timed_out=True)

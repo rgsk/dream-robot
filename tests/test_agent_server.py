@@ -217,3 +217,11 @@ def test_debug_tools_exist_only_on_a_debug_server():
 
     assert "debug_paint" not in asyncio.run(tools(False))
     assert "debug_paint" in asyncio.run(tools(True))
+
+
+def test_pick_and_place_are_offered_only_for_an_arm_with_bins():
+    async def tools():
+        async with Client(build_server(DepthFakeEnv)) as client:
+            return {t.name for t in (await client.list_tools()).tools}
+
+    assert not {"pick", "place"} & asyncio.run(tools())

@@ -33,4 +33,20 @@ then an OpenAI planner.
 - Known limit: two same-coloured objects touching in the image are one blob.
 - `find_by_colour` now takes `colour` (enum: red/yellow/green/blue), not a phrase: it reads
   nothing else, so no sentence to misparse. `find` takes a mask; SAM3 will bring its own.
-- Next: `pick(point)` and `place(side)`.
+
+## Step 4 · pick(point) and place(bin): 10/10 on T5 through MCP (2026-10-19)
+- `sims/robosuite/skills.py`: the expert's phase machine split in half (`PICK_PHASES`,
+  `PLACE_PHASES`), same IK and waypoints. pick aims at find's top-face point minus 2.1 cm.
+  Known, not sensed: robot kinematics, bin positions (fixtures). Cube pose: never read.
+- Holding = commanded closed **and** gripper opening > 0.15. First version used width only and
+  said "holding" at reset (an open gripper is widest) -> every pick refused. Caught on call 1.
+- `scripts/scripted_planner.py` (regex instead of an LLM), seeds 1000-1009:
+  **10/10 task success**, 209-247 steps (7.0-8.2 s; expert 6.9 s).
+  For scale: SmolVLA and our flow matching had colour at chance on T5.
+  Not a fair fight: scripted motion, flat-coloured cubes, fixed bins. It shows the tools work.
+- Failure paths, real sim: place with nothing held -> no_grasp (0 steps); pick at empty table
+  -> no_grasp after lift; pick while holding -> error; green into left on a yellow->right task
+  -> place ok, `status.success` false. Skill result != task result; the planner reads both.
+- pick takes `point: [x, y, z]`, the shape find returns: one paste in the Inspector, a
+  straight pass-through for a planner. Exactly 3 numbers, checked by the schema.
+- Next: the LLM planner on these tools.

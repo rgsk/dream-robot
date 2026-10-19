@@ -32,12 +32,13 @@ import io
 import sys
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import imageio.v3 as iio
 import numpy as np
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from pydantic import Field
 
 from dream_robot.agent.perception import COLOURS, colour_mask, find, overlay
 from dream_robot.core.env_api import Env, FailureMode, StepResult
@@ -45,11 +46,16 @@ from dream_robot.core.env_api import Env, FailureMode, StepResult
 INSTRUCTIONS = """\
 A simulated robot arm (Franka Panda) at a table. Call `reset` to start an episode;
 it returns the task instruction. `look` shows the scene from a camera. `find_by_colour`
-locates objects of a colour and returns their 3D points. `status` reports progress and,
-once the episode ends, how it failed.
+locates objects of a colour and returns their 3D points. `pick` grasps at such a point
+and lifts; `place` puts what is held into a bin. Both report ok or how they failed.
+`status` reports the episode: steps, and whether the task succeeded.
 
 Points are in metres, in the world frame: origin at the table centre, z up.
 """
+
+# [x, y, z] in metres, world frame: the shape find_by_colour returns, so its
+# ``point`` passes straight into pick's.
+Point = Annotated[list[float], Field(min_length=3, max_length=3)]
 
 # The wide render view, env.render(). Not "front": that is a canonical
 # observation camera (schema.CANONICAL_CAMERAS), and a task may record one.
@@ -67,6 +73,9 @@ class RobotSession:
             self.env = make_env()
             self._obs = self.env.reset()           # warm-up: learn the cameras
         self.cameras: tuple[str, ...] = (SCENE, *self._obs.images)
+        self.arm = _arm_skills(self.env)
+        if self.arm is not None:
+            self.arm.on_reset()
         self._last: StepResult | None = None
         self._steps = 0
         self._seed: int | None = None
@@ -74,6 +83,8 @@ class RobotSession:
     def reset(self, seed: int | None) -> dict[str, Any]:
         with _quiet():
             self._obs = self.env.reset(seed=seed)
+        if self.arm is not None:
+            self.arm.on_reset()
         self._last, self._steps, self._seed = None, 0, seed
         return self.status()
 
@@ -98,6 +109,29 @@ class RobotSession:
             "candidates": candidates,
         }
         return result, overlay(frame, found)
+
+    def step(self, action: np.ndarray) -> StepResult:
+        """The one place the episode advances. Skills step through here."""
+        if self._last is not None and (self._last.terminated or self._last.truncated):
+            raise ToolError("the episode is over: call reset")
+        self._last = self.env.step(action)
+        self._obs = self._last.observation
+        self._steps += 1
+        return self._last
+
+    def pick(self, point: list[float]) -> tuple[dict[str, Any], np.ndarray]:
+        self._check_running()
+        result = self.arm.pick(np.asarray(point, dtype=float), self._obs, self.step)
+        return result.as_dict(), np.asarray(self.env.render())
+
+    def place(self, bin_name: str) -> tuple[dict[str, Any], np.ndarray]:
+        self._check_running()
+        result = self.arm.place(bin_name, self._obs, self.step)
+        return result.as_dict(), np.asarray(self.env.render())
+
+    def _check_running(self) -> None:
+        if self._last is not None and (self._last.terminated or self._last.truncated):
+            raise ToolError("the episode is over: call reset")
 
     def paint(self, colors: tuple[str, str]) -> None:
         self._obs = self.env.paint(colors)
@@ -153,6 +187,33 @@ def build_server(make_env: Callable[[], Env], *, debug: bool = False) -> MCPServ
             result, img = session.find_by_colour(colour)
             return [result, _png(img)]
 
+    if session.arm is not None:
+        Bin = Literal[session.arm.bins]
+
+        @server.tool()
+        @on_sim
+        def pick(point: Point) -> list:
+            """Grasp the object whose top-face centre is at ``point`` and lift it.
+
+            ``point`` is [x, y, z] in metres: pass find_by_colour's ``point`` as it is.
+            Returns ok, or failure: "no_grasp" (closed on nothing), "timeout" (a motion
+            phase stalled). ``holding`` is read from the gripper's width. Also returns
+            the scene afterwards.
+            """
+            result, img = session.pick(point)
+            return [result, _png(img)]
+
+        @server.tool()
+        @on_sim
+        def place(bin: Bin) -> list:
+            """Carry what the gripper holds over a bin, lower it, release, and retreat.
+
+            Returns ok, or failure: "dropped" (lost it on the way), "no_grasp" (nothing
+            was held), "timeout". Also returns the scene afterwards.
+            """
+            result, img = session.place(bin)
+            return [result, _png(img)]
+
     if debug and hasattr(session.env, "paint"):
         Colour = Literal[session.env.palette]
 
@@ -175,6 +236,19 @@ def build_server(make_env: Callable[[], Env], *, debug: bool = False) -> MCPServ
         return session.status()
 
     return server
+
+
+def _arm_skills(env):
+    """pick/place for envs that expose a robosuite arm; None for anything else.
+
+    Imported lazily, as registry.py does: a server over a non-robosuite env must
+    not need robosuite installed.
+    """
+    if not (hasattr(env, "mujoco") and hasattr(env, "bin_names")):
+        return None
+    from dream_robot.sims.robosuite.skills import ArmSkills
+
+    return ArmSkills(env)
 
 
 def _png(img: np.ndarray) -> Image:
