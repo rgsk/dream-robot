@@ -49,4 +49,17 @@ then an OpenAI planner.
   -> place ok, `status.success` false. Skill result != task result; the planner reads both.
 - pick takes `point: [x, y, z]`, the shape find returns: one paste in the Inspector, a
   straight pass-through for a planner. Exactly 3 numbers, checked by the schema.
-- Next: the LLM planner on these tools.
+
+## Step 5 · a live window on the sim: --viewer own | docked | sharp (2026-10-19)
+- Driving by tool calls showed nothing between `look`s; the window shows the server's own sim,
+  paced to real time (else a pick flashes past in <1 s). Never for evals.
+- Wayland: no app may place its window; MuJoCo's viewer cannot be sized (opens at 2/3 of
+  *physical* px = bigger than a 2x-scaled screen -> GNOME maximises). So three modes:
+  own (ours: GLFW + mjr_render, 1/3 wide, sharp, kept across resets; GNOME places it -- default),
+  docked (MuJoCo viewer on XWayland, EWMH-moved to the right third, soft at 2x),
+  sharp (MuJoCo viewer, Wayland, maximised). Sharp + auto-placed needs GNOME 47 (have 46).
+- Bugs found on the way: Inspector strips DISPLAY (and ignores `-e` with `--config`) -> the
+  server finds the Wayland socket itself; glfw picks its X11/Wayland lib at import, so that runs
+  before the sim build; C prints (GLFW, GL warnings) on stdout broke stdio -> fd-level guard;
+  robosuite's collision shapes (geom group 0) drew a green arm -> hidden.
+- Once: own window went grey mid-session; not reproduced (7 read-backs via `snapshot()` clean).

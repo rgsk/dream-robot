@@ -2,13 +2,68 @@
   "mcpServers": {
     "dream-robot": {
       "command": "uv",
-      "args": ["run", "python", "-m", "dream_robot.agent.server", "--env", "robosuite/instructed_pick_place"],
-      "env": { "MUJOCO_GL": "egl" }
+      "args": [
+        "run",
+        "python",
+        "-m",
+        "dream_robot.agent.server",
+        "--env",
+        "robosuite/instructed_pick_place"
+      ],
+      "env": {
+        "MUJOCO_GL": "egl"
+      }
     },
     "dream-robot-debug": {
       "command": "uv",
-      "args": ["run", "python", "-m", "dream_robot.agent.server", "--env", "robosuite/instructed_pick_place", "--debug"],
-      "env": { "MUJOCO_GL": "egl" }
+      "args": [
+        "run",
+        "python",
+        "-m",
+        "dream_robot.agent.server",
+        "--env",
+        "robosuite/instructed_pick_place",
+        "--debug",
+        "--viewer",
+        "own"
+      ],
+      "env": {
+        "MUJOCO_GL": "egl"
+      }
+    },
+    "dream-robot-debug-docked": {
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "-m",
+        "dream_robot.agent.server",
+        "--env",
+        "robosuite/instructed_pick_place",
+        "--debug",
+        "--viewer",
+        "docked"
+      ],
+      "env": {
+        "MUJOCO_GL": "egl"
+      }
+    },
+    "dream-robot-debug-sharp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "-m",
+        "dream_robot.agent.server",
+        "--env",
+        "robosuite/instructed_pick_place",
+        "--debug",
+        "--viewer",
+        "sharp"
+      ],
+      "env": {
+        "MUJOCO_GL": "egl"
+      }
     }
   }
 }

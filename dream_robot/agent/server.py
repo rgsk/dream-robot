@@ -28,7 +28,7 @@ import argparse
 import asyncio
 import contextlib
 import functools
-import io
+import os
 import sys
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -68,10 +68,23 @@ class RobotSession:
     Construct it on the sim thread -- the constructor builds the sim.
     """
 
-    def __init__(self, make_env: Callable[[], Env]):
+    def __init__(self, make_env: Callable[[], Env], *, viewer: str | None = None):
+        if viewer:
+            from dream_robot.agent.viewer import find_display
+
+            find_display(viewer)                   # before the sim build imports glfw
         with _quiet():
             self.env = make_env()
             self._obs = self.env.reset()           # warm-up: learn the cameras
+        self.viewer = None
+        if viewer and hasattr(self.env, "mujoco"):
+            from dream_robot.agent.viewer import can_open_window, make_viewer
+
+            if can_open_window():
+                self.viewer = make_viewer(self.env, viewer)
+                self.viewer.open()
+            else:
+                print("viewer: no display found, running headless", file=sys.stderr)
         self.cameras: tuple[str, ...] = (SCENE, *self._obs.images)
         self.arm = _arm_skills(self.env)
         if self.arm is not None:
@@ -85,6 +98,8 @@ class RobotSession:
             self._obs = self.env.reset(seed=seed)
         if self.arm is not None:
             self.arm.on_reset()
+        if self.viewer is not None:
+            self.viewer.open()                     # the reset built a new model
         self._last, self._steps, self._seed = None, 0, seed
         return self.status()
 
@@ -117,6 +132,8 @@ class RobotSession:
         self._last = self.env.step(action)
         self._obs = self._last.observation
         self._steps += 1
+        if self.viewer is not None:
+            self.viewer.sync()
         return self._last
 
     def pick(self, point: list[float]) -> tuple[dict[str, Any], np.ndarray]:
@@ -135,6 +152,8 @@ class RobotSession:
 
     def paint(self, colors: tuple[str, str]) -> None:
         self._obs = self.env.paint(colors)
+        if self.viewer is not None:
+            self.viewer.sync(pace=False)
 
     def status(self) -> dict[str, Any]:
         last = self._last
@@ -148,12 +167,18 @@ class RobotSession:
         }
 
 
-def build_server(make_env: Callable[[], Env], *, debug: bool = False) -> MCPServer:
+def build_server(
+    make_env: Callable[[], Env], *, debug: bool = False, viewer: str | None = None
+) -> MCPServer:
     """``debug`` adds tools that edit the world, for building test scenes by hand.
     Never give them to a planner: a planner that can repaint the scene can
-    "succeed" by changing the task instead of doing it."""
+    "succeed" by changing the task instead of doing it.
+
+    ``viewer`` ("sharp" or "docked", see viewer.py) opens a live window on this
+    sim and paces it to real time -- for a human watching, never for an eval."""
     sim = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sim")
-    session = sim.submit(RobotSession, make_env).result()
+    with _quiet():
+        session = sim.submit(lambda: RobotSession(make_env, viewer=viewer)).result()
     server = MCPServer("dream-robot", instructions=INSTRUCTIONS)
     on_sim = _on_sim_thread(sim)
     Camera = Literal[session.cameras]
@@ -289,23 +314,46 @@ def _on_sim_thread(sim: ThreadPoolExecutor):
 
 @contextlib.contextmanager
 def _quiet():
-    """Send stray prints to stderr. On a stdio server, stdout *is* the protocol;
-    robosuite's import-time banner there would corrupt the first message."""
-    with contextlib.redirect_stdout(sys.stderr if sys.stderr else io.StringIO()):
-        yield
+    """Send everything written to stdout -- Python or C -- to stderr meanwhile.
+
+    On a stdio server, stdout *is* the protocol. Python prints are not the only
+    risk: MuJoCo's viewer prints "ERROR: could not initialize GLFW" from C, which
+    no ``redirect_stdout`` sees. So this swaps file descriptor 1 itself. Once the
+    stdio transport runs, the SDK has already moved the wire off fd 1; this
+    matters most for the server build, which happens before that.
+    """
+    sys.stdout.flush()
+    saved = os.dup(1)
+    try:
+        os.dup2(2, 1)
+        with contextlib.redirect_stdout(sys.stderr):
+            yield
+    finally:
+        sys.stdout.flush()
+        os.dup2(saved, 1)
+        os.close(saved)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--env", default="robosuite/instructed_pick_place")
     parser.add_argument("--debug", action="store_true", help="add scene-editing debug tools")
+    parser.add_argument(
+        "--viewer", nargs="?", const="own", choices=("own", "docked", "sharp"),
+        help="live window, real-time pacing: own (our window: sharp, 1/3 wide, kept across "
+        "resets; the default), docked (right third, a bit soft) or sharp (full resolution, "
+        "GNOME maximises it)",
+    )
     args = parser.parse_args()
 
     from dream_robot.core.registry import TASKS
 
     if args.env not in TASKS:
         parser.error(f"unknown env {args.env!r}; have {', '.join(TASKS)}")
-    build_server(TASKS[args.env], debug=args.debug).run("stdio")
+    build_server(TASKS[args.env], debug=args.debug, viewer=args.viewer).run("stdio")
+    # The transport has handed fd 1 back to the wire. C libraries flush their
+    # buffered stdout at exit (the viewer's GL warnings), so point it at stderr.
+    os.dup2(2, 1)
 
 
 if __name__ == "__main__":
