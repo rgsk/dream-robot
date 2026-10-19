@@ -21,7 +21,7 @@ against sharpness and MuJoCo's viewer cannot be sized:
              open (x11_dock.py), drawn at half resolution and upscaled -- soft
     own      our window (OwnViewer): native Wayland, sized to a third of the
              screen, full resolution; GNOME places it, you drag it once. Kept
-             open across resets
+             open across resets. Dimmed to 80%; [ and ] adjust
 """
 
 from __future__ import annotations
@@ -168,6 +168,7 @@ class OwnViewer:
     """
 
     TITLE = "dream-robot"
+    BRIGHTNESS = 0.8        # light scale for this window only; [ and ] adjust it live
 
     def __init__(self, env):
         import threading
@@ -182,6 +183,7 @@ class OwnViewer:
         self._model_changed = False
         self._cam = self._opt = None
         self._snap: list | None = None          # a request, filled by the window thread
+        self.brightness = self.BRIGHTNESS
 
     def open(self) -> None:
         import threading
@@ -234,6 +236,13 @@ class OwnViewer:
         with self._lock:
             mujoco.mjv_updateScene(self._model, self._data, self._opt, None, self._cam,
                                    mujoco.mjtCatBit.mjCAT_ALL, self._scene)
+            # Dim this window's copy of the lights, never the model's: look and the
+            # camera find_by_colour reads must see the scene exactly as recorded.
+            for i in range(self._scene.nlight):
+                light = self._scene.lights[i]
+                light.ambient[:] = light.ambient * self.brightness
+                light.diffuse[:] = light.diffuse * self.brightness
+                light.specular[:] = light.specular * self.brightness
 
     def _window_loop(self) -> None:
         import glfw
@@ -274,6 +283,15 @@ class OwnViewer:
                 mujoco.mjv_moveCamera(self._model, mujoco.mjtMouse.mjMOUSE_ZOOM, 0.0,
                                       -0.05 * dy, self._scene, self._cam)
 
+        def on_key(win, key, scancode, action, mods):
+            if action not in (glfw.PRESS, glfw.REPEAT):
+                return
+            step = {glfw.KEY_LEFT_BRACKET: -0.1, glfw.KEY_RIGHT_BRACKET: 0.1}.get(key)
+            if step is not None:
+                self.brightness = min(1.5, max(0.1, self.brightness + step))
+                self._update_scene()
+
+        glfw.set_key_callback(window, on_key)
         glfw.set_mouse_button_callback(window, on_button)
         glfw.set_cursor_pos_callback(window, on_move)
         glfw.set_scroll_callback(window, on_scroll)
