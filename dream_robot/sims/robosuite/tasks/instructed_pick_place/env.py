@@ -368,6 +368,23 @@ class InstructedPickPlace(PickPlaceTwoBins):
         for body_id, color in zip(self._env.cube_body_ids, colors, strict=True):
             model.geom_rgba[model.geom_bodyid == body_id] = self._cfg.palette[color]
 
+    def paint(self, colors: tuple[str, str]):
+        """Debug only: recolour the two cubes (slot 0, slot 1), names from the palette.
+
+        For building scenes T5 never draws, e.g. two cubes of one colour. The
+        instruction is left as drawn, so it may no longer match the scene.
+        Returns the observation, re-rendered with the new colours.
+        """
+        model = self._env.sim.model._model
+        for body_id, color in zip(self._env.cube_body_ids, colors, strict=True):
+            model.geom_rgba[model.geom_bodyid == body_id] = self._cfg.palette[color]
+        self._raw = self._env._get_observations(force_update=True)
+        return self._observe()
+
+    @property
+    def palette(self) -> tuple[str, ...]:
+        return tuple(self._cfg.palette)
+
     def _cube_positions(self) -> np.ndarray:
         xpos = self._env.sim.data.body_xpos
         return np.array([xpos[i] for i in self._env.cube_body_ids], dtype=float)

@@ -150,3 +150,30 @@ class FakePolicy:
         action[self._embodiment.arm_slice] += self.delta
         action[self._embodiment.gripper_slice] = 0.5
         return action
+
+
+def overhead_rgbd(hw: int = 64, height: float = 1.0, squares=()):
+    """A camera ``height`` m above the origin looking straight down at a white
+    floor (z = 0), with flat coloured squares on it.
+
+    ``squares`` is ((rgb, (x, y), half_size_m, top_z), ...). Returns the frame;
+    world x is image-right, world y is image-up.
+    """
+    from dream_robot.core.camera import RGBD
+
+    f = hw / 2  # 90 degree field of view
+    K = np.array([[f, 0, hw / 2], [0, f, hw / 2], [0, 0, 1.0]])
+    T = np.eye(4)
+    T[:3, :3] = np.diag([1.0, -1.0, -1.0])      # cam x = +x, y = -y, z = -z (down)
+    T[2, 3] = height
+    rgb = np.full((hw, hw, 3), 255, dtype=np.uint8)
+    depth = np.full((hw, hw), height)
+    v, u = np.mgrid[0:hw, 0:hw]
+    # Where each pixel's ray meets the floor -- good enough to place flat squares.
+    wx = (u + 0.5 - hw / 2) * height / f
+    wy = -(v + 0.5 - hw / 2) * height / f
+    for color, (x, y), half, top in squares:
+        inside = (np.abs(wx - x) < half) & (np.abs(wy - y) < half)
+        rgb[inside] = color
+        depth[inside] = height - top
+    return RGBD(rgb=rgb, depth=depth, K=K, cam_to_world=T)

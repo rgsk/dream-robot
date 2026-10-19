@@ -4,6 +4,11 @@
       "command": "uv",
       "args": ["run", "python", "-m", "dream_robot.agent.server", "--env", "robosuite/instructed_pick_place"],
       "env": { "MUJOCO_GL": "egl" }
+    },
+    "dream-robot-debug": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "dream_robot.agent.server", "--env", "robosuite/instructed_pick_place", "--debug"],
+      "env": { "MUJOCO_GL": "egl" }
     }
   }
 }

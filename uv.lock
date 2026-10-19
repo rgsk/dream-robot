@@ -592,6 +592,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pyyaml" },
     { name = "robosuite" },
+    { name = "scipy" },
     { name = "torch" },
 ]
 
@@ -615,6 +616,7 @@ requires-dist = [
     { name = "numpy" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "robosuite", specifier = ">=1.5.0,<1.5.2" },
+    { name = "scipy", specifier = ">=1.18.0" },
     { name = "torch", specifier = ">=2.10" },
 ]
 

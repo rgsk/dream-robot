@@ -29,6 +29,7 @@ import yaml
 from robosuite.environments.manipulation.lift import Lift
 from robosuite.utils.mjcf_utils import array_to_string, new_body, new_geom
 
+from dream_robot.core.camera import RGBD
 from dream_robot.core.env_api import FailureMode, StepResult
 from dream_robot.core.schema import (
     PANDA,
@@ -248,6 +249,37 @@ class PickPlaceCube:
             width=w, height=h, camera_name=self._cfg.render_camera
         )
         return np.ascontiguousarray(frame[::-1])
+
+    def rgbd(self, camera: str = "top", hw: tuple[int, int] = (256, 256)) -> RGBD:
+        """A calibrated depth frame from a canonical camera, for the executor.
+
+        Not part of the observation, and not privileged: a real RGB-D camera
+        gives exactly this. Rendered at ``hw``, independent of the dataset's
+        camera resolution -- perception may look closer than the policy does.
+        """
+        backend = {v: k for k, v in self._cfg.camera_mapping.items()}[camera]
+        sim = self._env.sim
+        h, w = hw
+        rgb, depth = sim.render(width=w, height=h, camera_name=backend, depth=True)
+        # Bottom-up (OpenGL) rows, as everywhere in this adapter; flip to top-down.
+        rgb, depth = rgb[::-1], depth[::-1]
+
+        # The depth buffer is non-linear in [0, 1]; MuJoCo's near/far planes
+        # (scaled by the model's extent) turn it into metres along the axis.
+        m = sim.model._model
+        near, far = m.vis.map.znear * m.stat.extent, m.vis.map.zfar * m.stat.extent
+        metres = near / (1.0 - depth * (1.0 - near / far))
+
+        cam_id = sim.model.camera_name2id(backend)
+        f = 0.5 * h / np.tan(np.deg2rad(m.cam_fovy[cam_id]) / 2)
+        K = np.array([[f, 0, w / 2], [0, f, h / 2], [0, 0, 1]])
+
+        # MuJoCo's camera looks down its own -z with y up; OpenCV's looks down
+        # +z with y down. Same x, flipped y and z.
+        T = np.eye(4)
+        T[:3, :3] = sim.data.cam_xmat[cam_id].reshape(3, 3) @ np.diag([1.0, -1.0, -1.0])
+        T[:3, 3] = sim.data.cam_xpos[cam_id]
+        return RGBD(rgb=np.ascontiguousarray(rgb), depth=metres, K=K, cam_to_world=T)
 
     def close(self) -> None:
         self._env.close()
