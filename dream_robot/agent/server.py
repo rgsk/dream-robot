@@ -37,18 +37,17 @@ import json
 import os
 import sys
 from collections.abc import Callable
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import imageio.v3 as iio
 import numpy as np
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from dream_robot.agent import recorder, tabletop
-from dream_robot.agent.perception import COLOURS, colour_mask, find, overlay
 from dream_robot.core.env_api import Env, StepResult
 
 # The base prompt for whoever drives the robot -- an LLM, Claude Code, a person. Sent as
@@ -58,21 +57,7 @@ INSTRUCTIONS = (Path(__file__).with_name("driver_prompt.md")).read_text()
 # [x, y, z] in metres, world frame.
 Point = Annotated[list[float], Field(min_length=3, max_length=3)]
 
-# find_by_colour's top face is a cube's centre this much higher (Lift's cubes:
-# 2.0-2.2 cm half-size). It knows colour, not shape, so its grasps assume a cube.
-CUBE_TOP_TO_CENTRE = 0.021
 
-
-class GraspIn(BaseModel):
-    """A grasp as find_objects returns it; pass it to pick unchanged. Extra fields are ignored."""
-
-    point: Point = Field(description="where the finger pads close, metres, world frame")
-    yaw_deg: float | None = Field(
-        None, description="world direction the fingers close along; null keeps the wrist as is"
-    )
-    above_table: float | None = Field(
-        None, description="point's height over the table: how far the object hangs when lifted"
-    )
 
 # The wide render view, env.render(). Not "front": that is a canonical
 # observation camera (schema.CANONICAL_CAMERAS), and a task may record one.
@@ -153,30 +138,11 @@ class RobotSession:
             return np.asarray(self.env.render())
         return np.asarray(self._obs.images[camera])
 
-    def find_by_colour(self, colour: str) -> tuple[dict[str, Any], np.ndarray]:
-        frame = self.env.rgbd("top")
-        found = find(frame, colour_mask(frame.rgb, colour))
-        # One shape for every outcome, so a planner reads the same fields each time.
-        candidates = [
-            {"id": i, "point": [round(float(c), 4) for c in f.point], "pixels": f.pixels,
-             "grasp": {"point": [round(float(c), 4) for c in f.point - [0, 0, CUBE_TOP_TO_CENTRE]],
-                       "yaw_deg": None, "above_table": None}}
-            for i, f in enumerate(found, start=1)
-        ]
-        result = {
-            "colour": colour,
-            "found": len(found) == 1,
-            "ambiguous": len(found) > 1,
-            "point": candidates[0]["point"] if len(found) == 1 else None,
-            "grasp": candidates[0]["grasp"] if len(found) == 1 else None,
-            "candidates": candidates,
-        }
-        return result, overlay(frame, found)
-
     def find_objects(self) -> tuple[list[dict[str, Any]], np.ndarray]:
         frame = self.env.rgbd("top")
         things = tabletop.find_objects(frame, self.env.table_xy, self.env.robot_mask("top"))
-        return [t.as_dict(i) for i, t in enumerate(things, start=1)], tabletop.overlay(frame, things)
+        listed = [t.as_dict(i) for i, t in enumerate(things, start=1)]
+        return listed, tabletop.overlay(frame, things)
 
     def step(self, action: np.ndarray) -> tuple[Any, bool]:
         """The one place the episode advances. Skills step through here and get the
@@ -201,26 +167,26 @@ class RobotSession:
         # which does leak success. Fix when that env is driven again.
         return bool(self._last and (self._last.terminated or self._last.truncated))
 
-    def pick(self, grasp: GraspIn) -> tuple[dict[str, Any], np.ndarray]:
-        from dream_robot.sims.robosuite.skills import Grasp
-
+    def move_to(
+        self, point: list[float] | None, yaw_deg: float | None
+    ) -> tuple[dict[str, Any], np.ndarray]:
         self._check_running()
-        yaw = None if grasp.yaw_deg is None else float(np.deg2rad(grasp.yaw_deg))
-        g = Grasp(np.asarray(grasp.point, dtype=float), yaw, grasp.above_table)
-        return self._recorded("pick", lambda: self.arm.pick(g, self._obs, self.step))
-
-    def place_at(self, point: list[float], yaw_deg: float | None) -> tuple[dict[str, Any], np.ndarray]:
-        self._check_running()
+        if point is None and yaw_deg is None:
+            raise ToolError("give a point, a yaw_deg, or both")
+        p = None if point is None else np.asarray(point, dtype=float)
         yaw = None if yaw_deg is None else float(np.deg2rad(yaw_deg))
-        try:
-            return self._recorded("place_at", lambda: self.arm.place_at(
-                np.asarray(point, dtype=float), self._obs, self.step, yaw=yaw))
-        except ValueError as exc:
-            raise ToolError(str(exc)) from exc
+        return self._recorded("move_to", lambda: self.arm.move_to(p, self._obs, self.step, yaw=yaw))
 
-    def home(self) -> tuple[dict[str, Any], np.ndarray]:
+    def move_by(self, delta: list[float], dyaw_deg: float) -> tuple[dict[str, Any], np.ndarray]:
         self._check_running()
-        return self._recorded("home", lambda: self.arm.home(self._obs, self.step))
+        dyaw = float(np.deg2rad(dyaw_deg))
+        return self._recorded("move_by", lambda: self.arm.move_by(
+            np.asarray(delta, dtype=float), self._obs, self.step, dyaw=dyaw))
+
+    def gripper(self, action: str) -> tuple[dict[str, Any], np.ndarray]:
+        self._check_running()
+        close = action == "close"
+        return self._recorded("gripper", lambda: self.arm.gripper(close, self._obs, self.step))
 
     def _recorded(self, skill: str, run) -> tuple[dict[str, Any], np.ndarray]:
         """Run a skill with the cameras recording. Returns its result plus the clip's
@@ -228,20 +194,30 @@ class RobotSession:
         if self.recorder is None:
             result = run()
             self.log_score()
-            return result.as_dict(), np.asarray(self.env.render())
+            return self._result(result), np.asarray(self.env.render())
         self.recorder.start(skill)
         try:
             result = run()
         finally:
             clip = self.recorder.stop()
         self.log_score()
-        return {**result.as_dict(), **clip.summary()}, recorder.grid(clip, "scene")
+        return {**self._result(result), **clip.summary()}, recorder.grid(clip, "scene")
+
+    def _result(self, result) -> dict[str, Any]:
+        d = result.as_dict()
+        if d["phase"] in ("blocked", "wrist_limit"):
+            # blocked: stalled short of the target, pressing on something.
+            # wrist_limit: the asked turn is past the wrist's stops (see hand.wrist_room_deg).
+            d["failure"] = d["phase"]
+        if self.arm is not None:
+            d["hand"] = self.arm.hand(self._obs)
+        return d
 
     def review_clip(self, clip: str | int | None, camera: str, start: float | None,
                     end: float | None, frames: int, crop: list[float] | None) -> np.ndarray:
         clips = list(self.recorder.clips.values()) if self.recorder else []
         if not clips:
-            raise ToolError("no clips yet this episode: pick or place_at records one")
+            raise ToolError("no clips yet this episode: every motion records one")
         if clip is None:
             chosen = clips[-1]                         # the latest
         elif isinstance(clip, int) or str(clip).isdigit():
@@ -261,11 +237,6 @@ class RobotSession:
         if self.time_up:
             raise ToolError("time is up: call reset")
 
-    def paint(self, colors: tuple[str, str]) -> None:
-        self._obs = self.env.paint(colors)
-        if self.viewer is not None:
-            self.viewer.sync(pace=False)
-
     def status(self) -> dict[str, Any]:
         horizon = getattr(self.env, "horizon_steps", None)
         return {
@@ -274,6 +245,7 @@ class RobotSession:
             "steps": self._steps,
             "steps_left": None if horizon is None else max(0, horizon - self._steps),
             "time_up": self.time_up,
+            **({"hand": self.arm.hand(self._obs)} if self.arm is not None else {}),
             "clips": [
                 {"n": i, "clip": c.id, "skill": c.skill, "seconds": round(c.seconds, 2)}
                 for i, c in enumerate(self.recorder.clips.values(), start=1)
@@ -304,27 +276,23 @@ class RobotSession:
 
 
 def build_server(
-    make_env: Callable[[], Env], *, debug: bool = False, viewer: str | None = None,
+    make_env: Callable[[], Env], *, viewer: str | None = None,
     score_log: str | None = None, clips_dir: str | None = None,
 ) -> MCPServer:
     """The MCP server. See ``build_scored_server`` for the same plus a referee."""
     return build_scored_server(
-        make_env, debug=debug, viewer=viewer, score_log=score_log, clips_dir=clips_dir
+        make_env, viewer=viewer, score_log=score_log, clips_dir=clips_dir
     )[0]
 
 
 def build_scored_server(
-    make_env: Callable[[], Env], *, debug: bool = False, viewer: str | None = None,
+    make_env: Callable[[], Env], *, viewer: str | None = None,
     score_log: str | None = None, clips_dir: str | None = None,
 ) -> tuple[MCPServer, Callable[[], dict[str, Any]]]:
     """The server, and ``score()``: the referee's verdict on the current episode.
 
     ``score`` is for whoever evaluates the driver (a script, a test), in the same
     process -- it is deliberately not a tool, so no driver can call it.
-
-    ``debug`` adds tools that edit the world, for building test scenes by hand.
-    Never give them to a planner: a planner that can repaint the scene can
-    "succeed" by changing the task instead of doing it.
 
     ``viewer`` ("sharp" or "docked", see viewer.py) opens a live window on this
     sim and paces it to real time -- for a human watching, never for an eval."""
@@ -351,24 +319,6 @@ def build_scored_server(
         """An image of the scene. "scene" is a wide view; the rest are the robot's own cameras."""
         return _png(session.frame(camera))
 
-    if hasattr(session.env, "rgbd"):                 # needs a depth camera
-
-        Colour = Literal[COLOURS]
-
-        @server.tool()
-        @on_sim
-        def find_by_colour(colour: Colour) -> list:
-            """Locate objects of one colour in the top camera.
-
-            Knows colour only -- not shape, size or position. ``found``, ``point`` and
-            ``grasp`` are set only when exactly one object matches. When several do,
-            ``ambiguous`` is true and they are null: choose from ``candidates`` (each with
-            a 3D point in metres, top-face centre, and a grasp), whose ids are drawn on the
-            returned image. Its grasps assume a ~4 cm cube; find_objects measures instead.
-            """
-            result, img = session.find_by_colour(colour)
-            return [result, _png(img)]
-
     if all(hasattr(session.env, a) for a in ("rgbd", "table_xy", "robot_mask")):
 
         @server.tool()
@@ -393,53 +343,49 @@ def build_scored_server(
 
         @server.tool()
         @on_sim
-        def pick(grasp: GraspIn) -> list:
-            """Turn the wrist, grasp, and lift, as ``grasp`` says.
-
-            Pass an object's ``grasp`` from find_objects (or find_by_colour) as it is.
-            Returns ok, or failure: "no_grasp" (closed on nothing), "timeout" (a motion
-            phase stalled). ``holding`` is read from the gripper's width. The cameras
-            record throughout: returns the ``clip`` id and a grid of 8 scene frames across
-            it, the last being the end state. ``review_clip`` shows more.
-            """
-            result, img = session.pick(grasp)
-            return [result, _png(img)]
-
-        @server.tool()
-        @on_sim
-        def place_at(
-            point: Point,
+        def move_to(
+            point: Annotated[Point | None, Field(
+                description="where the finger pads go, metres, world frame; null stays put"
+            )] = None,
             yaw_deg: Annotated[float | None, Field(
-                description="world direction for the held object's long side, turned to "
-                "while carrying; null keeps it as picked")] = None,
+                description="world direction from the right finger to the left, -180..180; "
+                "null keeps the wrist"
+            )] = None,
         ) -> list:
-            """Carry what the gripper holds above ``point``, lower it until its bottom is just
-            over the point, release, and retreat.
+            """Move the hand so the finger pads are at ``point``, with the fingers pointing
+            along ``yaw_deg``. Either may be left out: ``yaw_deg`` alone turns on the spot.
+            The gripper stays open or closed as it is.
 
-            ``yaw_deg`` turns the held object first, so it fits: a container's ``opening``
-            gives its side direction (``axis_yaw_deg``) and ``diagonal``. An object longer
-            than the opening's side may still fit along the diagonal (side +- 45 deg for a
-            square opening).
-
-            ``point`` is where the object should land: a container's ``drop_point`` from
-            find_objects, or a spot on the table. Returns ok, or failure: "dropped" (lost
-            it on the way), "no_grasp" (nothing was held), "timeout". The cameras record
-            throughout: returns the ``clip`` id and a grid of 8 scene frames across it, the
-            last being the end state. ``review_clip`` shows more.
+            ``yaw_deg`` is a direction: 30 and 210 are different poses (the same grasp, as
+            the fingers are symmetric). The arm turns whichever way keeps the wrist inside
+            its stops; if neither way can reach it, nothing moves and failure is
+            "wrist_limit" -- ``hand.wrist_room_deg`` says how far it can turn each way.
+            Stops by itself if the hand stalls short of the target -- pressing on the table
+            or an object -- with failure "blocked"; ``hand`` then says where it stopped.
             """
-            result, img = session.place_at(point, yaw_deg)
+            result, img = session.move_to(point, yaw_deg)
             return [result, _png(img)]
 
         @server.tool()
         @on_sim
-        def home() -> list:
-            """Lift the arm straight up, then return to its start pose.
+        def move_by(
+            dx: float = 0.0, dy: float = 0.0, dz: float = 0.0, dyaw_deg: float = 0.0,
+        ) -> list:
+            """Move the hand by (dx, dy, dz) metres from where it is now, and turn the wrist
+            by exactly ``dyaw_deg`` degrees about vertical, always that way round (positive =
+            counter-clockwise seen from above; 0 keeps it). A turn past the wrist's stops
+            goes as far as the stop and reports failure "wrist_limit"; ``hand.wrist_room_deg``
+            says how much room is left. Same "blocked" stop as ``move_to``."""
+            result, img = session.move_by([dx, dy, dz], dyaw_deg)
+            return [result, _png(img)]
 
-            Use to recover: after a failed pick (the hand may still be pressed on the
-            object), or to clear the cameras' view. Keeps the gripper as it is -- if
-            holding something, it still is. Recorded like pick and place_at.
-            """
-            result, img = session.home()
+        @server.tool()
+        @on_sim
+        def gripper(action: Literal["open", "close"]) -> list:
+            """Open or close the fingers where the hand is, and wait until they stop. After
+            "close", ``hand.holding`` says whether something is between them and
+            ``hand.opening_m`` how wide."""
+            result, img = session.gripper(action)
             return [result, _png(img)]
 
         if session.recorder is not None:
@@ -468,21 +414,6 @@ def build_scored_server(
                 """
                 return _png(session.review_clip(clip, camera, start, end, frames, crop))
 
-    if debug and hasattr(session.env, "paint"):
-        Colour = Literal[session.env.palette]
-
-        @server.tool()
-        @on_sim
-        def debug_paint(upper_cube: Colour, lower_cube: Colour) -> Image:
-            """DEBUG: recolour the two cubes, "upper" and "lower" as seen in the scene image.
-
-            Lasts until the next reset. The instruction is not changed, so it may no
-            longer match. Returns the scene after painting.
-            """
-            # Slot 0 sits nearer the robot, which is the upper cube in every view.
-            session.paint((upper_cube, lower_cube))
-            return _png(session.frame(SCENE))
-
     @server.tool()
     @on_sim
     def status() -> dict[str, Any]:
@@ -494,7 +425,7 @@ def build_scored_server(
 
 
 def _arm_skills(env):
-    """pick/place for envs that expose a robosuite arm; None for anything else.
+    """The arm primitives for envs that expose a robosuite arm; None for anything else.
 
     Imported lazily, as registry.py does: a server over a non-robosuite env must
     not need robosuite installed.
@@ -567,7 +498,6 @@ def _quiet():
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--env", default="robosuite/instructed_pick_place")
-    parser.add_argument("--debug", action="store_true", help="add scene-editing debug tools")
     parser.add_argument(
         "--viewer", nargs="?", const="own", choices=("own", "docked", "sharp"),
         help="live window, real-time pacing: own (our window: sharp, 1/3 wide, kept across "
@@ -578,6 +508,11 @@ def main() -> None:
         "--score-log", help="append the referee's verdict per episode to this JSONL file "
         "(on each reset and at exit); never exposed as a tool",
     )
+    parser.add_argument(
+        "--horizon-seconds", type=float,
+        help="episode clock for this server, overriding the task's (e.g. 300 for driving "
+        "by hand); evals keep the task's",
+    )
     parser.add_argument("--clips-dir", help="also write each skill's camera clips as MP4s here")
     args = parser.parse_args()
 
@@ -587,8 +522,11 @@ def main() -> None:
         factory = task_factory(args.env)
     except KeyError as exc:
         parser.error(str(exc))
+    if args.horizon_seconds is not None:
+        # Only tasks whose constructor takes it; others fail loudly at startup.
+        factory = functools.partial(factory, horizon_seconds=args.horizon_seconds)
     server, _ = build_scored_server(
-        factory, debug=args.debug, viewer=args.viewer, score_log=args.score_log,
+        factory, viewer=args.viewer, score_log=args.score_log,
         clips_dir=args.clips_dir,
     )
     server.run("stdio")

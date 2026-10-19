@@ -1,6 +1,6 @@
 """Everything on the table, from depth: objects to pick and containers to place into.
 
-find_by_colour asks "where is the red thing?" and needs a colour to ask. This
+A colour threshold asks "where is the red thing?" and needs a colour to ask. This
 asks nothing: whatever rises above the table is something, and each something
 is described well enough for a planner to name it ("#2 is the yellow bar") and
 for the arm to act on it.
@@ -109,7 +109,7 @@ class Thing:
         if self.kind == "object":
             d["grasp"] = self.grasp
         else:
-            # The centre of the opening, at rim height. place_at takes this point.
+            # The centre of the opening, at rim height. the driver aims a place at this point.
             d["drop_point"] = _r(self.centre)
             length, width = self.opening
             d["opening"] = {
@@ -180,7 +180,8 @@ def overlay(frame: RGBD, things: list[Thing]) -> np.ndarray:
             draw.line([(ua, va), (ub, vb)], fill=(255, 255, 0), width=2)
         u, v = _project(frame, t.centre)
         box = draw.textbbox((u + 8, v - 20), str(i), font=font)
-        draw.rectangle([box[0] - 2, box[1] - 1, box[2] + 2, box[3] + 1], fill=(0, 0, 0), outline=edge[t.kind])
+        draw.rectangle([box[0] - 2, box[1] - 1, box[2] + 2, box[3] + 1],
+                       fill=(0, 0, 0), outline=edge[t.kind])
         draw.text((u + 8, v - 20), str(i), fill=(255, 255, 255), font=font)
     return np.asarray(pil)
 

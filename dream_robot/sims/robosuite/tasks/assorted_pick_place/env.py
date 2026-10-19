@@ -31,7 +31,7 @@ body the success predicate reads.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -338,9 +338,13 @@ class _Scene(_LiftWithBins, _AssortedLift):
 class AssortedPickPlace(PickPlaceTwoBins):
     """Implements ``core.env_api.Env``. T5's table with assorted, named objects."""
 
-    def __init__(self, config: TaskConfig | None = None):
+    def __init__(self, config: TaskConfig | None = None, *, horizon_seconds: float | None = None):
+        """``horizon_seconds`` overrides the task's episode clock -- e.g. longer for a
+        person or LLM driving by hand, who explores and retries. Evals keep the task's."""
         # Not super().__init__: T2's builds a one-cube scene. Mirrors T5's.
         self._cfg = config or TaskConfig.load()
+        if horizon_seconds is not None:
+            self._cfg = replace(self._cfg, horizon_seconds=float(horizon_seconds))
         ch, cw = self._cfg.camera_hw
         self._backend_cams = list(self._cfg.camera_mapping)
         self._env = _Scene(

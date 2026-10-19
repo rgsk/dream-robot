@@ -244,7 +244,7 @@ class OwnViewer:
             mujoco.mjv_updateScene(self._model, self._data, self._opt, None, self._cam,
                                    mujoco.mjtCatBit.mjCAT_ALL, self._scene)
             # Dim this window's copy of the lights, never the model's: look and the
-            # camera find_by_colour reads must see the scene exactly as recorded.
+            # camera perception reads must see the scene exactly as recorded.
             for i in range(self._scene.nlight):
                 light = self._scene.lights[i]
                 light.ambient[:] = light.ambient * self.brightness

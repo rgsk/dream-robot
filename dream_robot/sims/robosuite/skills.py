@@ -1,17 +1,13 @@
-"""pick(grasp) and place_at(point): the scripted expert's two halves, aimed by perception.
+"""The arm's primitives: move_to, gripper, and the hand's own reading.
 
-The expert reads the cube's true pose; these do not. ``pick`` is aimed by a
-grasp that perception measured from the camera -- where the finger pads close,
-along which direction, and how high that is above the table -- and whether it
-worked is read from the gripper's own width, the way a real gripper reports it.
-``place_at`` goes to a point perception found (a container's opening), not to a
-named bin. What is still known rather than sensed: the robot's own kinematics.
+These are what a driver (an LLM, a person) composes into picking, placing, nudging,
+recovering. There are no fixed pick/place sequences any more: they were special cases
+of these, and their know-how (go down from above, check holding, travel high, release
+just over the rim, turn to fit) lives in the driver prompt as recipes.
 
-Phase machine, IK and every waypoint are the expert's (pick_place_cube/expert.py),
-not copies: ``ScriptedExpert`` runs ``PICK_PHASES`` or ``PLACE_PHASES``. What is
-new is the wrist: the expert always held the reset orientation, which only
-suits a cube; pick turns it about vertical so the fingers close across the
-object's narrow side, and carries with that orientation.
+Two reflexes stay in code because they cannot wait for the next tool call: a move
+stops itself when the hand stalls ("blocked"), and the gripper waits until the fingers
+settle. Holding is read from the gripper's own width, as a real gripper reports it.
 """
 
 from __future__ import annotations
@@ -24,31 +20,21 @@ import numpy as np
 
 from dream_robot.core.env_api import FailureMode, Observation
 from dream_robot.sims.robosuite.ik import DifferentialIK
-from dream_robot.sims.robosuite.tasks.pick_place_cube.expert import (
-    EEF_SITE,
-    PICK_PHASES,
-    PLACE_PHASES,
-    ExpertConfig,
-    ExpertContext,
-    Phase,
-    ScriptedExpert,
-)
+from dream_robot.sims.robosuite.tasks.pick_place_cube.expert import EEF_SITE, ExpertConfig
 
 # The Panda's finger bodies: the line between them is the closing direction.
 FINGERS = ("gripper0_right_leftfinger", "gripper0_right_rightfinger")
 
-# place_at lets go when the held object's bottom is this far above the drop
-# point: it falls the rest, rather than being pushed into the rim.
-RELEASE_GAP = 0.02
 
-# The finger pads' centre cannot go lower than this over the table: the fingertips
-# reach past it and touch down at ~2.0 cm (measured: descend stalls at 0.820 on
-# the 0.800 table). Lower grasps -- a 3 cm box's mid-height -- are raised to it.
-MIN_ABOVE_TABLE = 0.025
 
-# A grasp with no height above the table (find_by_colour's) is assumed to hang
-# like a T5 cube held at its centre.
-DEFAULT_ABOVE_TABLE = 0.021
+# Primitives: a move counts as blocked when the hand has gone less than this in
+# STALL_SECONDS while still short of its target -- it is pressing on something.
+STALL_DISTANCE = 0.002
+STALL_SECONDS = 0.5
+STALL_DEGREES = 1.0
+WRIST_MARGIN_DEGREES = 10.0   # keep the last joint this far from its stops when turning
+TURN_CHUNK = np.deg2rad(45)   # turn in steps no bigger than this, so the IK keeps the direction
+
 
 # Gripper opening (0 shut .. 1 open) above which *closed* fingers are on something.
 # Shut on nothing reads ~0; shut on a 4 cm cube, about half the 8 cm span. Width
@@ -60,13 +46,6 @@ HOLDING_MIN_OPENING = 0.15
 # else -- in particular not the sim's success flag: a real arm does not know whether
 # the task is done, the driver judges that from the cameras.
 Step = Callable[[np.ndarray], tuple[Observation, bool]]
-
-
-@dataclass(frozen=True)
-class Grasp:
-    point: np.ndarray             # world xyz where the finger pads should close
-    yaw: float | None             # world direction the fingers close along, radians; None: as reset
-    above_table: float | None     # point's height over the table: how far the object hangs
 
 
 @dataclass(frozen=True)
@@ -86,17 +65,14 @@ class SkillResult:
 
 
 class ArmSkills:
-    """pick and place for a robosuite single-Panda task. Call ``on_reset`` after every reset."""
+    """Primitives for a robosuite single-Panda task. Call ``on_reset`` after every reset."""
 
     def __init__(self, env, config: ExpertConfig | None = None):
         self._env = env
         self._cfg = config or ExpertConfig.load()
         self._ik: DifferentialIK | None = None
         self._down: np.ndarray | None = None     # reset orientation: gripper pointing down
-        self._close_yaw0 = 0.0                   # its closing direction, world yaw
         self._hold_rotation: np.ndarray | None = None
-        self._hang = DEFAULT_ABOVE_TABLE         # how far the held object hangs below the pads
-        self._held_axis: float | None = None     # world yaw of the held object's long side
         self._closed = False                     # last gripper command was "close"
 
     def on_reset(self) -> None:
@@ -108,123 +84,188 @@ class ArmSkills:
         )
         self._down = self._ik.site_mat
         self._hold_rotation = self._down
-        left, right = (data.xpos[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f)]
-                       for f in FINGERS)
-        self._close_yaw0 = float(np.arctan2(*(left - right)[1::-1]))
+        self._finger_direction0 = self._finger_direction()
+        self._turned = 0.0                       # total commanded turn since reset, radians
+        self._commanded_pos = self._ik.site_pos  # where the pads were last sent
         self._closed = False                     # every reset pose has the gripper open
-        self._home = self._ik.site_pos           # the reset pose: where home goes back to
 
     def holding(self, obs) -> bool:
         return self._closed and float(obs.state[-1]) > HOLDING_MIN_OPENING
 
-    def pick(self, grasp: Grasp, obs, step: Step) -> SkillResult:
-        """Turn the wrist, approach, descend, close, lift, as the grasp says."""
-        if self.holding(obs):
-            raise ValueError("already holding something: place it before picking again")
-        # A closing direction is an axis: turn the short way, never more than 90 degrees.
-        # No yaw: keep the reset wrist, as the expert always did.
-        turn = 0.0 if grasp.yaw is None else (grasp.yaw - self._close_yaw0 + np.pi / 2) % np.pi - np.pi / 2
-        self._hold_rotation = _rot_z(turn) @ self._down
-        # Fingers close across the narrow side, so the long side is a quarter turn from
-        # the closing direction. Unknown when the grasp gave no yaw.
-        self._held_axis = None if grasp.yaw is None else _wrap_half_turn(grasp.yaw + np.pi / 2)
-        point = np.asarray(grasp.point, dtype=float).copy()
-        self._hang = DEFAULT_ABOVE_TABLE
-        if grasp.above_table is not None:
-            raise_by = max(0.0, MIN_ABOVE_TABLE - grasp.above_table)
-            point[2] += raise_by
-            self._hang = grasp.above_table + raise_by
-        # The phase machine descends to reference + grasp_dz; land the pads on the point.
-        reference = point - [0.0, 0.0, self._cfg.grasp_dz]
-        result = self._run(PICK_PHASES, reference, np.zeros(3), obs, step)
-        if result.ok and not result.holding:      # lifted, fingers shut on nothing
-            return SkillResult(False, FailureMode.NO_GRASP, result.phase, result.steps,
-                               False, result.episode_over)
-        return result
+    # --- primitives: the LLM composes these; pick/place are fixed compositions ---
 
-    def home(self, obs, step: Step) -> SkillResult:
-        """Lift straight up to the start height, then go to the start pose.
+    def hand(self, obs) -> dict:
+        """The robot's own reading of its hand: where the finger pads are, the world
+        direction from the right finger to the left one, how much the wrist can still turn
+        each way, how wide the fingers are open, and whether it holds something."""
+        ccw, cw = self._wrist_room()
+        return {
+            "point": [round(float(c), 4) for c in self._ik.site_pos],
+            "yaw_deg": round(float(np.rad2deg(self._finger_direction())), 1),
+            "wrist_room_deg": {"ccw": round(float(np.rad2deg(ccw)), 1),
+                               "cw": round(float(np.rad2deg(cw)), 1)},
+            "opening_m": round(float(obs.state[-1]) * self._env._gripper_span, 4),
+            "holding": self.holding(obs),
+        }
 
-        Recovery after a failed or stalled skill: straight up first, so the hand leaves
-        whatever it was pressing on the way it came, before moving sideways. Keeps the
-        gripper as it is: open stays open, holding keeps holding (with its wrist turn);
-        empty-handed, the wrist turns back to the start orientation.
+    def move_to(self, point: np.ndarray | None, obs, step: Step,
+                yaw: float | None = None) -> SkillResult:
+        """Move the finger pads to ``point`` (None: stay) with the fingers pointing along
+        world direction ``yaw`` (None: keep the wrist).
+
+        ``yaw`` is a direction, not an axis: 30 and 210 deg are different poses. The arm
+        turns whichever way keeps its last wrist joint inside its stops; if no way does,
+        nothing moves and the result is "wrist_limit" (``hand.wrist_room_deg`` says what
+        is reachable). The gripper stays as it is. Stops by itself when the hand stalls
+        short of the target -- pressing on the table or an object -- and reports
+        ``blocked``; that reflex cannot wait for the next tool call.
         """
-        if self._ik is None:
-            raise RuntimeError("call on_reset() after env.reset()")
-        holding = self.holding(obs)
-        gripper = 0.0 if holding else 1.0
-        if not holding:
-            self._hold_rotation = self._down
-        here = self._ik.site_pos
-        up = np.array([here[0], here[1], max(here[2], self._home[2])])
-        timeout = int(round(self._cfg.phase_timeout_seconds * self._env.control_hz))
-        steps = 0
-        for phase, target in (("up", up), ("home", self._home)):
-            for _ in range(timeout):
-                if np.linalg.norm(self._ik.site_pos - target) < self._cfg.reach_tolerance:
-                    break
-                joints = self._ik.solve(target, self._hold_rotation)
-                obs, time_up = step(np.concatenate([joints, [gripper]]).astype(np.float32))
-                steps += 1
-                if time_up:
-                    return SkillResult(False, FailureMode.TIMEOUT, phase, steps,
-                                       self.holding(obs), True)
-            else:
-                return SkillResult(False, FailureMode.TIMEOUT, phase, steps,
-                                   self.holding(obs), False)
-        return SkillResult(True, FailureMode.NONE, "home", steps, self.holding(obs), False)
-
-    def place_at(self, point: np.ndarray, obs, step: Step, yaw: float | None = None) -> SkillResult:
-        """Carry above ``point``, lower until the held object's bottom is just over it,
-        open, retreat. ``point`` is where the object should land: a container's
-        opening at rim height, or a spot on the table.
-
-        ``yaw``: world direction for the held object's long side, turned to during the
-        carry (the short way: an axis, so never more than 90 degrees). None: as held.
-        """
-        if not self.holding(obs):
-            return SkillResult(False, FailureMode.NO_GRASP, "start", 0, False, False)
+        self._check_ready()
+        turn = 0.0
         if yaw is not None:
-            if self._held_axis is None:
-                raise ValueError("the held object's orientation is unknown (its grasp had no "
-                                 "yaw): place without yaw_deg")
-            turn = _wrap_half_turn(yaw - self._held_axis)
-            self._hold_rotation = _rot_z(turn) @ self._hold_rotation
-            self._held_axis = _wrap_half_turn(self._held_axis + turn)
-        release_z = float(point[2]) + self._hang + RELEASE_GAP
-        # The phase machine lowers to bin_center + drop_height; aim that at release_z.
-        target = np.array([point[0], point[1], release_z - self._cfg.drop_height])
-        return self._run(PLACE_PHASES, np.zeros(3), target, obs, step)
+            d = _wrap_full_turn(yaw - self._commanded_direction())
+            ccw, cw = self._wrist_room()
+            # The way round with room for it (the room is a lower bound, see _wrist_room);
+            # if neither looks clear, the one with more room -- it may still stop short.
+            options = (d, d - 2 * np.pi * np.sign(d)) if d else (0.0,)
+            fits = [t for t in options if -cw <= t <= ccw]
+            turn = min(fits, key=abs) if fits else max(
+                options, key=lambda t: (ccw if t > 0 else cw) - abs(t))
+        return self._turn_and_move(point, turn, obs, step)
 
-    def _run(self, phases: tuple[Phase, ...], cube_ref, bin_center, obs, step) -> SkillResult:
+    def move_by(self, delta: np.ndarray, obs, step: Step, dyaw: float = 0.0) -> SkillResult:
+        """Move the pads by ``delta`` and turn the wrist by exactly ``dyaw`` (radians,
+        positive = counter-clockwise seen from above) -- always that way round. A turn
+        past the wrist's stops is cut at the stop: the motion completes and the result
+        is "wrist_limit"."""
+        self._check_ready()
+        target = self._commanded_pos + np.asarray(delta, dtype=float)
+        return self._turn_and_move(target, dyaw, obs, step)
+
+    def _turn_and_move(self, point, turn: float, obs, step: Step) -> SkillResult:
+        """Turn by ``turn``, always that way round, moving the pads to ``point`` meanwhile.
+
+        In chunks of at most TURN_CHUNK: the IK alone would take the short way round. Each
+        chunk is sized from the wrist room read *now*, so the turn runs up to the stop and
+        no further; if it cannot finish, the result is "wrist_limit" (the move completes).
+        """
+        target = self._commanded_pos if point is None else np.asarray(point, dtype=float)
+        remaining, steps, limited = turn, 0, False
+        while True:
+            chunk = 0.0
+            if abs(remaining) > 1e-6:
+                ccw, cw = self._wrist_room()
+                room = ccw if remaining > 0 else cw
+                chunk = float(np.sign(remaining) * min(abs(remaining), TURN_CHUNK, room))
+                if abs(chunk) < np.deg2rad(0.5):
+                    limited, chunk = True, 0.0
+            self._hold_rotation = _rot_z(chunk) @ self._hold_rotation
+            self._turned += chunk
+            remaining -= chunk
+            result = self._servo(target, obs, step)
+            steps += result.steps
+            obs = self._last_obs
+            if not result.ok:
+                self._commanded_pos = self._ik.site_pos      # where it stopped
+                return SkillResult(False, result.failure, result.phase, steps,
+                                   result.holding, result.episode_over)
+            if chunk == 0.0:
+                break
+        self._commanded_pos = target
+        if limited:
+            return SkillResult(False, FailureMode.TIMEOUT, "wrist_limit", steps,
+                               self.holding(obs), False)
+        return SkillResult(True, FailureMode.NONE, "reached", steps, self.holding(obs), False)
+
+    def _servo(self, target: np.ndarray, obs, step: Step) -> SkillResult:
+        """Drive the pads to ``target`` and the wrist to the commanded orientation."""
+        gripper = 0.0 if self._closed else 1.0
+        hz = self._env.control_hz
+        window = int(round(STALL_SECONDS * hz))
+        timeout = int(round(self._cfg.phase_timeout_seconds * hz))
+        trail = [(self._ik.site_pos, self._ik.site_mat)]
+        steps = 0
+        self._last_obs = obs
+        while True:
+            pos_err = float(np.linalg.norm(self._ik.site_pos - target))
+            rot_err = _rotation_angle(self._ik.site_mat, self._hold_rotation)
+            if pos_err < self._cfg.fine_tolerance and rot_err < np.deg2rad(3):
+                return SkillResult(True, FailureMode.NONE, "reached", steps,
+                                   self.holding(obs), False)
+            if steps >= timeout:
+                return SkillResult(False, FailureMode.TIMEOUT, "move", steps,
+                                   self.holding(obs), False)
+            if len(trail) > window:
+                (p1, r1), (p0, r0) = trail[-1], trail[-1 - window]
+                # Stalled = neither moving nor turning. Position alone said "blocked" while
+                # the wrist was still turning in free air.
+                if (np.linalg.norm(p1 - p0) < STALL_DISTANCE
+                        and _rotation_angle(r1, r0) < np.deg2rad(STALL_DEGREES)):
+                    return SkillResult(False, FailureMode.TIMEOUT, "blocked", steps,
+                                       self.holding(obs), False)
+            joints = self._ik.solve(target, self._hold_rotation)
+            obs, time_up = step(np.concatenate([joints, [gripper]]).astype(np.float32))
+            self._last_obs = obs
+            steps += 1
+            trail.append((self._ik.site_pos, self._ik.site_mat))
+            if time_up:
+                return SkillResult(False, FailureMode.TIMEOUT, "move", steps,
+                                   self.holding(obs), True)
+
+    def _wrist_room(self) -> tuple[float, float]:
+        """(ccw, cw): how far the hand may still turn each way, radians, keeping the last
+        joint WRIST_MARGIN off its stops (+-166 deg on the Panda). Read from the joint now.
+
+        The joint moves opposite to the hand's yaw, 0.7-1 deg per deg (measured; the
+        other joints take up the rest), so assuming 1 is a lower bound: the true room is
+        a bit more, and turning in chunks re-reads it, so a turn still reaches the stop.
+        """
+        model, data = self._env.mujoco
+        q_adr = int(self._env.arm_qpos_idx[-1])
+        jid = int(np.flatnonzero(model.jnt_qposadr == q_adr)[0])
+        lo, hi = model.jnt_range[jid]
+        margin = np.deg2rad(WRIST_MARGIN_DEGREES)
+        q = float(data.qpos[int(self._env.arm_qpos_idx[-1])])
+        return max(0.0, q - lo - margin), max(0.0, hi - margin - q)
+
+    def _commanded_direction(self) -> float:
+        """World direction right finger -> left finger once the commanded wrist is reached."""
+        return self._finger_direction0 + self._turned
+
+    def _finger_direction(self) -> float:
+        model, data = self._env.mujoco
+        left, right = (data.xpos[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f)]
+                       for f in FINGERS)
+        return _wrap_full_turn(float(np.arctan2(*(left - right)[1::-1])))
+
+    def _check_ready(self) -> None:
         if self._ik is None:
             raise RuntimeError("call on_reset() after env.reset()")
-        machine = ScriptedExpert(self._cfg, control_hz=self._env.control_hz, phases=phases)
-        carrying = {p.name for p in PLACE_PHASES[:2]}     # carry, lower: must stay shut on it
-        steps = 0
-        while True:
-            opening = float(obs.state[-1])
-            command = machine(ExpertContext(
-                eef_pos=self._ik.site_pos, cube_pos=cube_ref, bin_center=bin_center,
-                gripper_opening=opening, grip_settled=machine.grip_settled(opening),
-            ))
-            if command.finished:
-                return SkillResult(True, FailureMode.NONE, command.phase, steps,
-                                   self.holding(obs), False)
-            if command.timed_out:
-                return SkillResult(False, FailureMode.TIMEOUT, command.phase, steps,
-                                   self.holding(obs), False)
-            if command.phase in carrying and not self.holding(obs):
-                return SkillResult(False, FailureMode.DROPPED, command.phase, steps,
-                                   False, False)
-            self._closed = command.gripper < 0.5
-            joints = self._ik.solve(command.waypoint, self._hold_rotation)
-            obs, time_up = step(np.concatenate([joints, [command.gripper]]).astype(np.float32))
+
+    def gripper(self, close: bool, obs, step: Step) -> SkillResult:
+        """Close or open the fingers where the hand is, and wait until they stop moving.
+        Closing on something leaves the fingers apart: ``holding``."""
+        command = 0.0 if close else 1.0
+        self._closed = close
+        hz = self._env.control_hz
+        timeout = int(round(self._cfg.phase_timeout_seconds * hz))
+        here = self._ik.site_pos
+        self._commanded_pos = here
+        widths, steps = [], 0
+        window, eps = self._cfg.grip_settle_window, self._cfg.grip_settle_epsilon
+        while steps < timeout:
+            joints = self._ik.solve(here, self._hold_rotation)
+            obs, time_up = step(np.concatenate([joints, [command]]).astype(np.float32))
             steps += 1
+            widths.append(float(obs.state[-1]))
             if time_up:
-                return SkillResult(False, FailureMode.TIMEOUT, command.phase, steps,
+                return SkillResult(False, FailureMode.TIMEOUT, "gripper", steps,
                                    self.holding(obs), True)
+            if len(widths) > window and np.ptp(widths[-window:]) < eps:
+                break
+        return SkillResult(True, FailureMode.NONE, "closed" if close else "open", steps,
+                           self.holding(obs), False)
+
 
 
 def _rot_z(a: float) -> np.ndarray:
@@ -233,6 +274,12 @@ def _rot_z(a: float) -> np.ndarray:
     return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
 
 
-def _wrap_half_turn(a: float) -> float:
-    """An axis, not a direction: a and a + pi are the same. Into [-pi/2, pi/2)."""
-    return float((a + np.pi / 2) % np.pi - np.pi / 2)
+def _wrap_full_turn(a: float) -> float:
+    """A direction: into [-pi, pi)."""
+    return float((a + np.pi) % (2 * np.pi) - np.pi)
+
+
+def _rotation_angle(a: np.ndarray, b: np.ndarray) -> float:
+    """Angle of the rotation taking orientation ``b`` to ``a``, radians."""
+    c = (np.trace(a @ b.T) - 1.0) / 2.0
+    return float(np.arccos(np.clip(c, -1.0, 1.0)))

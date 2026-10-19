@@ -266,3 +266,75 @@ gets cameras + the robot's own sensors; ground truth goes to a scorer outside th
   (side / diagonal / will not fit), judging by frames + review_clip, recovering with home,
   known limits (touching things merge, collision-blind motion).
 - Only measured facts; each number is from steps 6-15.
+
+## Step 17 · Primitives: move_to, move_by, gripper; hand state (2026-10-19)
+- User: generality means the LLM drives with granular commands, not only fixed pick/place.
+  Agreed plan: add primitives, rebuild pick/place on them later, then measure primitives-only
+  vs macros on 10 seeds; retire the macros if they add nothing.
+- `move_to(point, yaw_deg)` (stall reflex -> "blocked": < 2 mm in 0.5 s short of target),
+  `move_by(dx, dy, dz)`, `gripper(open|close)` (waits to settle), `hand` in status and every
+  result (pads xyz, closing yaw, opening m, holding). All recorded as clips.
+- Smoke, seed 2009, yellow box by primitives only: 8 calls, 226 steps, referee success
+  (macros: ~250 steps). move_to into the table: stops "blocked" at z 0.8095 (1 cm above).
+- driver_prompt.md gained a "Primitives" section with a by-hand pick recipe.
+
+## Step 18 · Driving with primitives only (2026-10-19, in progress)
+- Seeds 2020-2024, instruction target only, no pick/place_at. Verdicts in
+  `scratch/agent/driver_prim.jsonl` (referee log unread until the end).
+  2020 cereal, 2021 bread, 2022 ball 6.5 cm (slid in the grip, opening 5.5 -> 4.8 cm, held),
+  2023 bottle carried over a milk carton, 2024 yellow box 7 x 6.2 cm: all my verdict success.
+  8 calls per episode (11 on 2024), same as the by-hand recipe.
+- Bugs found on 2024, fixed: (1) move_to said "blocked" in free air while the wrist turned
+  (stall check watched position only) -> now position AND rotation; (2) a yaw after a cut-short
+  move was computed from the measured wrist but applied to the commanded one, compounding
+  (-25.4 asked -> -9.5) -> now relative to the commanded wrist. Check: -25.4/60/-80 asked ->
+  -27.9/57.4/-82.8; into the table still "blocked".
+- **Result, seeds 2020-2029, primitives only (no pick/place_at): referee 10/10, my verdict
+  agreed 10/10.** 83 tool calls (8 per episode, 11 once) vs ~3 with macros.
+  Kinds: cereal, bread, ball x3 (5.7-6.5 cm), bottle x2 (carried over a milk carton), box
+  7 x 6.2 cm, can, cylinder. Nothing knocked over in any clip.
+  Not a like-for-like vs the macros' 8/10 (2000-2009): those failures were bars > 12 cm, and no
+  long bar came up here. What primitives bought: grasp height chosen per object (ball middles),
+  high carries over tall objects, and they surfaced 2 motion bugs.
+
+## Step 19 · pick, place_at, home retired: primitives only (2026-10-20)
+- User: move_to / move_by / gripper driven by an LLM can do anything; the macros are special
+  cases -> retired (special-case rule). Tools left: reset, look, status, find_objects,
+  find_by_colour, move_to, move_by, gripper, review_clip.
+- Their know-how moved into driver_prompt.md as measured recipes: pick (4 calls), place in a
+  container (4 calls, carry height = tallest in path + hang + 3 cm, release 2 cm over rim),
+  recover (open, straight up, re-find), turning to fit (carry move_to yaw), ball grasp at the
+  middle. Kept in code: the two reflexes (blocked stop, gripper settle).
+- skills.py: pick/place_at/home/_run and the expert phase import removed.
+- Tests rewritten to the recipes: arm 2/2 (T7 seed 2009 succeeds; close-on-nothing and
+  into-the-table reported, not raised), server 14/14. T5 scripted planner on primitives: 3/3.
+- find_by_colour retired too: find_objects already reports colour and measures the grasp
+  (find_by_colour assumed a 4 cm cube). Its one edge, separating touching objects of different
+  colours, is SAM3's job. T5 scripted planner now: find_objects -> the named colour: 3/3.
+  Library colour_mask stays (find_objects names colours with it).
+- Also retired (user OK'd): `debug_paint` + `--debug` + T5 env.paint; the colour-blob `find()`
+  and its overlay (perception.py keeps `colour_mask` for naming colours); `find_accuracy.py`
+  (measured find_by_colour; in git history). `.mcp.json` listing cut to `dream-robot` (T5) and
+  `dream-robot-t7`; viewer modes own/docked/sharp stay in code. `move_by` kept (user).
+- Final tool set: reset, look, status, find_objects, move_to, move_by, gripper, review_clip.
+  Tests: server+perception 11/11, arm 2/2; T5 planner 2/2.
+- `.mcp.json` now has one server, named by task: `t7-pick-place-objects` (was `dream-robot-t7`).
+  The T5 listing is gone: T7 covers it for driving. T5 stays as a task (the learned-policy /
+  VLA benchmark) and its scripted planner runs in-process, needing no listing.
+- "time is up: call reset" in the Inspector: T7's 30 s clock (900 steps) is too short for driving
+  by hand. New `--horizon-seconds` (server) -> `horizon_seconds` (T7 env; robosuite's own horizon
+  follows). `t7-pick-place-objects` runs with 300 s (9000 steps); evals keep the task's 30 s.
+- `move_by(dx, dy, dz, dyaw_deg)`: relative wrist turn (from the commanded wrist). Check from
+  -86.4: +30 -> -57.1, +30 with dz -5 cm -> -29.4, dx only -> -26.8 (kept within 3 deg).
+- Wrist limit: Panda joint 7 is +-166 deg, starts at +44. Five move_by(dyaw_deg=80) in a row hit
+  the stop on the 4th ("blocked", then timeout). Fix: a turn may go the other way (turn -+ 180),
+  same closing axis, chosen so the joint stays 25 deg off its stops. Now 8/8 consecutive +80 turns
+  ok, joint stays within -120..-7.
+- Yaw semantics (user, option A): `move_to(point?, yaw_deg?)` -- both optional; yaw is a world
+  DIRECTION (-180..180), not an axis; the arm turns whichever way keeps joint 7 inside its stops,
+  else "wrist_limit". `move_by(..., dyaw_deg)` turns exactly that way and stops at the stop
+  ("wrist_limit"). The automatic 180 flip is gone. `hand.wrist_room_deg` = {ccw, cw} left.
+  Turning runs in <=45 deg chunks (the IK alone takes the short way), each sized from the joint
+  read live. First version predicted the joint at 1:1 with hand yaw (it is ~0.7:1) and stopped
+  at j7 -104; live re-reading reaches -156 (stop -166, 10 deg margin). Checks from -86 deg:
+  +80 x3 ok, 4th -> wrist_limit at 167 deg; yaw 0 -> 1.2; yaw 180 -> -178.4; empty call rejected.

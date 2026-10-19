@@ -7,7 +7,7 @@ and the driver gets a grid of frames now and can ask for more later
 (``review_clip``): a time window, a camera, a region to enlarge. That is how an
 image-only model watches video.
 
-Frames are kept as JPEG bytes (a pick is ~50 frames x 3 cameras; raw that is
+Frames are kept as JPEG bytes (a 5 s motion is ~50 frames x 3 cameras; raw that is
 ~100 MB) for the current episode only. When ``out_dir`` is set each clip is also
 written as one MP4 per camera, for a human.
 """
@@ -112,7 +112,8 @@ def grid(clip: Clip, camera: str, *, start: float = 0.0, end: float | None = Non
     idx = [i for i, t in enumerate(clip.times) if start - 1e-6 <= t <= end + 1e-6]
     if not idx:
         raise ValueError(f"no frames between {start} and {end} s (clip is {clip.seconds:.2f} s)")
-    picks = sorted({idx[round(k * (len(idx) - 1) / max(n - 1, 1))] for k in range(min(n, len(idx)))})
+    spread = max(n - 1, 1)
+    picks = sorted({idx[round(k * (len(idx) - 1) / spread)] for k in range(min(n, len(idx)))})
     tile = 512 if len(picks) <= 2 else 384 if len(picks) <= 4 else 256
     font = ImageFont.load_default(size=16)
     tiles = []

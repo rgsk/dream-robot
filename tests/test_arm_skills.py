@@ -1,4 +1,4 @@
-"""pick/place_at on the real T5 and T7 sims, aimed by perception, through the MCP server."""
+"""The arm primitives on the real T7 sim, aimed by perception, through the MCP server."""
 
 import asyncio
 import json
@@ -37,47 +37,49 @@ def _container(things, side):
     return bins[0] if side == "left" else bins[-1]
 
 
-def test_t5_find_by_colour_pick_place_at_completes_seed_1000():
-    # Seed 1000: "put the yellow cube in the right box".
-    reset, found, things, picked, placed, status = _drive([
-        ("reset", {"seed": 1000}),
-        ("find_by_colour", {"colour": "yellow"}),
-        ("find_objects", {}),
-        ("pick", lambda out: {"grasp": out[1]["grasp"]}),
-        ("place_at", lambda out: {"point": _container(out[2], "right")["drop_point"]}),
-    ])
-    assert reset["instruction"] == "put the yellow cube in the right box"
-    assert picked["ok"] and picked["holding"]
-    assert placed["ok"]
-    assert status["success"]
+def _pick_place(grasp, drop, hang):
+    """The driver prompt's pick and place recipes, as (tool, args) calls."""
+    x, y, z = grasp["point"]
+    dx, dy, dz = drop
+    return [
+        ("move_to", {"point": [x, y, z + 0.10], "yaw_deg": grasp["yaw_deg"]}),
+        ("move_to", {"point": [x, y, z]}),
+        ("gripper", {"action": "close"}),
+        ("move_by", {"dz": 0.2}),
+        ("move_to", {"point": [dx, dy, dz + hang + 0.15]}),
+        ("move_to", {"point": [dx, dy, dz + hang + 0.02]}),
+        ("gripper", {"action": "open"}),
+        ("move_by", {"dz": 0.12}),
+    ]
 
 
-def test_t7_find_objects_pick_place_at_completes_seed_1000():
-    # Seed 1000: "put the red box in the left bin"; the red box is the only red
-    # rectangular-footprint object.
-    def red_box(out):
-        (box,) = [t for t in out[1]["things"]
-                  if t["kind"] == "object" and t["colour"] == "red" and t["footprint"] == "rectangular"
-                  and t["size"]["height"] < 0.06]
-        return {"grasp": box["grasp"]}
+def test_t7_primitives_pick_place_completes_seed_2009():
+    # Seed 2009: "put the yellow box in the right bin"; the only yellow object.
+    server, score = build_scored_server(lambda: make_env("robosuite/assorted_pick_place"))
 
-    reset, things, picked, placed, status = _drive([
-        ("reset", {"seed": 1000}),
-        ("find_objects", {}),
-        ("pick", red_box),
-        ("place_at", lambda out: {"point": _container(out[1], "left")["drop_point"]}),
-    ], task="robosuite/assorted_pick_place")
-    assert reset["instruction"] == "put the red box in the left bin"
-    assert sum(t["kind"] == "container" for t in things["things"]) == 2
-    assert picked["ok"] and picked["holding"]
-    assert placed["ok"]
-    assert status["success"]
+    async def go():
+        async with Client(server) as c:
+            reset = json.loads((await c.call_tool("reset", {"seed": 2009})).content[0].text)
+            things = json.loads((await c.call_tool("find_objects", {})).content[0].text)
+            (box,) = [t for t in things["things"] if t["kind"] == "object" and t["colour"] == "yellow"]
+            calls = _pick_place(box["grasp"], _container(things, "right")["drop_point"],
+                                box["grasp"]["above_table"])
+            out = []
+            for name, args in calls:
+                out.append(json.loads((await c.call_tool(name, args)).content[0].text))
+            return reset, out
+
+    reset, out = asyncio.run(go())
+    assert reset["instruction"] == "put the yellow box in the right bin"
+    assert out[2]["hand"]["holding"]                     # closed on the box
+    assert not out[6]["hand"]["holding"]                 # let go
+    assert score()["success"]
 
 
 def test_failures_are_reported_not_raised():
-    placed, picked, _ = _drive([
-        ("place_at", {"point": [0.0, -0.2, 0.85]}),                 # nothing held
-        ("pick", {"grasp": {"point": [0.0, 0.1, 0.83]}}),           # empty table
+    closed, blocked, _ = _drive([
+        ("gripper", {"action": "close"}),                         # on nothing
+        ("move_to", {"point": [0.05, 0.0, 0.79]}),                # into the table
     ])
-    assert placed == {**placed, "ok": False, "failure": "no_grasp", "steps": 0}
-    assert picked == {**picked, "ok": False, "failure": "no_grasp", "holding": False}
+    assert closed["ok"] and not closed["hand"]["holding"]
+    assert blocked == {**blocked, "ok": False, "failure": "blocked"}
