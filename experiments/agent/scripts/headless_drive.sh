@@ -3,6 +3,7 @@
 # only the t7 MCP server, no built-in tools, a one-line system prompt.
 #   experiments/agent/scripts/headless_drive.sh SEED [TAG]
 # Writes scratch/agent/headless/<seed>[-TAG].jsonl (raw stream) and .log (readable; tail -f it).
+# MCP_CONFIG=<file> picks another server config (default .mcp.json), e.g. a tool hidden.
 # Cost per call: python experiments/agent/scripts/token_cost.py <session transcript> --from-reset SEED
 set -euo pipefail
 seed=${1:?seed}
@@ -12,7 +13,7 @@ mkdir -p "$out"
 
 claude -p "Call reset with seed $seed. Do what the instruction says. Finish with your verdict \
 for each object, judged from the images." \
-  --strict-mcp-config --mcp-config .mcp.json \
+  --strict-mcp-config --mcp-config "${MCP_CONFIG:-.mcp.json}" \
   --tools "" \
   --allowedTools "mcp__t7-pick-place-objects" \
   --system-prompt "You drive a robot arm through the t7-pick-place-objects tools." \

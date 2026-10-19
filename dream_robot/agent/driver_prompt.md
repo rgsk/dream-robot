@@ -59,13 +59,43 @@ holding) and whether the motion went as planned -- never whether the task is don
 motion records the cameras and returns a grid of timestamped frames; the last frame is the
 end state.
 
+## Aiming by pixel: `object_at`, `point_at`
+**`object_at(pixel, camera)` -- point once at a thing, get it measured:** the same fields
+`find_objects` gives (centre, size, footprint, colour, an object's `grasp`, a container's
+`drop_point` and `opening`), plus `support_z`, the height of what it stands on. Any pixel on
+the thing works, top or side. For a bin, point at its **rim**: inside is its floor, which
+counts as the support (`found: false`). Read pixels off `point_at(camera)`'s gridded image;
+check the outline on the returned image is the thing you meant.
+**Trust the measured `grasp.point`, z included** -- it already sits below the top by the right
+amount (half the height, at most 3 cm). Going deeper than it has failed: on a 14 cm milk carton,
+pads 4 cm under the measured grasp put the carton's peaked top into the palm ("blocked").
+
+`point_at` gives raw points, for what `object_at` cannot measure:
+`point_at(camera)` returns that camera's 512 x 512 image with a labelled grid every 64 px.
+`point_at(camera, pixels=[[u, v], ...])` returns the 3D world point under each pixel (u right,
+v down, from the top-left), and the image with each pixel marked and numbered -- check every
+mark landed where you meant, and query again if not. It knows nothing about objects: it is
+whatever surface the camera sees there, so it works on anything.
+- **The point is the first surface on that pixel's ray.** The top camera looks down at an
+  angle from the front: a pixel on an object's front face gives a point on that face, not its
+  middle. For an object's top centre, pick a pixel in the middle of its *top* face.
+- **Size and direction from edges:** point at two opposite edges of the top face; their
+  distance is the size, `atan2(dy, dx)` the direction. Close the fingers across the narrow
+  side.
+- **Heights:** the table top is z = 0.80; an object's height = its top z - 0.80.
+- **A bin:** point at its rim corners -- the middle of them is the drop point (x, y), their z
+  the rim height; the inside corners give the opening.
+- What `find_objects` would give, made from points: grasp point = top-face centre, z lowered
+  to where the pads should close; `above_table` (the hang) = grasp z - 0.80; `drop_point` =
+  the bin's centre at rim height.
+
 ## Recipes (what worked, measured on this cell)
 Each recipe is one `sequence` of the steps listed.
 
 **Pick** -- 4 steps:
 1. `move_to` 10 cm above the grasp point, with the grasp's `yaw_deg`. Approach from above:
    it avoids sweeping into neighbours.
-2. `move_to` the grasp point (same x, y; z = where the pads should close).
+2. `move_to` the grasp point (same x, y; z = the measured grasp z, not deeper).
 3. `gripper close` -- a sequence stops here with "nothing_held" if it missed;
    `opening_m` vs the object's width tells you it holds the right thing.
 4. `move_by dz=0.2` (more if a tall object is between here and the target).

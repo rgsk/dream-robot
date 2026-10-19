@@ -43,17 +43,22 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import imageio.v3 as iio
+from PIL import Image as PILImage
 import numpy as np
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import BaseModel, Field
 
-from dream_robot.agent import recorder, tabletop
+from dream_robot.agent import pointing, recorder, tabletop
 from dream_robot.core.env_api import Env, StepResult
 
 # The base prompt for whoever drives the robot -- an LLM, Claude Code, a person. Sent as
 # the MCP server's instructions, so every client gets the same one. Edit the .md file.
 INSTRUCTIONS = (Path(__file__).with_name("driver_prompt.md")).read_text()
+
+# A pixel (u, v) in point_at's 512 px image: u right, v down, from the top-left corner.
+Pixel = Annotated[list[float], Field(min_length=2, max_length=2)]
+POINT_AT_HW = (512, 512)
 
 # [x, y, z] in metres, world frame.
 Point = Annotated[list[float], Field(min_length=3, max_length=3)]
@@ -162,6 +167,30 @@ class RobotSession:
         if camera == SCENE:
             return np.asarray(self.env.render())
         return np.asarray(self._obs.images[camera])
+
+    def point_at(self, camera: str, pixels: list[list[float]] | None
+                 ) -> tuple[dict[str, Any], np.ndarray]:
+        frame = self.env.rgbd(camera, POINT_AT_HW)
+        view = pointing.grid_view(frame)
+        if not pixels:
+            return {"camera": camera, "size": list(POINT_AT_HW[::-1])}, np.asarray(view)
+        found = pointing.points(frame, pixels)
+        return {"camera": camera, "points": found}, pointing.mark(view, pixels)
+
+    def object_at(self, camera: str, pixel: list[float]) -> tuple[dict[str, Any], np.ndarray]:
+        frame = self.env.rgbd(camera, POINT_AT_HW)
+        robot = self.env.robot_mask(camera, POINT_AT_HW) if hasattr(self.env, "robot_mask") else None
+        thing, support_z, seed = pointing.object_at(frame, pixel, robot)
+        base = {"camera": camera, "pixel": pixel, "point": [round(float(c), 4) for c in seed],
+                "support_z": round(support_z, 4)}
+        if thing is None:
+            view = pointing.mark(pointing.grid_view(frame), [pixel])
+            return {**base, "found": False,
+                    "note": "this pixel is on the supporting surface, not on a thing"}, view
+        d = thing.as_dict(1)
+        d.pop("id")
+        img = tabletop.overlay(frame, [thing])
+        return {**base, "found": True, **d}, pointing.mark(PILImage.fromarray(img), [pixel])
 
     def find_objects(self) -> tuple[list[dict[str, Any]], np.ndarray]:
         frame = self.env.rgbd("top")
@@ -372,6 +401,7 @@ def build_server(
 def build_scored_server(
     make_env: Callable[[], Env], *, viewer: str | None = None,
     score_log: str | None = None, clips_dir: str | None = None,
+    hide_tools: tuple[str, ...] = (),
 ) -> tuple[MCPServer, Callable[[], dict[str, Any]]]:
     """The server, and ``score()``: the referee's verdict on the current episode.
 
@@ -379,7 +409,10 @@ def build_scored_server(
     process -- it is deliberately not a tool, so no driver can call it.
 
     ``viewer`` ("sharp" or "docked", see viewer.py) opens a live window on this
-    sim and paces it to real time -- for a human watching, never for an eval."""
+    sim and paces it to real time -- for a human watching, never for an eval.
+
+    ``hide_tools``: tool names left out, e.g. ``("find_objects",)`` to drive by
+    ``point_at`` alone; the driver's prompt is told they are not there."""
     sim = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sim")
     with _quiet():
         session = sim.submit(
@@ -387,17 +420,33 @@ def build_scored_server(
                 make_env, viewer=viewer, score_log=score_log, clips_dir=clips_dir
             )
         ).result()
-    server = MCPServer("dream-robot", instructions=INSTRUCTIONS)
+    instructions = INSTRUCTIONS
+    if hide_tools:
+        instructions += ("\n\n## Not available in this cell\n"
+                         + ", ".join(f"`{t}`" for t in hide_tools)
+                         + ": ignore what this prompt says about them; aim with `object_at` and `point_at`.\n")
+    server = MCPServer("dream-robot", instructions=instructions)
+
+    class _Tools:
+        """``server.tool()``, minus the hidden names."""
+
+        @staticmethod
+        def tool():
+            def register(fn):
+                return fn if fn.__name__ in hide_tools else server.tool()(fn)
+            return register
+
+    tools = _Tools()
     on_sim = _on_sim_thread(sim)
     Camera = Literal[session.cameras]
 
-    @server.tool()
+    @tools.tool()
     @on_sim
     def reset(seed: int | None = None) -> dict[str, Any]:
         """Start a new episode. Same seed, same scene. Returns the instruction and status."""
         return session.reset(seed)
 
-    @server.tool()
+    @tools.tool()
     @on_sim
     def look(camera: Camera = SCENE) -> Image:
         """An image of the scene. "scene" is a wide view; the rest are the robot's own cameras."""
@@ -405,7 +454,7 @@ def build_scored_server(
 
     if all(hasattr(session.env, a) for a in ("rgbd", "table_xy", "robot_mask")):
 
-        @server.tool()
+        @tools.tool()
         @on_sim
         def find_objects() -> list:
             """Everything on the table, from the top camera's depth: no colour or name needed.
@@ -423,9 +472,50 @@ def build_scored_server(
             things, img = session.find_objects()
             return [{"things": things}, _png(img)]
 
+        @tools.tool()
+        @on_sim
+        def point_at(
+            camera: Literal["top", "wrist"] = "top",
+            pixels: Annotated[list[Pixel] | None, Field(
+                description="[u, v] pixels in this camera's 512 x 512 image, u right, v down "
+                "from the top-left corner; omit to get the image to read them from"
+            )] = None,
+        ) -> list:
+            """What is under a pixel, in 3D: the world point (metres) of the surface the
+            camera sees there, from its depth. Works on anything -- table, object, bin rim.
+
+            Call it without ``pixels`` to get the camera's 512 x 512 image with a labelled
+            grid every 64 px; read the pixels you want off it, then call again with them
+            (several at once). That image comes back with each queried pixel marked and
+            numbered, so you can check it hit what you meant. The top camera looks down at
+            an angle from the front; the wrist camera looks down between the fingers."""
+            result, img = session.point_at(camera, pixels)
+            return [result, _png(img)]
+
+        @tools.tool()
+        @on_sim
+        def object_at(
+            pixel: Annotated[Pixel, Field(
+                description="[u, v] on the thing, in point_at's 512 x 512 image of this camera"
+            )],
+            camera: Literal["top", "wrist"] = "top",
+        ) -> list:
+            """The thing under one pixel, measured: point at it, get what find_objects
+            gives for it -- ``kind``, ``centre`` (top centre), ``size``, ``footprint``,
+            ``top``, ``colour``, and an object's ``grasp`` or a container's ``drop_point``
+            and ``opening`` -- plus ``support_z``, the height of what it stands on.
+
+            Any pixel on the thing will do (its top, a side): it is the thing's surface
+            standing out from its support that is measured. A pixel on the support itself
+            gives ``found: false``. For a container, point at its rim, not inside it. Read
+            pixels from ``point_at(camera)``'s gridded image; the returned image outlines
+            what was measured -- check it is the thing you meant."""
+            result, img = session.object_at(camera, pixel)
+            return [result, _png(img)]
+
     if session.arm is not None:
 
-        @server.tool()
+        @tools.tool()
         @on_sim
         def move_to(
             point: Annotated[Point | None, Field(
@@ -450,7 +540,7 @@ def build_scored_server(
             result, img = session.move_to(point, yaw_deg)
             return [result, _png(img)]
 
-        @server.tool()
+        @tools.tool()
         @on_sim
         def move_by(
             dx: float = 0.0, dy: float = 0.0, dz: float = 0.0, dyaw_deg: float = 0.0,
@@ -463,7 +553,7 @@ def build_scored_server(
             result, img = session.move_by([dx, dy, dz], dyaw_deg)
             return [result, _png(img)]
 
-        @server.tool()
+        @tools.tool()
         @on_sim
         def gripper(action: Literal["open", "close"]) -> list:
             """Open or close the fingers where the hand is, and wait until they stop. After
@@ -472,7 +562,7 @@ def build_scored_server(
             result, img = session.gripper(action)
             return [result, _png(img)]
 
-        @server.tool()
+        @tools.tool()
         @on_sim
         def sequence(steps: list[Step]) -> list:
             """Several primitives in one call, run in order: each step is exactly one of
@@ -490,7 +580,7 @@ def build_scored_server(
         if session.recorder is not None:
             ClipCamera = Literal[recorder.CAMERAS]
 
-            @server.tool()
+            @tools.tool()
             @on_sim
             def review_clip(
                 clip: str | None = None,
@@ -513,7 +603,7 @@ def build_scored_server(
                 """
                 return _png(session.review_clip(clip, camera, start, end, frames, crop))
 
-    @server.tool()
+    @tools.tool()
     @on_sim
     def status() -> dict[str, Any]:
         """The instruction, steps taken, steps left before time runs out, and this episode's
@@ -616,6 +706,10 @@ def main() -> None:
         "--all-objects", action="store_true",
         help="T7: the instruction names a bin for every object, and all must land",
     )
+    parser.add_argument(
+        "--hide-tools", nargs="*", default=[],
+        help="leave these tools out, e.g. find_objects to aim with point_at alone",
+    )
     parser.add_argument("--clips-dir", help="also write each skill's camera clips as MP4s here")
     args = parser.parse_args()
 
@@ -632,7 +726,7 @@ def main() -> None:
         factory = functools.partial(factory, all_objects=True)
     server, _ = build_scored_server(
         factory, viewer=args.viewer, score_log=args.score_log,
-        clips_dir=args.clips_dir,
+        clips_dir=args.clips_dir, hide_tools=tuple(args.hide_tools),
     )
     server.run("stdio")
     # The transport has handed fd 1 back to the wire. C libraries flush their

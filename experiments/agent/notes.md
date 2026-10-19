@@ -404,3 +404,74 @@ gets cameras + the robot's own sensors; ground truth goes to a scorer outside th
   the next; the step-22 videos were stitched by file time to get around it). Fixed: the episode
   name carries the reset time, `s2031-261020-014536-1-gripper`. Check: two resets of 2031 -> two
   clip files; review_clip still reads the latest.
+- Repeat of 2030 (`2030-seq2`): 2/2, 11 calls, 123k read (first run 138k), 55 s (58). Can first this
+  time, and 4 sequences: pick then place for *both* objects (first run chained the second object's
+  transfer into one). So "one whole transfer once confident" is not a stable habit; splitting
+  costs 1 call per object. Verification at the end: 2 calls (was 3).
+
+## Step 23 · Aiming by pixel: `point_at`, T7 without find_objects (2026-10-20)
+- User: point_at is the general tool (works in a kitchen too) -- try it on T7 first, where the
+  find_objects runs are the comparison.
+- `point_at(camera)` -> 512 px image, labelled grid every 64 px (dark lines: white grid vanished on
+  the table); `point_at(camera, pixels)` -> world point per pixel from depth + the image with each
+  pixel marked. `agent/pointing.py`. Check: table pixels z 0.8006 (table 0.80); points reproject
+  to their pixel within 0.05 px; ~1 mm per pixel at the table front.
+- Server `--hide-tools NAME...` (prompt told they are absent); `experiments/agent/mcp_point_only.json`
+  hides find_objects; `MCP_CONFIG=` picks it in headless_drive.sh. Prompt: an "Aiming by pixel"
+  section (first surface on the ray, top face for the centre, size from edges, bins from corners).
+- **Result, point_at only, vs step 22 (sequence + find_objects):**
+
+  | seed | referee | calls | read | output | wall |
+  |---|---|---|---|---|---|
+  | 2030 | 2/2 | 18 (12) | 294k (138k) | 6.5k (2.0k) | 129 s (58) |
+  | 2031 | 0/2, cancelled | 44 (9) | 1.52M (98k) | 26.7k (1.7k) | 535 s (63) |
+
+  2031, from the driver's own images (`scratch/agent/point_demo/`): its first point_at got the
+  carton top right, (-0.029, -0.037, 0.931); a lower pixel hit the front face 2 cm nearer the
+  camera, as the prompt warns. First grasp at (-0.027, -0.042), 3 mm from the true centre, close
+  at z 0.862: the carton **tipped over** during the descent -> nothing_held (cause not seen in
+  frames; a finger on the way down is a guess). It then lay across the left bin's rim; a grasp
+  on it -> "blocked"; then 19 point_at, 3 review_clip, re-probing, nothing placed by 535 s.
+  Cancelled by the user. (First read of this, "front-face trap", was wrong.)
+- So: pixel aiming found the right grasp point on both seeds; 2031 failed on recovering a
+  knocked-over tall object, not on aiming. The cost is real: the driver turns points into
+  geometry by reasoning (output 3x, wall 2x on 2030); find_objects does that in code.
+
+## Step 24 · `object_at(pixel)`: driver picks the thing, code measures it (2026-10-20)
+- `pointing.object_at`: support = most common height within 25 cm of the pixel's point and not
+  above it (find_objects' table rule, made local); foreground above it nearby, xy-grid clusters as
+  find_objects; the cluster under the pixel, described by find_objects' own `_describe`. No table
+  extent, no known table height. Tool `object_at(pixel, camera)`; prompt section updated.
+- Check vs find_objects, seeds 2030-2039, 512 px: objects identical (centre <= 0.1 mm, same
+  size, kind, grasp yaw) from a top pixel and from a front-face pixel; bins from either rim:
+  drop point <= 0.1 mm, opening 0.115-0.116; a pixel inside a bin or on the table -> found: false.
+- **Runs, find_objects hidden (point_at + object_at), vs step 22 (find_objects) and step 23
+  (point_at only):**
+
+  | seed | arm | referee | calls | read | output | wall |
+  |---|---|---|---|---|---|---|
+  | 2030 | find_objects | 2/2 | 12 | 138k | 2.0k | 58 s |
+  | 2030 | point_at | 2/2 | 18 | 294k | 6.5k | 129 s |
+  | 2030 | object_at | 2/2 | 15 | 194k | 2.3k | 60 s |
+  | 2031 | find_objects | 2/2 | 9 | 98k | 1.7k | 63 s |
+  | 2031 | point_at | 0/2 cancelled | 44 | 1.52M | 26.7k | 535 s |
+  | 2031 | object_at | 2/2 | 26 | 488k | 7.3k | 171 s |
+
+- 2031 detours, all the driver's own choices, not measurement: first pointed inside both bins
+  (found: false), then at the rims; first carton grasp went to z 0.87 though object_at said 0.912
+  -> the gable top hit the palm, "blocked"; next try at yaw 65.4 -> wrist_limit (needed +180);
+  then 4 clean sequences. Its verdict named the blocked cause correctly.
+- So: object_at gives find_objects' numbers anywhere, at ~find_objects' cost when the driver
+  trusts the grasp (2030); 2031's extra cost is the driver second-guessing the grasp height.
+- Prompt: "trust the measured grasp.point, z included" (+ the carton failure as the reason); pick
+  recipe step 2 says "the measured grasp z, not deeper". Rerun (`-objat2`):
+
+  | seed | referee | calls | read | output | wall | was (step 24 object_at) |
+  |---|---|---|---|---|---|---|
+  | 2031 | 2/2 | 20 | 297k | 3.7k | 99 s | 26 calls, 488k, 171 s |
+  | 2030 | 2/2 | 12 | 141k | 2.2k | 57 s | 15 calls, 194k, 60 s |
+
+  Every grasp went to object_at's z exactly; no blocked, no wrist_limit; bins pointed at the rim
+  first time. 2030 now matches find_objects (12 calls, 138k, 58 s); 2031 still ~3x
+  find_objects' read (98k): 5 object_at + 4 look, it re-measures the carton and checks a lot.
+  One run per seed.
