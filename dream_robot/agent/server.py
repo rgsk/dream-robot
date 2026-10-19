@@ -36,6 +36,7 @@ import functools
 import json
 import os
 import sys
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -45,7 +46,7 @@ import imageio.v3 as iio
 import numpy as np
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from dream_robot.agent import recorder, tabletop
 from dream_robot.core.env_api import Env, StepResult
@@ -57,6 +58,27 @@ INSTRUCTIONS = (Path(__file__).with_name("driver_prompt.md")).read_text()
 # [x, y, z] in metres, world frame.
 Point = Annotated[list[float], Field(min_length=3, max_length=3)]
 
+
+
+
+class MoveToStep(BaseModel):
+    point: Point | None = Field(None, description="as move_to: finger pads to here; null stays put")
+    yaw_deg: float | None = Field(None, description="as move_to: finger direction; null keeps it")
+
+
+class MoveByStep(BaseModel):
+    dx: float = 0.0
+    dy: float = 0.0
+    dz: float = 0.0
+    dyaw_deg: float = 0.0
+
+
+class Step(BaseModel):
+    """One primitive: exactly one of the three fields."""
+
+    move_to: MoveToStep | None = None
+    move_by: MoveByStep | None = None
+    gripper: Literal["open", "close"] | None = None
 
 
 # The wide render view, env.render(). Not "front": that is a canonical
@@ -115,7 +137,10 @@ class RobotSession:
         self._last, self._steps, self._seed = None, 0, seed
         self._started = True
         if self.recorder is not None:
-            self.recorder.new_episode(f"s{seed}" if seed is not None else "unseeded")
+            # Stamped with the reset time: the same seed run again must not overwrite
+            # the earlier run's clip files (s2030-1-move_to once collided across runs).
+            stamp = time.strftime("%y%m%d-%H%M%S")
+            self.recorder.new_episode(f"s{seed}-{stamp}" if seed is not None else stamp)
         return self.status()
 
     def log_score(self) -> None:
@@ -188,20 +213,73 @@ class RobotSession:
         close = action == "close"
         return self._recorded("gripper", lambda: self.arm.gripper(close, self._obs, self.step))
 
-    def _recorded(self, skill: str, run) -> tuple[dict[str, Any], np.ndarray]:
+    def sequence(self, steps: list[Step]) -> tuple[dict[str, Any], np.ndarray]:
+        """Primitives in order, as one recorded clip. Stops at the first step that
+        fails (blocked, wrist_limit, timeout), closes on nothing, or runs out of time."""
+        self._check_running()
+        if not steps:
+            raise ToolError("give at least one step")
+        runs = []
+        for i, st in enumerate(steps, start=1):    # check them all before anything moves
+            given = [k for k in ("move_to", "move_by", "gripper") if getattr(st, k) is not None]
+            if len(given) != 1:
+                raise ToolError(f"step {i}: give exactly one of move_to, move_by, gripper")
+            kind = given[0]
+            if kind == "move_to":
+                p, yaw = st.move_to.point, st.move_to.yaw_deg
+                if p is None and yaw is None:
+                    raise ToolError(f"step {i}: move_to needs a point, a yaw_deg, or both")
+                p = None if p is None else np.asarray(p, dtype=float)
+                yaw = None if yaw is None else float(np.deg2rad(yaw))
+                runs.append(("move_to", lambda p=p, yaw=yaw: self.arm.move_to(
+                    p, self._obs, self.step, yaw=yaw)))
+            elif kind == "move_by":
+                m = st.move_by
+                runs.append(("move_by", lambda m=m: self.arm.move_by(
+                    np.array([m.dx, m.dy, m.dz]), self._obs, self.step,
+                    dyaw=float(np.deg2rad(m.dyaw_deg)))))
+            else:
+                runs.append((f"gripper {st.gripper}", lambda c=st.gripper == "close":
+                             self.arm.gripper(c, self._obs, self.step)))
+
+        def run() -> dict[str, Any]:
+            done, stop, total = [], None, 0
+            for i, (name, fn) in enumerate(runs, start=1):
+                d = self._result(fn())
+                total += d["steps"]
+                hand = d["hand"]
+                done.append({"step": i, "action": name, "phase": d["phase"],
+                             "point": hand["point"], "holding": hand["holding"]})
+                if not d["ok"] or d["failure"] != "none":
+                    stop = d["failure"] if d["failure"] != "none" else d["phase"]
+                elif name == "gripper close" and not hand["holding"]:
+                    stop = "nothing_held"
+                elif d["episode_over"] or self.time_up:
+                    stop = "time_up"
+                if stop:
+                    done[-1]["failure"] = stop
+                    break
+            return {"ok": stop is None, "completed": len(done) - (stop is not None),
+                    "of": len(runs), "stopped": stop or "none", "steps": total,
+                    "done": done, "hand": self.arm.hand(self._obs)}
+
+        return self._recorded("sequence", run, summarize=lambda d: d)
+
+    def _recorded(self, skill: str, run, summarize=None) -> tuple[dict[str, Any], np.ndarray]:
         """Run a skill with the cameras recording. Returns its result plus the clip's
         summary, and a grid of scene frames across the clip (the last is the end state)."""
+        summarize = summarize or self._result
         if self.recorder is None:
             result = run()
             self.log_score()
-            return self._result(result), np.asarray(self.env.render())
+            return summarize(result), np.asarray(self.env.render())
         self.recorder.start(skill)
         try:
             result = run()
         finally:
             clip = self.recorder.stop()
         self.log_score()
-        return {**self._result(result), **clip.summary()}, recorder.grid(clip, "scene")
+        return {**summarize(result), **clip.summary()}, recorder.grid(clip, "scene")
 
     def _result(self, result) -> dict[str, Any]:
         d = result.as_dict()
@@ -272,6 +350,12 @@ class RobotSession:
             # Where it started (spawn, table-centred = world xy), not where it is now.
             verdict["target_xy"] = [round(float(c), 4) for c in self.env.target.xy]
             verdict["target_kind"] = self.env.target.kind
+            if self.env.instruction.placements:     # all_objects: each goal, met or not
+                verdict["goals"] = [
+                    {"kind": self.env.objects[i].kind, "side": side,
+                     "in": self.env.bin_of(i) == self.env.bin_names.index(side)}
+                    for i, side in self.env.instruction.placements
+                ]
         return verdict
 
 
@@ -386,6 +470,21 @@ def build_scored_server(
             "close", ``hand.holding`` says whether something is between them and
             ``hand.opening_m`` how wide."""
             result, img = session.gripper(action)
+            return [result, _png(img)]
+
+        @server.tool()
+        @on_sim
+        def sequence(steps: list[Step]) -> list:
+            """Several primitives in one call, run in order: each step is exactly one of
+            ``{"move_to": {"point": [x, y, z], "yaw_deg": a}}``, ``{"move_by": {"dz": 0.2}}``
+            or ``{"gripper": "close"}``, meaning what those tools mean.
+
+            Stops at the first step that fails ("blocked", "wrist_limit"), a "close" that
+            ends holding nothing ("nothing_held"), or time running out; the rest do not run.
+            Returns each step done (phase, pad point, holding), where and why it stopped,
+            the final ``hand``, and one grid of frames across the whole sequence, recorded
+            as one clip (``review_clip`` reads it)."""
+            result, img = session.sequence(steps)
             return [result, _png(img)]
 
         if session.recorder is not None:
@@ -513,6 +612,10 @@ def main() -> None:
         help="episode clock for this server, overriding the task's (e.g. 300 for driving "
         "by hand); evals keep the task's",
     )
+    parser.add_argument(
+        "--all-objects", action="store_true",
+        help="T7: the instruction names a bin for every object, and all must land",
+    )
     parser.add_argument("--clips-dir", help="also write each skill's camera clips as MP4s here")
     args = parser.parse_args()
 
@@ -525,6 +628,8 @@ def main() -> None:
     if args.horizon_seconds is not None:
         # Only tasks whose constructor takes it; others fail loudly at startup.
         factory = functools.partial(factory, horizon_seconds=args.horizon_seconds)
+    if args.all_objects:
+        factory = functools.partial(factory, all_objects=True)
     server, _ = build_scored_server(
         factory, viewer=args.viewer, score_log=args.score_log,
         clips_dir=args.clips_dir,

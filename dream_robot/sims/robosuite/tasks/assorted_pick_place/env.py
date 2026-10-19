@@ -5,7 +5,9 @@ T5 asked "which of two identical cubes?". T7 asks the executor to cope with
 cylinder, ball, or one of robosuite's meshes: can, bottle, milk, cereal,
 bread), size, colour and yaw. The instruction names one object by how it
 looks -- "put the yellow bar in the left bin" -- and only that object resting
-in that bin counts.
+in that bin counts. With ``all_objects`` it names a bin for every object -- "put the
+milk carton in the left bin and the red ball in the right bin" -- and both must land.
+That mode always has two objects, one per bin: a 12 cm bin cannot reliably take two.
 
 **The scene is redrawn on every reset, MJCF and all.** T5 built two cubes once
 and repainted them; here the object *set* changes, so the draw happens inside
@@ -171,9 +173,15 @@ class SceneObject:
 
 @dataclass(frozen=True)
 class Instruction:
-    target: int                # index into the episode's objects
+    target: int                # index into the episode's objects (all_objects: the first)
     side: str
     prompt: str
+    # all_objects: (object index, side) for every object; empty = only target counts.
+    placements: tuple[tuple[int, str], ...] = ()
+
+    @property
+    def goals(self) -> tuple[tuple[int, str], ...]:
+        return self.placements or ((self.target, self.side),)
 
 
 class _AssortedLift(Lift):
@@ -338,13 +346,21 @@ class _Scene(_LiftWithBins, _AssortedLift):
 class AssortedPickPlace(PickPlaceTwoBins):
     """Implements ``core.env_api.Env``. T5's table with assorted, named objects."""
 
-    def __init__(self, config: TaskConfig | None = None, *, horizon_seconds: float | None = None):
+    def __init__(self, config: TaskConfig | None = None, *, horizon_seconds: float | None = None,
+                 all_objects: bool = False):
         """``horizon_seconds`` overrides the task's episode clock -- e.g. longer for a
-        person or LLM driving by hand, who explores and retries. Evals keep the task's."""
+        person or LLM driving by hand, who explores and retries. Evals keep the task's.
+        ``all_objects``: two objects, one per bin, and the instruction names both.
+        The count is still drawn per attempt (same RNG use), so a seed whose first
+        draw was two placeable objects gets the same scene in either mode; one that
+        drew three, or was redrawn, does not (2031 matches, 2030 does not)."""
+        self._all_objects = all_objects
         # Not super().__init__: T2's builds a one-cube scene. Mirrors T5's.
         self._cfg = config or TaskConfig.load()
         if horizon_seconds is not None:
             self._cfg = replace(self._cfg, horizon_seconds=float(horizon_seconds))
+        if all_objects:
+            self._cfg = replace(self._cfg, count=(2, 2))
         ch, cw = self._cfg.camera_hw
         self._backend_cams = list(self._cfg.camera_mapping)
         self._env = _Scene(
@@ -392,7 +408,8 @@ class AssortedPickPlace(PickPlaceTwoBins):
         self._t += 1
         self._max_z = np.maximum(self._max_z, self.object_positions[:, 2])
 
-        success = self.bin_of(self.instruction.target) == self.target_bin
+        success = all(self.bin_of(i) == self.bin_names.index(side)
+                      for i, side in self.instruction.goals)
         truncated = (not success) and self._t >= self._cfg.horizon_steps
         return StepResult(
             observation=self._observe(),
@@ -456,18 +473,30 @@ class AssortedPickPlace(PickPlaceTwoBins):
 
     def _draw_instruction(self) -> Instruction:
         """Target, then side. Global RNG, after the scene, as T5."""
+        if self._all_objects:
+            # One object per bin: which one goes to the first bin is drawn.
+            first = int(np.random.randint(2))
+            goals = ((0, self.bin_names[first]), (1, self.bin_names[1 - first]))
+            clauses = [self._cfg.template.format(object=self.objects[i].name, side=side)
+                       .removeprefix("put ") for i, side in goals]
+            prompt = "put " + ", ".join(clauses[:-1]) + " and " + clauses[-1]
+            return Instruction(goals[0][0], goals[0][1], prompt, goals)
         target = int(np.random.randint(len(self.objects)))
         side = self.bin_names[np.random.randint(len(self.bin_names))]
         name = self.objects[target].name
         return Instruction(target, side, self._cfg.template.format(object=name, side=side))
 
     def _diagnose(self) -> FailureMode:
-        t = self.instruction.target
+        """The first goal not met. all_objects: every object is a target, so
+        "another object lifted" is no sign of a wrong pick."""
+        goals = self.instruction.goals
+        t, side = next(((i, s) for i, s in goals if self.bin_of(i) != self.bin_names.index(s)),
+                       goals[0])
         others_lifted = any(self.lifted(i) for i in range(len(self.objects)) if i != t)
-        if others_lifted and not self.lifted(t):
+        if others_lifted and not self.lifted(t) and not self.instruction.placements:
             return FailureMode.WRONG_TARGET
         landed = self.bin_of(t)
-        if landed is not None and landed != self.target_bin:
+        if landed is not None and landed != self.bin_names.index(side):
             return FailureMode.WRONG_TARGET
         if not self.lifted(t):
             return FailureMode.NO_GRASP

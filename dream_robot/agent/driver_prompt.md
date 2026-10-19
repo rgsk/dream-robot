@@ -48,20 +48,29 @@ There are no pick/place macros: you compose every motion from three tools.
   says where it stopped.
 - `gripper("open" | "close")` -- waits until the fingers stop; then `hand.holding` and
   `hand.opening_m` tell you whether and how wide something is held.
+- `sequence(steps)` -- several of the three in one call, in order, e.g.
+  `[{"move_to": {"point": [x, y, z], "yaw_deg": a}}, {"gripper": "close"}, {"move_by": {"dz": 0.2}}]`.
+  It stops at the first step that fails ("blocked", "wrist_limit"), a close that holds
+  nothing ("nothing_held"), or time up, and says which step and why; the rest do not run.
+  One grid of frames for the whole sequence. Use it for a whole pick or place you have
+  already planned; use the single tools when you want to look before the next move.
 `status` and every motion return `hand` (pad position, closing direction, opening,
 holding) and whether the motion went as planned -- never whether the task is done. Each
 motion records the cameras and returns a grid of timestamped frames; the last frame is the
 end state.
 
 ## Recipes (what worked, measured on this cell)
-**Pick** -- 4 calls:
+Each recipe is one `sequence` of the steps listed.
+
+**Pick** -- 4 steps:
 1. `move_to` 10 cm above the grasp point, with the grasp's `yaw_deg`. Approach from above:
    it avoids sweeping into neighbours.
 2. `move_to` the grasp point (same x, y; z = where the pads should close).
-3. `gripper close` -> check `hand.holding`. `opening_m` near 0 = closed on nothing.
+3. `gripper close` -- a sequence stops here with "nothing_held" if it missed;
+   `opening_m` vs the object's width tells you it holds the right thing.
 4. `move_by dz=0.2` (more if a tall object is between here and the target).
 
-**Place in a container** -- 4 calls:
+**Place in a container** -- 4 steps:
 1. `move_to` above the container's `drop_point`, high enough that what hangs below the
    pads clears everything on the way: pad height >= tallest thing in the path + the held
    object's hang (`above_table` of its grasp) + 3 cm.

@@ -338,3 +338,69 @@ gets cameras + the robot's own sensors; ground truth goes to a scorer outside th
   read live. First version predicted the joint at 1:1 with hand yaw (it is ~0.7:1) and stopped
   at j7 -104; live re-reading reaches -156 (stop -166, 10 deg margin). Checks from -86 deg:
   +80 x3 ok, 4th -> wrist_limit at 167 deg; yaw 0 -> 1.2; yaw 180 -> -178.4; empty call rejected.
+
+## Step 20 · What an LLM-driven episode costs (2026-10-20)
+- `scripts/token_cost.py <session.jsonl> --from-reset SEED`: per robot call, the context the model
+  read, tokens added, image size, tool vs model wall time (from Claude Code's transcript usage).
+- Seed 2030, Claude driving, both objects placed (red box -> left bin, cylinder -> right): 21 calls.
+  - Context 57.2k at reset -> 82.4k at the end: the episode itself added 25k
+    (images ~11.4k = 45%, JSON ~5.4k, own text/thinking ~8k). A motion call adds ~1.3k
+    (grid 1024x512 = 699, JSON ~220, thinking ~400).
+  - Tokens read over the episode: 1.47M, of which ~1.2M is the 57k starting context resent
+    on each of the 21 calls (mostly cache reads). Output: 2.8k.
+  - Wall: 122 s = tool 35 s (sim + recording) + model 87 s (thinking between calls).
+- Decision: the number of calls drives the cost, not the pixels. Removing every image saves ~11k
+  of 1.47M read and no time; halving the calls halves both. Grouped calls (`sequence`) go first;
+  cutting pixels is a smaller second step.
+- Caveat: 1 episode, and this session's 57k start includes the conversation before it; a fresh
+  driver session starts smaller, but resending the start still dominates.
+- Fresh driver, measured: `scripts/headless_drive.sh 2031` = `claude -p` on the subscription, only the
+  t7 server, no built-in tools, one-line system prompt (`--bare` would force an API key). Seed 2031
+  (milk -> left bin, plus the blue box -> right): referee success (milk; the extra object is not
+  scored), its own verdict both in. 25 calls, 123 s (tool 29 s, model 81 s).
+  - Context 6.3k at the first call (was 57k) -> 30.8k. Read over the episode: 440k (was 1.47M);
+    growth 24.6k, images ~12.5k of it. Estimate was ~370k; the extra is 4 more calls.
+  - So with a lean driver the episode's own growth dominates; images ~half of that growth and they
+    stay in context -> cutting pixels matters now, alongside fewer calls.
+
+## Step 21 · Baseline: two objects, one per bin, fresh `claude -p` driver (2026-10-20)
+- User: the instruction should name every object; a 12 cm bin cannot reliably take two, so
+  `--all-objects` (T7 env `all_objects`, in `.mcp.json`): exactly 2 objects, one per bin, the side
+  split drawn; "put the X in the right bin and the Y in the left bin"; success = both in; referee
+  logs `goals` per object. Default one-object mode unchanged.
+  Count is still drawn per attempt: 2031's scene is unchanged, 2030's is not (first draw redrawn).
+- All driving from now on is `scripts/headless_drive.sh SEED` (prompt: reset, do the instruction,
+  verdict per object). The chat-driven 2030 run of step 20 is superseded.
+- **Baseline (current tools, unchanged):**
+
+  | seed | objects | referee | own verdict | calls | read | growth (images) | wall (tool/model) |
+  |---|---|---|---|---|---|---|---|
+  | 2030 | bread -> right, can -> left | 2/2 | 2/2 | 25 | 418k | 22.0k (10.9k) | 92 s (22/62) |
+  | 2031 | milk -> right, blue box -> left | 2/2 | 2/2 | 26 | 469k | 24.2k (12.3k) | 112 s (29/75) |
+
+  Context at first call 6.2k both. Next: cut pixels and `sequence`, each against this table.
+
+## Step 22 · `sequence`: several primitives per call (2026-10-20)
+- User: images cost because every move returns a grid; fewer calls -> fewer grids, so `sequence`
+  before cutting pixels.
+- `sequence(steps)`: each step one of move_to / move_by / gripper; runs in order as one clip, one
+  grid; stops at the first failure (blocked, wrist_limit, timeout), "nothing_held" after a close,
+  or time up. Primitives kept (tools: 9). Driver prompt: recipes are one sequence each.
+  In-process check, 2031: box pick 4/4 steps, 168 sim steps, holding; into the table -> blocked,
+  next step skipped; close on empty table -> nothing_held.
+- **Against the step-21 baseline (same seeds, same `claude -p` driver):**
+
+  | seed | referee | own verdict | calls | read | growth (images) | wall (tool/model) |
+  |---|---|---|---|---|---|---|
+  | 2030 | 2/2 | 2/2 | 12 (was 25) | 138k (418k) | 10.0k (2.6k) | 58 s (18/32), was 92 |
+  | 2031 | 2/2 | 2/2 | 9 (was 26) | 98k (469k) | 7.7k (2.4k) | 63 s (25/25), was 112 |
+
+  3 sequences per episode: object 1 as pick (5 steps) then place (3-4), with a look between;
+  object 2 as one whole transfer (7-8 steps). Rest: find_objects 2-3, look 3-5.
+- Read down 67-79%, wall down 37-44%; images fell from ~11-12k to ~2.5k with no pixel change, as
+  predicted. What is left is find_objects/look images (~200-700 each) and the model's own text.
+  Cutting pixels now has ~2.5k per episode to save: not worth it yet.
+- Clip names collided across runs of the same seed (`s2030-1-move_to` from one run overwritten by
+  the next; the step-22 videos were stitched by file time to get around it). Fixed: the episode
+  name carries the reset time, `s2031-261020-014536-1-gripper`. Check: two resets of 2031 -> two
+  clip files; review_clip still reads the latest.

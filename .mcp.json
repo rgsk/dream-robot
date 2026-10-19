@@ -16,7 +16,8 @@
         "--clips-dir",
         "scratch/agent/clips",
         "--horizon-seconds",
-        "300"
+        "300",
+        "--all-objects"
       ],
       "env": {
         "MUJOCO_GL": "egl"
