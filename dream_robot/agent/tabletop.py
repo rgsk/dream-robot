@@ -111,7 +111,14 @@ class Thing:
         else:
             # The centre of the opening, at rim height. place_at takes this point.
             d["drop_point"] = _r(self.centre)
-            d["opening"] = {"length": round(self.opening[0], 3), "width": round(self.opening[1], 3)}
+            length, width = self.opening
+            d["opening"] = {
+                "length": round(length, 3), "width": round(width, 3),
+                "diagonal": round(float(np.hypot(length, width)), 3),
+                # Direction of the long side (either side, for a square). Its diagonals
+                # lie at about +-atan(width / length) from it -- 45 deg for a square.
+                "axis_yaw_deg": round(float(np.rad2deg(self.axis_yaw)), 1),
+            }
         return d
 
 

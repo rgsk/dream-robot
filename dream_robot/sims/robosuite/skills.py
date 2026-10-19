@@ -96,6 +96,7 @@ class ArmSkills:
         self._close_yaw0 = 0.0                   # its closing direction, world yaw
         self._hold_rotation: np.ndarray | None = None
         self._hang = DEFAULT_ABOVE_TABLE         # how far the held object hangs below the pads
+        self._held_axis: float | None = None     # world yaw of the held object's long side
         self._closed = False                     # last gripper command was "close"
 
     def on_reset(self) -> None:
@@ -111,6 +112,7 @@ class ArmSkills:
                        for f in FINGERS)
         self._close_yaw0 = float(np.arctan2(*(left - right)[1::-1]))
         self._closed = False                     # every reset pose has the gripper open
+        self._home = self._ik.site_pos           # the reset pose: where home goes back to
 
     def holding(self, obs) -> bool:
         return self._closed and float(obs.state[-1]) > HOLDING_MIN_OPENING
@@ -122,8 +124,10 @@ class ArmSkills:
         # A closing direction is an axis: turn the short way, never more than 90 degrees.
         # No yaw: keep the reset wrist, as the expert always did.
         turn = 0.0 if grasp.yaw is None else (grasp.yaw - self._close_yaw0 + np.pi / 2) % np.pi - np.pi / 2
-        c, s = np.cos(turn), np.sin(turn)
-        self._hold_rotation = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]]) @ self._down
+        self._hold_rotation = _rot_z(turn) @ self._down
+        # Fingers close across the narrow side, so the long side is a quarter turn from
+        # the closing direction. Unknown when the grasp gave no yaw.
+        self._held_axis = None if grasp.yaw is None else _wrap_half_turn(grasp.yaw + np.pi / 2)
         point = np.asarray(grasp.point, dtype=float).copy()
         self._hang = DEFAULT_ABOVE_TABLE
         if grasp.above_table is not None:
@@ -138,12 +142,56 @@ class ArmSkills:
                                False, result.episode_over)
         return result
 
-    def place_at(self, point: np.ndarray, obs, step: Step) -> SkillResult:
+    def home(self, obs, step: Step) -> SkillResult:
+        """Lift straight up to the start height, then go to the start pose.
+
+        Recovery after a failed or stalled skill: straight up first, so the hand leaves
+        whatever it was pressing on the way it came, before moving sideways. Keeps the
+        gripper as it is: open stays open, holding keeps holding (with its wrist turn);
+        empty-handed, the wrist turns back to the start orientation.
+        """
+        if self._ik is None:
+            raise RuntimeError("call on_reset() after env.reset()")
+        holding = self.holding(obs)
+        gripper = 0.0 if holding else 1.0
+        if not holding:
+            self._hold_rotation = self._down
+        here = self._ik.site_pos
+        up = np.array([here[0], here[1], max(here[2], self._home[2])])
+        timeout = int(round(self._cfg.phase_timeout_seconds * self._env.control_hz))
+        steps = 0
+        for phase, target in (("up", up), ("home", self._home)):
+            for _ in range(timeout):
+                if np.linalg.norm(self._ik.site_pos - target) < self._cfg.reach_tolerance:
+                    break
+                joints = self._ik.solve(target, self._hold_rotation)
+                obs, time_up = step(np.concatenate([joints, [gripper]]).astype(np.float32))
+                steps += 1
+                if time_up:
+                    return SkillResult(False, FailureMode.TIMEOUT, phase, steps,
+                                       self.holding(obs), True)
+            else:
+                return SkillResult(False, FailureMode.TIMEOUT, phase, steps,
+                                   self.holding(obs), False)
+        return SkillResult(True, FailureMode.NONE, "home", steps, self.holding(obs), False)
+
+    def place_at(self, point: np.ndarray, obs, step: Step, yaw: float | None = None) -> SkillResult:
         """Carry above ``point``, lower until the held object's bottom is just over it,
         open, retreat. ``point`` is where the object should land: a container's
-        opening at rim height, or a spot on the table."""
+        opening at rim height, or a spot on the table.
+
+        ``yaw``: world direction for the held object's long side, turned to during the
+        carry (the short way: an axis, so never more than 90 degrees). None: as held.
+        """
         if not self.holding(obs):
             return SkillResult(False, FailureMode.NO_GRASP, "start", 0, False, False)
+        if yaw is not None:
+            if self._held_axis is None:
+                raise ValueError("the held object's orientation is unknown (its grasp had no "
+                                 "yaw): place without yaw_deg")
+            turn = _wrap_half_turn(yaw - self._held_axis)
+            self._hold_rotation = _rot_z(turn) @ self._hold_rotation
+            self._held_axis = _wrap_half_turn(self._held_axis + turn)
         release_z = float(point[2]) + self._hang + RELEASE_GAP
         # The phase machine lowers to bin_center + drop_height; aim that at release_z.
         target = np.array([point[0], point[1], release_z - self._cfg.drop_height])
@@ -177,3 +225,14 @@ class ArmSkills:
             if time_up:
                 return SkillResult(False, FailureMode.TIMEOUT, command.phase, steps,
                                    self.holding(obs), True)
+
+
+def _rot_z(a: float) -> np.ndarray:
+    """A world-frame turn about vertical; applied on the left of a hand orientation."""
+    c, s = np.cos(a), np.sin(a)
+    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+
+
+def _wrap_half_turn(a: float) -> float:
+    """An axis, not a direction: a and a + pi are the same. Into [-pi/2, pi/2)."""
+    return float((a + np.pi / 2) % np.pi - np.pi / 2)

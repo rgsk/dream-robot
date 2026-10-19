@@ -37,6 +37,7 @@ import json
 import os
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, Any, Literal
 
@@ -46,23 +47,13 @@ from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import BaseModel, Field
 
-from dream_robot.agent import tabletop
+from dream_robot.agent import recorder, tabletop
 from dream_robot.agent.perception import COLOURS, colour_mask, find, overlay
 from dream_robot.core.env_api import Env, StepResult
 
-INSTRUCTIONS = """\
-A simulated robot arm (Franka Panda) at a table. Call `reset` to start an episode;
-it returns the task instruction. `look` shows the scene from a camera.
-`find_objects` finds everything on the table -- objects, each with a grasp, and
-containers, each with a drop point -- numbered on an image. `find_by_colour` locates
-objects of one colour. `pick` takes a grasp and lifts; `place_at` puts what is held
-down at a point. Both report whether the motion went as planned, never whether the
-task is done: judge that from the images. `status` reports the instruction and the
-steps left before time runs out.
-
-Points are in metres, world frame: x, y from the table centre, z up from the floor
-(the table top is at about z = 0.8).
-"""
+# The base prompt for whoever drives the robot -- an LLM, Claude Code, a person. Sent as
+# the MCP server's instructions, so every client gets the same one. Edit the .md file.
+INSTRUCTIONS = (Path(__file__).with_name("driver_prompt.md")).read_text()
 
 # [x, y, z] in metres, world frame.
 Point = Annotated[list[float], Field(min_length=3, max_length=3)]
@@ -96,7 +87,7 @@ class RobotSession:
 
     def __init__(
         self, make_env: Callable[[], Env], *, viewer: str | None = None,
-        score_log: str | None = None,
+        score_log: str | None = None, clips_dir: str | None = None,
     ):
         if viewer:
             from dream_robot.agent.viewer import find_display
@@ -123,6 +114,10 @@ class RobotSession:
         self._seed: int | None = None
         self._score_log = score_log
         self._started = False                     # a real episode (not the warm-up) is running
+        self.recorder = (
+            recorder.Recorder(self.env.frame, self.env.control_hz, out_dir=clips_dir)
+            if hasattr(self.env, "frame") else None
+        )
 
     def reset(self, seed: int | None) -> dict[str, Any]:
         self.log_score()                           # the episode that is ending
@@ -134,6 +129,8 @@ class RobotSession:
             self.viewer.open()                     # the reset built a new model
         self._last, self._steps, self._seed = None, 0, seed
         self._started = True
+        if self.recorder is not None:
+            self.recorder.new_episode(f"s{seed}" if seed is not None else "unseeded")
         return self.status()
 
     def log_score(self) -> None:
@@ -188,6 +185,8 @@ class RobotSession:
         self._last = self.env.step(action)
         self._obs = self._last.observation
         self._steps += 1
+        if self.recorder is not None:
+            self.recorder.tick()
         if self.viewer is not None:
             self.viewer.sync()
         return self._obs, self.time_up
@@ -208,15 +207,55 @@ class RobotSession:
         self._check_running()
         yaw = None if grasp.yaw_deg is None else float(np.deg2rad(grasp.yaw_deg))
         g = Grasp(np.asarray(grasp.point, dtype=float), yaw, grasp.above_table)
-        result = self.arm.pick(g, self._obs, self.step)
-        self.log_score()
-        return result.as_dict(), np.asarray(self.env.render())
+        return self._recorded("pick", lambda: self.arm.pick(g, self._obs, self.step))
 
-    def place_at(self, point: list[float]) -> tuple[dict[str, Any], np.ndarray]:
+    def place_at(self, point: list[float], yaw_deg: float | None) -> tuple[dict[str, Any], np.ndarray]:
         self._check_running()
-        result = self.arm.place_at(np.asarray(point, dtype=float), self._obs, self.step)
+        yaw = None if yaw_deg is None else float(np.deg2rad(yaw_deg))
+        try:
+            return self._recorded("place_at", lambda: self.arm.place_at(
+                np.asarray(point, dtype=float), self._obs, self.step, yaw=yaw))
+        except ValueError as exc:
+            raise ToolError(str(exc)) from exc
+
+    def home(self) -> tuple[dict[str, Any], np.ndarray]:
+        self._check_running()
+        return self._recorded("home", lambda: self.arm.home(self._obs, self.step))
+
+    def _recorded(self, skill: str, run) -> tuple[dict[str, Any], np.ndarray]:
+        """Run a skill with the cameras recording. Returns its result plus the clip's
+        summary, and a grid of scene frames across the clip (the last is the end state)."""
+        if self.recorder is None:
+            result = run()
+            self.log_score()
+            return result.as_dict(), np.asarray(self.env.render())
+        self.recorder.start(skill)
+        try:
+            result = run()
+        finally:
+            clip = self.recorder.stop()
         self.log_score()
-        return result.as_dict(), np.asarray(self.env.render())
+        return {**result.as_dict(), **clip.summary()}, recorder.grid(clip, "scene")
+
+    def review_clip(self, clip: str | int | None, camera: str, start: float | None,
+                    end: float | None, frames: int, crop: list[float] | None) -> np.ndarray:
+        clips = list(self.recorder.clips.values()) if self.recorder else []
+        if not clips:
+            raise ToolError("no clips yet this episode: pick or place_at records one")
+        if clip is None:
+            chosen = clips[-1]                         # the latest
+        elif isinstance(clip, int) or str(clip).isdigit():
+            n = int(clip)
+            if not 1 <= n <= len(clips):
+                raise ToolError(f"clip number {n}: this episode has {len(clips)} (1-{len(clips)})")
+            chosen = clips[n - 1]
+        else:
+            matches = [c for c in clips if c.id == clip]
+            if not matches:
+                raise ToolError(f"no clip {clip!r} this episode; have {[c.id for c in clips]}")
+            chosen = matches[0]
+        return recorder.grid(chosen, camera, start=start or 0.0, end=end,
+                             n=frames, crop=None if crop is None else tuple(crop))
 
     def _check_running(self) -> None:
         if self.time_up:
@@ -235,6 +274,10 @@ class RobotSession:
             "steps": self._steps,
             "steps_left": None if horizon is None else max(0, horizon - self._steps),
             "time_up": self.time_up,
+            "clips": [
+                {"n": i, "clip": c.id, "skill": c.skill, "seconds": round(c.seconds, 2)}
+                for i, c in enumerate(self.recorder.clips.values(), start=1)
+            ] if self.recorder else [],
         }
 
     def _diagnose(self):
@@ -262,15 +305,17 @@ class RobotSession:
 
 def build_server(
     make_env: Callable[[], Env], *, debug: bool = False, viewer: str | None = None,
-    score_log: str | None = None,
+    score_log: str | None = None, clips_dir: str | None = None,
 ) -> MCPServer:
     """The MCP server. See ``build_scored_server`` for the same plus a referee."""
-    return build_scored_server(make_env, debug=debug, viewer=viewer, score_log=score_log)[0]
+    return build_scored_server(
+        make_env, debug=debug, viewer=viewer, score_log=score_log, clips_dir=clips_dir
+    )[0]
 
 
 def build_scored_server(
     make_env: Callable[[], Env], *, debug: bool = False, viewer: str | None = None,
-    score_log: str | None = None,
+    score_log: str | None = None, clips_dir: str | None = None,
 ) -> tuple[MCPServer, Callable[[], dict[str, Any]]]:
     """The server, and ``score()``: the referee's verdict on the current episode.
 
@@ -286,7 +331,9 @@ def build_scored_server(
     sim = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sim")
     with _quiet():
         session = sim.submit(
-            lambda: RobotSession(make_env, viewer=viewer, score_log=score_log)
+            lambda: RobotSession(
+                make_env, viewer=viewer, score_log=score_log, clips_dir=clips_dir
+            )
         ).result()
     server = MCPServer("dream-robot", instructions=INSTRUCTIONS)
     on_sim = _on_sim_thread(sim)
@@ -351,25 +398,75 @@ def build_scored_server(
 
             Pass an object's ``grasp`` from find_objects (or find_by_colour) as it is.
             Returns ok, or failure: "no_grasp" (closed on nothing), "timeout" (a motion
-            phase stalled). ``holding`` is read from the gripper's width. Also returns
-            the scene afterwards.
+            phase stalled). ``holding`` is read from the gripper's width. The cameras
+            record throughout: returns the ``clip`` id and a grid of 8 scene frames across
+            it, the last being the end state. ``review_clip`` shows more.
             """
             result, img = session.pick(grasp)
             return [result, _png(img)]
 
         @server.tool()
         @on_sim
-        def place_at(point: Point) -> list:
+        def place_at(
+            point: Point,
+            yaw_deg: Annotated[float | None, Field(
+                description="world direction for the held object's long side, turned to "
+                "while carrying; null keeps it as picked")] = None,
+        ) -> list:
             """Carry what the gripper holds above ``point``, lower it until its bottom is just
             over the point, release, and retreat.
 
+            ``yaw_deg`` turns the held object first, so it fits: a container's ``opening``
+            gives its side direction (``axis_yaw_deg``) and ``diagonal``. An object longer
+            than the opening's side may still fit along the diagonal (side +- 45 deg for a
+            square opening).
+
             ``point`` is where the object should land: a container's ``drop_point`` from
             find_objects, or a spot on the table. Returns ok, or failure: "dropped" (lost
-            it on the way), "no_grasp" (nothing was held), "timeout". Also returns the
-            scene afterwards.
+            it on the way), "no_grasp" (nothing was held), "timeout". The cameras record
+            throughout: returns the ``clip`` id and a grid of 8 scene frames across it, the
+            last being the end state. ``review_clip`` shows more.
             """
-            result, img = session.place_at(point)
+            result, img = session.place_at(point, yaw_deg)
             return [result, _png(img)]
+
+        @server.tool()
+        @on_sim
+        def home() -> list:
+            """Lift the arm straight up, then return to its start pose.
+
+            Use to recover: after a failed pick (the hand may still be pressed on the
+            object), or to clear the cameras' view. Keeps the gripper as it is -- if
+            holding something, it still is. Recorded like pick and place_at.
+            """
+            result, img = session.home()
+            return [result, _png(img)]
+
+        if session.recorder is not None:
+            ClipCamera = Literal[recorder.CAMERAS]
+
+            @server.tool()
+            @on_sim
+            def review_clip(
+                clip: str | None = None,
+                camera: ClipCamera = "scene",
+                start: Annotated[float | None, Field(ge=0)] = None,
+                end: Annotated[float | None, Field(ge=0)] = None,
+                frames: Annotated[int, Field(ge=1, le=12)] = 8,
+                crop: Annotated[list[float] | None, Field(min_length=4, max_length=4)] = None,
+            ) -> Image:
+                """More frames from a recorded skill (this episode's clips), to see what
+                happened when: e.g. did the arm touch the box, is the bar on the rim.
+
+                ``clip``: omit for the latest; or its number in this episode (1, 2, ...); or
+                its id. ``status`` lists this episode's clips.
+
+                ``camera``: "scene" (wide, front), "top" (overhead, angled), "wrist" (on the
+                hand). ``start``/``end``: a window in seconds within the clip (default: all
+                of it). ``frames``: how many, evenly spread, timestamped. ``crop``: [x0, y0,
+                x1, y1] as fractions of the frame (0-1) to enlarge one region.
+                """
+                return _png(session.review_clip(clip, camera, start, end, frames, crop))
 
     if debug and hasattr(session.env, "paint"):
         Colour = Literal[session.env.palette]
@@ -389,8 +486,8 @@ def build_scored_server(
     @server.tool()
     @on_sim
     def status() -> dict[str, Any]:
-        """The instruction, steps taken, and steps left before time runs out. Says nothing
-        about success: judge that from the images."""
+        """The instruction, steps taken, steps left before time runs out, and this episode's
+        recorded clips. Says nothing about success: judge that from the images."""
         return session.status()
 
     return server, lambda: sim.submit(session.score).result()
@@ -481,6 +578,7 @@ def main() -> None:
         "--score-log", help="append the referee's verdict per episode to this JSONL file "
         "(on each reset and at exit); never exposed as a tool",
     )
+    parser.add_argument("--clips-dir", help="also write each skill's camera clips as MP4s here")
     args = parser.parse_args()
 
     from dream_robot.core.registry import task_factory
@@ -490,7 +588,8 @@ def main() -> None:
     except KeyError as exc:
         parser.error(str(exc))
     server, _ = build_scored_server(
-        factory, debug=args.debug, viewer=args.viewer, score_log=args.score_log
+        factory, debug=args.debug, viewer=args.viewer, score_log=args.score_log,
+        clips_dir=args.clips_dir,
     )
     server.run("stdio")
     # The transport has handed fd 1 back to the wire. C libraries flush their

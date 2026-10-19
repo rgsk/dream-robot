@@ -77,7 +77,9 @@
         "--viewer",
         "own",
         "--score-log",
-        "scratch/agent/referee_t7.jsonl"
+        "scratch/agent/referee_t7.jsonl",
+        "--clips-dir",
+        "scratch/agent/clips"
       ],
       "env": {
         "MUJOCO_GL": "egl"

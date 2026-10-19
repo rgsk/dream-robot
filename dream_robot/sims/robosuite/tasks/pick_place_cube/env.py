@@ -285,6 +285,18 @@ class PickPlaceCube:
         )
         return np.ascontiguousarray(frame[::-1])
 
+    def frame(self, camera: str, hw: tuple[int, int] = (512, 512)) -> np.ndarray:
+        """One RGB frame, rows top-down, from "scene" (the wide render camera) or a
+        canonical camera ("top", "wrist"), at any resolution. For recording: the
+        observation's own images stay at the dataset's size."""
+        if camera == "scene":
+            backend = self._cfg.render_camera
+        else:
+            backend = {v: k for k, v in self._cfg.camera_mapping.items()}[camera]
+        h, w = hw
+        frame = self._env.sim.render(width=w, height=h, camera_name=backend)
+        return np.ascontiguousarray(frame[::-1])
+
     def rgbd(self, camera: str = "top", hw: tuple[int, int] = (256, 256)) -> RGBD:
         """A calibrated depth frame from a canonical camera, for the executor.
 

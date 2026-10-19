@@ -198,3 +198,71 @@ gets cameras + the robot's own sensors; ground truth goes to a scorer outside th
 - My one wrong verdict: a bar along the diagonal looked "inside" from the wrist camera; one
   end was propped on a wall. Images at 128 px don't show a 1-2 cm lift -> verification needs a
   better check than a glance (side view, or depth: is the object's top below the rim?).
+
+## Step 13 · Recorded clips: judge with eyes (2026-10-19)
+- Rule (user): perception tools aim the arm; judging (did it work, did anything else move,
+  why it failed) is done by looking at frames. No depth-diff oracle: if a judgement is weak,
+  get better frames.
+- `agent/recorder.py`: pick and place_at record scene/top/wrist at 512 px, 10 fps (JPEG in
+  memory for the episode; MP4s with `--clips-dir`, on in `dream-robot-t7`). Skill results add
+  the clip id and return a grid of 8 timestamped scene frames (last = end state).
+  New tool `review_clip(clip, camera, start, end, frames, crop)`: more frames, any window,
+  a region enlarged. A recorded pick takes 1.4 s.
+- First use, seed 1000 (red box target): the grid shows the cereal box tipping at 0.8-2.4 s;
+  `review_clip` top camera, cropped, shows the hand's body pressing on it at 1.2 s. The step-9
+  guess ("arm swept it") is now seen, not inferred: the straight approach to the red box passes
+  through the cereal box.
+- review_clip's `clip` is optional (default: latest) and takes a number (1, 2, ... this
+  episode) or an id; `status` lists the episode's clips. A per-episode dropdown would need the
+  tool schema rewritten after every skill (tools/list_changed), uneven across clients -- skipped.
+  Clip prefixes: `s<seed>`, `unseeded`, `warmup` (before any reset).
+
+## Step 14 · Debug drive: tall objects, clear the table, judged from clips (2026-10-19)
+- Driver's choice, not the instruction (debugging). Seeds 2010-2015, fresh; 2013 skipped (no tall object).
+
+  | seed | done | seen in clips |
+  |---|---|---|
+  | 2010 | yellow box -> L, cereal -> R | cereal untouched by the first pick; upright in bin; its pick slow (7.3 s vs ~5) |
+  | 2011 | cereal -> L (reaching past a cylinder), cylinder -> R | cereal looked tipped in the grid; review_clip top crop: upright |
+  | 2012 | milk carton -> R, bread -> L | milk upright in bin; bread next to it unmoved (re-find: 0.2 mm) |
+  | 2014 | bottle -> R (carried past a can), can -> L | hand passed the bottle in the bin, no touch |
+  | 2015 | blue cylinder 6.3 cm wide | **pick timeout**: wrist clip shows a finger landing on the cylinder's rim, pushing it into a tilt; descend stalls |
+- Tall objects (cereal x2, milk, bottle): 4/4 picked, placed upright, nothing knocked over.
+- New gaps: (1) wide objects -- 6.3 cm leaves ~0.9 cm per side in the 8 cm span; `too_wide`
+  at 7.5 cm is too generous for that margin; (2) after a failed pick the arm stays pressed on the
+  object, and there is no tool to lift away / go home -> no recovery possible.
+- Fix: `home` tool (lift straight up, then the start pose). An automatic back-off reflex inside
+  pick was discussed and deferred: in sim time freezes between calls, so `home` alone recovers;
+  on a real arm a stalled hand keeps pressing while the LLM thinks -> add the reflex then.
+- Recovery test, seed 2015 driven through MCP: cylinder pick fails (timeout, hand pressed on it)
+  -> `home` (3.2 s, arm clear; the cylinder had tipped onto its side) -> re-find: now 5.7 cm
+  across -> bread to the right bin -> retry the cylinder: picked and placed in the left bin.
+  Table cleared. The failure itself made the retry easier: lying down, it fits the gripper better.
+
+## Step 15 · place_at turns the held object to fit (2026-10-19)
+- `place_at(point, yaw_deg=None)`: turns the held object's long side to `yaw_deg` while carrying
+  (short way, <= 90 deg); pick records the long side (closing direction + 90). Containers now
+  report `opening.axis_yaw_deg` and `opening.diagonal` so the driver can choose side or diagonal.
+- The three bars that failed, placed along the bin diagonal (in-process, referee-scored):
+
+  | seed | bar (find) | slack along diagonal | result |
+  |---|---|---|---|
+  | 1006 | 11.4 x 4.1 cm | ~0.9 cm | **success** (failed before) |
+  | 2006 | 12.8 x 3.8 cm | ~0.3 cm | fail: wrist view shows it exactly on the diagonal; drops in, one end rests on a wall at the corner |
+  | 2001 | 14.8 x 2.7 cm | -0.4 cm | fail: cannot lie flat in a 12 cm square at any angle |
+
+  Slack = side - (L + W)/sqrt(2). No wrist-limit trouble (turns stay within +-90 per skill).
+- Beyond this: a bar that does not fit flat needs a different placement (tilted / one end
+  first, or standing), i.e. a new skill, not a parameter.
+- Driven through MCP (after reconnect): seed 1006, yellow bar 11.4 cm; long side ~-20 deg, bin side
+  -90 -> chose the -45 diagonal (25 deg turn); review_clip top crop: flat along the diagonal,
+  inside the walls. The same bar rested on the rims in step 9.
+
+## Step 16 · The driver's base prompt (2026-10-19)
+- `agent/driver_prompt.md`, sent as the MCP server's instructions -> every driver (LLM, Claude
+  Code, Inspector) gets it. Covers: camera-only rules, frame conventions, the gripper's limits
+  (8 cm span, ~6 cm reliable width with evidence, 2.5 cm pad floor, small balls slip), the
+  loop, editing a grasp (yaw = other side, z = thinner part), fitting into a container
+  (side / diagonal / will not fit), judging by frames + review_clip, recovering with home,
+  known limits (touching things merge, collision-blind motion).
+- Only measured facts; each number is from steps 6-15.
