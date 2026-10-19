@@ -346,11 +346,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    from dream_robot.core.registry import TASKS
+    from dream_robot.core.registry import task_factory
 
-    if args.env not in TASKS:
-        parser.error(f"unknown env {args.env!r}; have {', '.join(TASKS)}")
-    build_server(TASKS[args.env], debug=args.debug, viewer=args.viewer).run("stdio")
+    try:
+        factory = task_factory(args.env)
+    except KeyError as exc:
+        parser.error(str(exc))
+    build_server(factory, debug=args.debug, viewer=args.viewer).run("stdio")
     # The transport has handed fd 1 back to the wire. C libraries flush their
     # buffered stdout at exit (the viewer's GL warnings), so point it at stderr.
     os.dup2(2, 1)

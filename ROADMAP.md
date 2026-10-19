@@ -92,6 +92,85 @@ there is a demo video from week 4 onward that improves every rung instead of app
 Deliberately inject a failure (yank the cube mid-grasp) and let the planner recover. Those thirty
 seconds are more convincing than any success-rate table.
 
+## The agent stack — the robot as MCP tools, any driver
+
+Rung 9's spine exists (2026-10-19, `dream_robot/agent/`, log in `experiments/agent/notes.md`). The
+robot is an **MCP server**; every step is a tool. Whoever drives it — the LLM planner, Claude Code,
+or me by hand in the MCP Inspector — calls the same tools and gets the same return channel. A live
+window (`--viewer`) shows the sim as it is driven.
+
+On T5 today: `find_by_colour → pick → place → status`, 10/10, where our learned policies had colour at
+chance. Not a fair fight (scripted motion, flat-coloured cubes) — it proves the spine, not the skills.
+
+### The full picture
+
+```- 
+              me  ──or──  LLM planner
+                      │  MCP tools (same for both)
+  ┌───────────────────┼──────────────────────┬──────────────────┬─────────────────┐
+  │ perceive          │ act                  │ judge            │ imagine         │
+  │ find_by_colour    │ pick      (expert)   │ progress model:  │ world model:    │
+  │ find_corner       │ pick_act  (ACT)      │  curve, abort,   │ "what happens   │
+  │ find_sam3         │ fold_dp   (diffusion)│  measure_fold    │  if I do X?"    │
+  └───────────────────┴──────────────────────┴──────────────────┴─────────────────┘
+                      sim (or the real arm later)
+```
+
+The LLM says do this, then that; uses ACT here and diffusion there; watches the progress curve; says
+redo when it goes wrong; asks the world model what an action would do. Every box is a tool, so every
+box is swappable, testable alone, and drivable by hand.
+
+Three design rules decide whether this works or stays a demo:
+
+1. **The reflex lives in the skill, the judgement in the planner.** An LLM cannot watch a curve at
+   30 Hz. The progress model runs *inside* each skill as a watchdog: progress stalls or reverses →
+   the skill aborts early and returns `failure: stalled` **plus the curve**. The planner decides
+   afterwards — redo, switch skill, re-perceive. (MCP progress notifications stream the curve live to
+   whoever is watching.) This is the thesis's 30 Hz / 0.5 Hz split, made concrete.
+2. **"Use ACT for this, diffusion for that" needs evidence.** Each skill tool carries a skill card —
+   what it is good at, success rate, how it fails — taken from the results matrix. The matrix stops
+   being a portfolio artifact and becomes the planner's knowledge. Better implementations are added
+   **alongside** (`find_by_colour` + `find_sam3`, `pick` + `pick_act`), never replacing, so they compare
+   on the same episode.
+3. **The progress model before the world model.** Progress is the abort signal, the retry trigger, the
+   success check and later RL's reward. The world model is the most speculative box; it comes last, first
+   as a "preview this action" tool.
+
+**The honest risk.** Orchestration cannot make bad skills good. A 40% `pick_corner` makes a very smart
+40% robot that retries a lot. Detect-and-retry turns 85% into 99%; it does not turn 40% into anything.
+Reliability still lives in the skills and the progress model.
+
+### Next: a task worth the stack — napkin folding
+
+Cube → bin is solved the moment perception works. The next task must sit where robotics is actually
+hard, not where the arm motion is hard:
+
+| task | sim honest? | verdict |
+|---|---|---|
+| **napkin folding (flat start)** | yes — cloth sims are usable | **do this** |
+| washing utensils | no — water and grime are faked; dish-*rack* loading (rigid, clutter, fragile) is fine | real hardware later |
+| cooking | partly — stir/pour granular yes; cutting, heat, liquids no | real hardware later |
+
+Napkin folding is also the deployability filter's best template (flat stacks from a laundry service,
+deployed at 99%+). Its difficulty is exactly the bottleneck: **state that can't be summarised** (a
+napkin is thousands of points; "where is the corner" is perception), **grasping something thin**
+(one layer pinched off a table), **judging success** (no clean predicate — fold quality must be
+measured, and that measure is also the failure detector), **recovery** (bad grasp → re-detect → regrasp).
+Deployed folders are built the way our stack already is: perception finds corners and edges, folds
+are scripted motions, learning goes only where it is needed.
+
+Build order — each step ends in something watchable in the window:
+
+1. **Cloth spike.** Can MuJoCo's native cloth (flex, MuJoCo 3) do a napkin that lies flat, can be
+   pinched by a corner, and holds a diagonal fold? If not, Genesis in its own venv (the dataset seam
+   already allows it).
+2. **`measure_fold`** — success and progress from the top camera. The first judge; defines "done".
+3. **One reliable fold** — expert motions + perception (`find_corner`, `pick`, `fold_to`), driven by
+   me or the LLM through MCP.
+4. **Progress watchdog + abort/retry** inside the skills, with the live curve.
+5. **`fold_act` / `fold_dp` alongside**, trained on the expert's demos, with skill cards.
+6. **World model "preview" tool**, last.
+
 ## The sim spine — freeze early
 
 Built once, reused by every rung. Changing any of it later destroys cross-rung comparability, which is
@@ -172,7 +251,7 @@ a migration to plan for, a folder per sim. A new backend can be tried at any tim
 | rungs | backend | caveat |
 |---|---|---|
 | 1-7 | MuJoCo / LeRobot / ManiSkill | fast, LeRobot-adjacent, fine for rigid + granular |
-| 6, 8 (granular, cloth) | Isaac (or Genesis) | MuJoCo cloth is not the tool |
+| 6, 8 (granular, cloth) | Isaac (or Genesis) | MuJoCo cloth was not the tool — MuJoCo 3's flex cloth is retested first (agent stack, step 1) |
 
 Two places sim lies, to be stated in the walkthroughs rather than papered over:
 

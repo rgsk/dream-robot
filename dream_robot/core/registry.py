@@ -66,10 +66,25 @@ TASKS: dict[str, Callable] = {
 }
 
 
+def task_factory(name: str) -> Callable:
+    """The constructor for ``name``. ``robocasa/<Task>`` names any RoboCasa task, from
+    its own venv (envs/robocasa) -- there are hundreds, so they are not listed."""
+    if name in TASKS:
+        return TASKS[name]
+    if name.startswith("robocasa/"):
+        task = name.split("/", 1)[1]
+
+        def _robocasa(**kwargs):
+            from dream_robot.sims.robocasa.kitchen import Kitchen
+
+            return Kitchen(task, **kwargs)
+
+        return _robocasa
+    raise KeyError(f"unknown task {name!r}; registered: {sorted(TASKS)} or robocasa/<Task>")
+
+
 def make_env(name: str, **kwargs):
-    if name not in TASKS:
-        raise KeyError(f"unknown task {name!r}; registered: {sorted(TASKS)}")
-    return TASKS[name](**kwargs)
+    return task_factory(name)(**kwargs)
 
 
 # --- policies ---------------------------------------------------------------

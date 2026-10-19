@@ -115,7 +115,7 @@ class LiveViewer:
         self._handle = mujoco.viewer.launch_passive(
             model, data, show_left_ui=False, show_right_ui=False
         )
-        _look_at_table(self._handle)
+        _look_at_table(self._handle, self._env)
         if self._mode == "docked":
             from dream_robot.agent.x11_dock import dock_right_third_async
 
@@ -138,21 +138,25 @@ class LiveViewer:
             self._handle = None
 
 
-def _look_at_table(handle) -> None:
-    """Start from a view of the table, bins and arm, not MuJoCo's default."""
+def _look_at_table(handle, env) -> None:
+    """Start from a view of the task, not MuJoCo's default."""
     with handle.lock():
         # robosuite models every part twice: a visual mesh (group 1) and a coloured
         # collision shape (group 0). Its own cameras hide group 0; MuJoCo's viewer
         # shows every group, which draws a green-and-blue arm fighting the real one.
         handle.opt.geomgroup[0] = 0
-        _set_table_view(handle.cam)
+        _set_view(handle.cam, env)
 
 
-def _set_table_view(cam) -> None:
-    cam.lookat[:] = (0.0, 0.0, 0.85)
-    cam.distance = 2.3                  # table, bins and the whole arm in a 1/3 window
-    cam.azimuth = 180.0                 # from the table's far side, facing the robot
-    cam.elevation = -25.0
+def _set_view(cam, env) -> None:
+    """Aim at the task. An env that knows better says so with ``view()`` -> (lookat,
+    distance, azimuth, elevation): a kitchen's origin can be inside a wall, so the
+    kitchen aims at its robot. Otherwise: the robosuite table, which sits at the origin."""
+    lookat, distance, azimuth, elevation = (
+        env.view() if hasattr(env, "view") else ((0.0, 0.0, 0.85), 2.3, 180.0, -25.0)
+    )
+    cam.lookat[:] = lookat
+    cam.distance, cam.azimuth, cam.elevation = distance, azimuth, elevation
 
 
 class OwnViewer:
@@ -194,10 +198,13 @@ class OwnViewer:
         with self._lock:
             self._model, self._data = model, data
             self._scene = mujoco.MjvScene(model, maxgeom=10_000)
-            if self._cam is None:                  # keep the user's view across resets
+            if self._cam is None:
                 self._cam, self._opt = mujoco.MjvCamera(), mujoco.MjvOption()
                 self._opt.geomgroup[0] = 0        # hide collision shapes, as robosuite does
-                _set_table_view(self._cam)
+                _set_view(self._cam, self._env)
+            elif hasattr(self._env, "view"):       # a new kitchen: the robot moved, re-aim
+                _set_view(self._cam, self._env)
+            # else: keep the user's view across resets -- the table never moves
             self._model_changed = True
         self._update_scene()
         if self._thread is None or not self._thread.is_alive():
@@ -277,11 +284,16 @@ class OwnViewer:
             with self._lock:
                 mujoco.mjv_moveCamera(self._model, action, dx / height, dy / height,
                                       self._scene, self._cam)
+                # The scene's camera is only rebuilt on a sim step; while the robot is
+                # idle, a mouse move would never reach the screen. Refresh it now.
+                mujoco.mjv_updateCamera(self._model, self._data, self._cam, self._scene)
 
         def on_scroll(win, dx, dy):
             with self._lock:
+                # Reversed from MuJoCo's own viewer: scroll the way photo viewers zoom.
                 mujoco.mjv_moveCamera(self._model, mujoco.mjtMouse.mjMOUSE_ZOOM, 0.0,
-                                      -0.05 * dy, self._scene, self._cam)
+                                      0.05 * dy, self._scene, self._cam)
+                mujoco.mjv_updateCamera(self._model, self._data, self._cam, self._scene)
 
         def on_key(win, key, scancode, action, mods):
             if action not in (glfw.PRESS, glfw.REPEAT):
