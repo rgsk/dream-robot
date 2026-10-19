@@ -40,8 +40,12 @@ dependencies = [
     # --- rule 5: every run writes results.json and a video ---
     "imageio[ffmpeg]>=2.34",
     "ipywidgets>=8.1.9",
+<<<<<<< HEAD
     # .pyn files (rough/scratch.pyn and friends) import and run through it
     "byname",
+=======
+    "joblib>=1.6.0",
+>>>>>>> main
 ]
 
 [dependency-groups]
