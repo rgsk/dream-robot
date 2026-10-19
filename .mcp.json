@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "dream-robot": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "dream_robot.agent.server", "--env", "robosuite/instructed_pick_place"],
+      "env": { "MUJOCO_GL": "egl" }
+    }
+  }
+}
