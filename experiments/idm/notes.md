@@ -43,3 +43,38 @@ model read the arm motion off them? On T5, against SmolVLA's 22 / 11 / 10 of 60
 - Frame cache: `<root>/decoded/{top,wrist}.npy` (17 s to build, matches LeRobot exactly). First
   timing run OOM'd: workers got a full copy of the memmap each. Fixed (workers open the file);
   untested.
+
+## Step 3 · whole episode as one clip (2026-10-20)
+- Design change (user): the video model draws a clip (frames every s steps, out to horizon H);
+  the IDM walks it, reading (real frame now, next imagined frame) each time; a new clip only
+  when this one runs out. Two knobs: s (IDM spacing) and H (how long the IDM runs on its own).
+  Old runs = H = s = 10. `eval_t5.py --horizon {k,N,full}`; results.json logs clips per episode.
+- Same k=10 checkpoint (s = 10), no retraining, H = whole episode:
+| split | H = 10 (replan every 10) | H = full (one clip) |
+|---|---|---|
+| seen | 47/60 | **59/60** |
+| held-out | 46/60 | **58/60** |
+- 0 wrong cube / bin again. Failures: 1 no_grasp (seen); 1 no_grasp + 1 dropped (held-out).
+- Clips per episode: 1 in 116 of 120; 2-3 in the rest (IDM fell behind, clip ran out, redrawn).
+- The slot-0 hovering is gone (38/39, 34/35). The user's bet was right: the H=10 failures were
+  the expert *replanning* from the hover every 10 steps, each time "a little lower"; one clip
+  drawn from a clean start has the whole descent in it.
+
+## Step 4 · oracle redraws like a video model would (2026-10-20)
+- Bug in step 3's redraws (seed 1008, held-out): cube slipped during the lift, the IDM carried an
+  empty hand to the bin, and every redrawn clip showed the arm parked at the bin. The shadow
+  expert's phases only move forward and its checks are about the arm, not the cube, so it
+  believed the cube delivered.
+- Fix (`ExpertFuture._replan_if_lost`): on a redraw, if the expert is in a carrying phase but the
+  named cube is neither in the closed hand (< 4 cm) nor in its bin, the plan restarts from where
+  the cube is now. Logged as replans per episode.
+- Rerun, same 120 episodes, H = full:
+| split | step 3 | step 4 |
+|---|---|---|
+| seen | 59/60 | **59/60** |
+| held-out | 58/60 | **59/60** |
+- 1008 now succeeds (1 replan, 444 steps). Seen 1040 replanned once too (succeeded either way).
+- Only failure left: seed 1010 in both splits (same placement), cube nearer the robot. A *reader*
+  failure: the clip shows the grasp, the real arm never descends onto the cube, follows the clip
+  to the bin empty-handed; redraws (shadow still in descend, so no replan needed) show the grasp
+  again and the arm misses again. Same symptom as step 2's slot-0 hovering, now on one scene.

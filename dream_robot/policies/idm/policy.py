@@ -1,13 +1,15 @@
 """An IDM checkpoint plus a source of future frames, rolled out as a policy.
 
 Satisfies ``core.record.Policy``. The future source is anything with
-``reset()`` and ``observe(observation, imagine=bool) -> Observation | None``:
+``reset()`` and ``observe(observation, imagine=bool) -> list[Observation] | None``
+(a clip: frames k steps apart):
 ``sims.robosuite.oracle.ExpertFuture`` today, a video model later. This file
 never learns which -- the swap in ROADMAP's step 2 is a different object here.
 
-Every ``execute`` steps it asks for a new future and plans k actions toward it,
-then plays the first ``execute`` of them. ``execute = k`` (the default) plays
-each plan to the frame it was aimed at.
+It walks the clip one frame at a time: plan k actions from the *real* frame now
+to the next imagined frame, play the first ``execute`` (default all k), aim at
+the next. Reading the real frame each time absorbs small drift without asking
+for a new clip; a new one is asked for only when this one is used up.
 """
 
 from __future__ import annotations
@@ -48,6 +50,7 @@ class IDMPolicy:
 
     def reset_queue(self) -> None:
         self._queue: list[np.ndarray] = []
+        self._clip: list[Observation] = []
         #: The future frames the current plan is aimed at; core.eval films them
         #: as a third column. Kept until the next plan replaces them.
         self.aim_images: dict[str, np.ndarray] | None = None
@@ -55,6 +58,9 @@ class IDMPolicy:
     def reset(self) -> None:
         self._future.reset()
         self.reset_queue()
+        #: Clips imagined per episode, for the results file.
+        self.clips_per_episode = [*getattr(self, "clips_per_episode", []), 0]
+        self.replans_per_episode = [*getattr(self, "replans_per_episode", []), 0]
 
     def _images(self, observation: Observation) -> dict[str, torch.Tensor]:
         return {
@@ -64,8 +70,14 @@ class IDMPolicy:
         }
 
     def __call__(self, observation: Observation) -> np.ndarray:
-        future = self._future.observe(observation, imagine=not self._queue)
-        if future is not None:
+        need = not self._queue
+        clip = self._future.observe(observation, imagine=need and not self._clip)
+        if clip is not None:
+            self._clip = list(clip)
+            self.clips_per_episode[-1] += 1
+            self.replans_per_episode[-1] = getattr(self._future, "replans", 0)
+        if need:
+            future = self._clip.pop(0)
             state = torch.from_numpy(
                 np.asarray(observation.state, dtype=np.float32)
             ).unsqueeze(0).to(self._device)

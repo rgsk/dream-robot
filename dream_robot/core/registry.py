@@ -148,7 +148,7 @@ def _smolvla(env, *, checkpoint: Path | None = None, device: str | None = None):
 
 
 def _oracle_idm(env, *, checkpoint: Path | None = None, device: str | None = None,
-                execute: int | None = None):
+                execute: int | None = None, horizon: int | None | str = "k"):
     # The IDM fed the expert's future, forked from the live sim (ROADMAP "Next:
     # our own executor", step 1). Privileged: robosuite tasks with an expert only.
     import importlib
@@ -164,7 +164,11 @@ def _oracle_idm(env, *, checkpoint: Path | None = None, device: str | None = Non
     net, meta = IDMPolicy.load_net(Path(checkpoint), resolved)
     task_package = type(env).__module__.rsplit(".", 1)[0]
     expert = importlib.import_module(f"{task_package}.expert")
-    future = ExpertFuture(env, expert.ExpertPolicy(env), k=net.config.k)
+    # horizon "k": one frame per imagination (the first runs); None: the whole
+    # remaining episode as one clip.
+    k = net.config.k
+    future = ExpertFuture(env, expert.ExpertPolicy(env), spacing=k,
+                          horizon=k if horizon == "k" else horizon)
     return IDMPolicy(net, future, device=resolved, execute=execute, metadata=meta)
 
 

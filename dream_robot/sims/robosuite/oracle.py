@@ -108,47 +108,90 @@ class SimSnapshot:
 
 
 class ExpertFuture:
-    """``observe(obs, imagine=True)`` -> the observation the expert reaches ``k`` steps on.
+    """``observe(obs, imagine=True)`` -> a clip: the frames the expert reaches, every
+    ``spacing`` steps, out to ``horizon`` steps (``None``: until the task is done).
 
     Call once per real control step, with that step's observation, before the
     action is sent. ``imagine=False`` only advances the shadow expert (the IDM
-    is still executing its last chunk and needs no new future).
+    is still walking its last clip and needs no new one).
 
-    ``k`` is how far ahead the stand-in video model sees. Near the end of an
-    episode the imagination stops at the horizon and returns the last frame it
-    reached, so the future can be fewer than ``k`` steps ahead.
+    ``spacing`` is the IDM's frame gap; ``horizon`` is how long the stand-in video
+    model imagines before it is asked again. ``horizon == spacing`` is one frame
+    per imagination. The clip ends early where the imagined episode does --
+    success or the episode's time limit -- so its last gap can be shorter.
     """
 
-    def __init__(self, env, expert, *, k: int):
-        if k < 1:
-            raise ValueError(f"k must be >= 1, got {k}")
+    def __init__(self, env, expert, *, spacing: int, horizon: int | None = None):
+        if spacing < 1:
+            raise ValueError(f"spacing must be >= 1, got {spacing}")
+        if horizon is not None and horizon < spacing:
+            raise ValueError(f"horizon {horizon} is shorter than one spacing ({spacing})")
         self._env = env
         self._expert = expert                  # the task's ExpertPolicy: (obs) -> (action, command)
-        self.k = k
+        self.spacing = spacing
+        self.horizon = horizon
         self.imagined_steps: list[int] = []    # per imagination, how far it actually got
+        self.replans = 0                       # plans restarted because the cube was lost
 
     def reset(self) -> None:
         """Call after env.reset(). Latches the expert onto this episode."""
         self._expert.reset()
         self.imagined_steps = []
+        self.replans = 0
 
-    def observe(self, observation: Observation, *, imagine: bool) -> Observation | None:
-        future = self._imagine(observation) if imagine else None
+    def observe(self, observation: Observation, *, imagine: bool) -> list[Observation] | None:
+        if imagine:
+            self._replan_if_lost(observation)
+        clip = self._imagine(observation) if imagine else None
         self._expert(observation)              # the shadow follows the real step
-        return future
+        return clip
 
-    def _imagine(self, observation: Observation) -> Observation:
+    #: Phases in which the expert believes the cube is in its hand.
+    _CARRYING = ("lift", "carry", "lower", "release", "retreat", "done")
+    #: Hand-to-cube distance (m) under which a closed hand counts as holding it.
+    _HELD_DISTANCE = 0.04
+
+    def _replan_if_lost(self, observation: Observation) -> None:
+        """Start the expert's plan over if it thinks it has the cube and doesn't.
+
+        The shadow's phases only move forward, and its checks are about the arm
+        (fingers stopped, hand high, hand over the bin), not the cube. So when
+        the real cube slips out, the shadow carries on and calls it delivered,
+        and every clip drawn from there shows an empty hand at the bin. A video
+        model drawing from the current frame would see the cube on the table
+        and imagine picking it up again; this makes the oracle do the same.
+        """
+        if self._expert.phase not in self._CARRYING:
+            return
+        cube = self._env.cube_pos
+        if self._env.which_bin(cube) == self._env.target_bin:
+            return                                         # delivered: nothing to redo
+        hand = self._expert._ik.site_pos
+        closed = float(observation.state[-1]) < 0.5
+        if closed and np.linalg.norm(hand - cube) < self._HELD_DISTANCE:
+            return                                         # really holding it
+        self._expert.reset()                               # re-latches the cube where it is now
+        self.replans += 1
+
+    def _imagine(self, observation: Observation) -> list[Observation]:
         snapshot = SimSnapshot.take(self._env)
         machine = copy.deepcopy(self._expert._machine)
-        horizon = self._env.horizon_steps
-        obs, steps = observation, 0
+        limit = self._env.horizon_steps
+        horizon = self.horizon or limit
+        obs, steps, clip = observation, 0, []
         try:
-            while steps < self.k and self._env._t < horizon:
+            while steps < horizon and self._env._t < limit:
                 action, _ = self._expert(obs)
-                obs = self._env.step(action).observation
-                steps += 1
+                result = self._env.step(action)
+                obs, steps = result.observation, steps + 1
+                if steps % self.spacing == 0:
+                    clip.append(obs)
+                if result.terminated:
+                    break
         finally:
             snapshot.restore(self._env)
             self._expert._machine = machine
+        if steps % self.spacing:
+            clip.append(obs)                   # the end, between two spacings
         self.imagined_steps.append(steps)
-        return obs
+        return clip

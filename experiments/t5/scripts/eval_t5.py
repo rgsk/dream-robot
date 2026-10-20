@@ -94,12 +94,18 @@ def main() -> int:
     p.add_argument("--video-per-outcome", type=int, default=2)
     p.add_argument("--execute", type=int, default=None,
                    help="oracle_idm: actions played per plan (default k)")
+    p.add_argument("--horizon", default="k",
+                   help="oracle_idm: steps imagined per clip: k (one frame), a number, or full")
     args = p.parse_args()
 
     env = InstructedPickPlace(pairs=args.pairs, wording=args.wording)
     tap = _InstructionTap(env)
     try:
-        extra = {"execute": args.execute} if args.policy == "oracle_idm" else {}
+        extra = {}
+        if args.policy == "oracle_idm":
+            horizon = {"k": "k", "full": None}.get(args.horizon)
+            extra = {"execute": args.execute,
+                     "horizon": int(args.horizon) if args.horizon not in ("k", "full") else horizon}
         policy = POLICIES[args.policy](env, checkpoint=args.checkpoint, **extra)
         split = f"{args.pairs}/{args.wording}"
         print(f"{args.policy} on T5 [{split}], "
@@ -115,8 +121,11 @@ def main() -> int:
         env.close()
 
     summary = breakdown(tap.rows)
+    clips = getattr(policy, "clips_per_episode", None)
     write_results(result, args.out / "results.json",
-                  extra={"checkpoint": str(args.checkpoint), "split": split, "t5": summary})
+                  extra={"checkpoint": str(args.checkpoint), "split": split, "t5": summary,
+                         **({"horizon": args.horizon, "clips_per_episode": clips,
+                             "replans_per_episode": policy.replans_per_episode} if clips else {})})
     (args.out / "episodes.json").write_text(json.dumps(tap.rows, indent=1) + "\n")
 
     s = summary["success"]

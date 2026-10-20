@@ -39,14 +39,14 @@ def with_imagination(env, seed, k):
     obs = env.reset(seed=seed)
     expert = ExpertPolicy(env)
     expert.reset()
-    oracle = ExpertFuture(env, ExpertPolicy(env), k=k)
+    oracle = ExpertFuture(env, ExpertPolicy(env), spacing=k, horizon=k)
     oracle.reset()
     states, futures = [obs.state.copy()], {}
     t = 0
     while True:
         future = oracle.observe(obs, imagine=t % k == 0)
         if future is not None:
-            futures[t] = (future.images["top"].copy(), oracle.imagined_steps[-1])
+            futures[t] = (future[-1].images["top"].copy(), oracle.imagined_steps[-1])
         action, _ = expert(obs)
         r = env.step(action)
         obs, t = r.observation, t + 1
