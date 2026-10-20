@@ -43,3 +43,4 @@ gone; re-run `setup.sh` and it is back.
 | folder | simulator | Python | why separate |
 |---|---|---|---|
 | `robocasa/` | RoboCasa kitchens (robosuite master) | 3.11 | pins MuJoCo 3.3.1, numpy 2.2.5, lerobot 0.3.3 |
+| `dream_yam/` | Dream YAM Sim (Dream Labs, ships in the `dreamlabs` wheel) + the Dream-1 client | 3.12 | pins numpy 2.2.6, jax 0.7.1, MuJoCo >= 3.3.5 |
