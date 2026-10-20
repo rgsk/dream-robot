@@ -266,7 +266,7 @@ state:
   keeps driving until `stop`, the next command, or `home`.
 - `wait` returns the top camera when a gripper grasps or releases something, or after 10 s. The image
   decides when a step is done; grasp and release are only hints.
-- `look`, `watch` and `review` show the cameras now, over a stretch, or for any earlier time.
+- `look` and `review` show the cameras now, or for any earlier stretch of time.
 
 **The world runs on the wall clock, as a real robot's does.** While Dream-1 answers and while the LLM
 thinks, time passes. Dream-1 is called the way Dream's own control loop calls it: the next chunk is

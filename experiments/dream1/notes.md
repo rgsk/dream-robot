@@ -193,3 +193,41 @@ Dream-1's own embodiment so the policy works as well as it can. RoboCasa is park
 | realtime, fixed pieces (step 6) | 94 | 244 s | 14 |
 | continuous + wait, missed releases (run 2) | 63 | 183 s | 16 |
 | continuous + image-first wait (run 5) | 64 | 133 s | 18 |
+- Tool use over runs 2-5: wait 6-15 per run, policy 3-5, stop 1-2, home 0-4, look 0-2,
+  watch 0-2, review once, status never; `continue_run` never used (a leftover of the fixed-piece
+  design). Dropped it: every command is a fresh Dream-1 episode. Offline tests pass.
+- User: the top view gets hidden by an arm. wait (and look "all", reset, stop, home) now return
+  one 640x540 image: top full size, the two wrist cameras at half size under it (~460 tokens,
+  1.5x the top alone). Prompt: judge from the wrist views before moving an arm away. Offline
+  frame: the gripper hides the bowl from the top camera; the left wrist view shows the apple in it.
+- `experiments/agent/scripts/run_viewer.py`: a live web view of a headless run
+  (localhost:8765). It reads claude -p's stream log, so the LLM's text, every call with its
+  args, and every result with the images exactly as the model got them; follows the run while
+  it goes. Standard library only; works for T7 / kitchen runs too.
+- Run 6 (top + wrist views): 3/3 by the referee, **138 calls (~$0.19), 274 s wall, 23 turns**
+  (run 5: 64 calls, 133 s). Dream-1, not the setup, made the difference:
+  - apple 12 calls;
+  - orange grasped then dropped (56-57 s), retried by itself, in at 95 s (41 calls);
+  - banana slipped beside the plate (119 s), then hovered ~2 min without a grasp (85 calls). The
+    LLM waited ~1.5 min before changing course.
+  - The banana landed partly by luck: Dream-1, still driving during the LLM's last turn, grasped
+    it at 239.8 s; the home move then carried it and released over the plate. The LLM judged the
+    final image right.
+  - The same setup gave 64 vs 138 calls, so one run cannot rank prompt / view changes: 3-5 runs
+    per variant. The prompt's "~40 s of no progress" is too loose (the LLM took ~90 s).
+- Viewer scroll, tested in real Chrome with Playwright (a real run replayed live into a temp
+  folder; `experiments/agent/scripts/tests/`). Two bugs:
+  - follow turned off only on a wheel event, so scrollbar / PageUp / some trackpads got yanked
+    back. Now decided by where the scroll lands.
+  - opening a long run stopped 900 px short: Chrome's scroll anchoring moved the page as images
+    loaded above, which read as the user scrolling away. Off (`overflow-anchor: none`).
+  - All cases pass, entries arriving throughout.
+- Run 7 (same setup as 6): **3/3, 100 calls (~$0.14), 190 s wall, 21 turns**, no errors.
+  - Apple 11 calls.
+  - Orange 49: the first grasp slipped at once, retried by itself, in at 103 s.
+  - Banana 40: three grasps, two slipped.
+  - LLM slip: a 20 s `watch` (which does not wake on events) right before the banana landed,
+    ~20 s / ~15 calls late. Same setup, runs 5-7: 64 / 138 / 100 calls: Dream-1's grasp luck.
+- Dropped `watch` (user): it holds the LLM for the future with no early wake; `wait` covers the
+  future (wakes on events, with a picture), `review` the past. Tools now: reset, policy, wait,
+  stop, home, look, review, status. Offline tests pass.

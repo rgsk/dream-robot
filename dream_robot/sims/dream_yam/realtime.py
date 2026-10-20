@@ -13,9 +13,8 @@ rolls. This module runs the station that way:
   row due now picked by the time since the observation the call carried, rows already past
   skipped. Below ~0.7 s round trips the arms never stop; above, the client paces sync and the
   arms hold through each call, as on the real station.
-- **Between runs the client keeps getting every 0.2 s frame** while the episode is open, as a
-  real loop would; a continued run after a long pause is what a real one would be (the session
-  may have expired; its window shows the pause).
+- **The client gets every 0.2 s frame** from the start of a run, as a real loop would; every new
+  command starts a fresh Dream-1 episode with the last 1.8 s of frames.
 - Tools never touch the sim directly: they post work to the loop and wait on it.
 
 Frames are kept as 5 Hz JPEGs (the store) for tool grids and review; the full 20 Hz view goes
@@ -50,7 +49,6 @@ class Run:
     prompt: str
     start_step: int
     end_step: int | None             # None: runs until stopped
-    continued: bool
     plan: tuple | None = None        # (t_obs step, left rows, right rows, step it took over at)
     calls: int = 0
     rtt_s: list = field(default_factory=list)
@@ -173,7 +171,7 @@ class Realtime:
         self.target = (self.HOME.copy(), self.HOME.copy())
         self.path = deque()
         self.run = None
-        self.episode_open = False            # the Dream-1 episode can be continued
+        self.episode_open = False            # a Dream-1 episode is open: frames go to the client
         self.fed_step = 0
         self.store = []                      # (step, jpeg bytes), 5 Hz
         self.grip = GripWatch()              # grasp / release, from the gripper's own sensor
@@ -309,19 +307,15 @@ class Realtime:
             self._new_episode()
         self.on_loop(job)
 
-    def policy(self, prompt, continued=False, seconds=None):
-        """Start Dream-1 on ``prompt``; returns ``(run, already)`` at once, ``already`` when that
-        command was running anyway. It drives until ``stop``, ``home``, ``reset``, another command,
-        the watchdog, or the call cap. ``seconds``: instead, run that long and return when done.
-
-        Not ``continued``: a fresh Dream-1 episode (a running other command is stopped first).
-        ``continued``: resume the stopped run's episode -- same command, no home/reset since."""
+    def policy(self, prompt, seconds=None):
+        """Start Dream-1 on ``prompt`` as a fresh episode (a running other command is stopped
+        first); returns ``(run, already)`` at once, ``already`` when that command was running
+        anyway. It drives until ``stop``, ``home``, ``reset``, another command, the watchdog, or
+        the call cap. ``seconds``: instead, run that long and return when done."""
         s = self.station
         current = self.run
         if current is not None and current.prompt == prompt:
             return current, True
-        if continued and (current is not None or not (self.episode_open and s.prompt == prompt)):
-            raise ValueError("cannot continue: a different command, or home/reset since")
         if self.calls >= self.max_calls:
             raise ValueError(f"no Dream-1 calls left ({self.max_calls} used)")
         if current is not None:
@@ -335,14 +329,13 @@ class Realtime:
             time.sleep(STEP_S)                    # just after a reset: the cameras' 1.8 s window fills
 
         def start():
-            if not continued:
-                s.client.reset_episode()
-                s.prompt = prompt
-                s._feed(every=0)                  # the last 9 frames of the world as it is now
-                self.fed_step = s.steps
-                self.episode_open = True
+            s.client.reset_episode()
+            s.prompt = prompt
+            s._feed(every=0)                      # the last 9 frames of the world as it is now
+            self.fed_step = s.steps
+            self.episode_open = True
             end = None if seconds is None else s.steps + round(seconds / STEP_S)
-            self.run = Run(prompt, s.steps, end, continued)
+            self.run = Run(prompt, s.steps, end)
             return self.run
 
         self.touch()

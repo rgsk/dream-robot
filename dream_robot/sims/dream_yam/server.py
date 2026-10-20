@@ -1,7 +1,7 @@
 """Dream YAM Sim as an MCP server: the LLM plans in words, Dream-1 moves the arms, time runs on.
 
 The driver never moves a joint. It supervises: ``policy(command)`` starts Dream-1 on a command and
-returns at once; Dream-1 keeps driving both arms on it while the driver ``watch``es, ``look``s and
+returns at once; Dream-1 keeps driving both arms on it while the driver ``wait``s, ``look``s and
 thinks, until the driver ``stop``s it or sends the next command. The driver splits a task into
 commands Dream-1 can do ("put apple into the bowl") and decides when each is done. That is
 ROADMAP's planner/executor split with a learned executor that never waits for the planner.
@@ -57,10 +57,30 @@ def _grid(frames, n, width=960):
     return np.concatenate(rows, axis=0)
 
 
-def _camera(images, camera):
-    from dream_robot.sims.dream_yam.station import CAMERAS, tile
+def _overview(images):
+    """All three cameras in one picture: the top camera full size (640x360), and under it the left
+    and right wrist cameras at half size -- the top view decides, the wrists confirm what an arm
+    hides from it. About 460 image tokens."""
+    def labelled(rgb, text, size=None):
+        im = PILImage.fromarray(rgb)
+        if size:
+            im = im.resize(size)
+        draw = ImageDraw.Draw(im)
+        draw.rectangle((0, 0, 8 + 6 * len(text), 18), fill=(0, 0, 0))
+        draw.text((4, 4), text, fill=(255, 255, 0))
+        return np.asarray(im)
 
-    return tile(images) if camera == "all" else images[CAMERAS[camera]]
+    top = labelled(images["top"], "TOP")
+    w, h = top.shape[1] // 2, top.shape[0] // 2
+    wrists = np.concatenate([labelled(images["left"], "LEFT WRIST", (w, h)),
+                             labelled(images["right"], "RIGHT WRIST", (w, h))], axis=1)
+    return np.concatenate([top, wrists], axis=0)
+
+
+def _camera(images, camera):
+    from dream_robot.sims.dream_yam.station import CAMERAS
+
+    return _overview(images) if camera == "all" else images[CAMERAS[camera]]
 
 
 def _crop(rgb, camera):
@@ -123,41 +143,19 @@ class Session:
             d["chunks_rejected"] = run.rejected
         return d
 
-    def policy(self, command, continue_run):
+    def policy(self, command):
         self._check()
         try:
-            run, already = self.rt.policy(command, continued=continue_run)
+            run, already = self.rt.policy(command)
         except ValueError as exc:
-            raise ToolError(f"{exc}. Start it fresh (continue_run false)." if "continue" in str(exc)
-                            else str(exc)) from exc
+            raise ToolError(str(exc)) from exc
         if not already:
             self.runs.append(run)
             self.seen = len(self.rt.events)      # a new step: earlier grasps / releases are old news
-        self.log("policy", command=command, continued=continue_run, already=already)
+        self.log("policy", command=command, already=already)
         return {"running": command, "since": self.t(run.start_step), "now": self.t(),
                 **({"note": "already running this command"} if already else {}),
                 "calls_left": self.max_calls - self.rt.calls}
-
-    def watch(self, seconds):
-        """Let time run ``seconds`` (Dream-1 driving or not); frames from that window."""
-        self._check()
-        a, calls0 = self.rt.steps, self.rt.calls
-        deadline = time.monotonic() + seconds
-        run = self.rt.run
-        while time.monotonic() < deadline:
-            time.sleep(STEP_S)
-            self.rt.touch()                      # watching is attending: the watchdog stays quiet
-            if run is not None and run.done.is_set():
-                break                            # it stopped by itself: say so now
-        b = self.rt.steps
-        now = self.rt.run
-        result = {"from": self.t(a), "to": self.t(b), "calls": self.rt.calls - calls0,
-                  "calls_left": self.max_calls - self.rt.calls,
-                  "dream_1": f"running: {now.prompt}" if now is not None else "stopped"}
-        if run is not None and run.done.is_set():
-            result["it_stopped"] = self._run_summary(run)
-        self.log("watch", seconds=seconds)
-        return result, _grid(self.rt.frames(a, b), 6)
 
     def holding(self):
         g = self.rt.grip
@@ -199,7 +197,7 @@ class Session:
         if why == "stopped":
             result["it_stopped"] = self._run_summary(run)
         self.log("wait", woke_on=why, events=result["events"])
-        return result, _camera(self.rt.images(), "top")
+        return result, _camera(self.rt.images(), "all")
 
     def stop(self):
         self._check()
@@ -284,19 +282,16 @@ def build_server(task, max_calls=200, score_log=None, clips_dir=None, viewer=Fal
     def policy(
         command: Annotated[str, Field(description="what the arms should do, in plain words, "
                                       "one short step, e.g. 'put apple into the bowl'")],
-        continue_run: Annotated[bool, Field(description="true: resume the stopped run of this "
-                                            "same command, Dream-1 keeping its memory of it; "
-                                            "false: a fresh start")] = False,
     ) -> dict[str, Any]:
         """Start Dream-1, a learned robot policy, on ``command``. Returns at once: Dream-1 keeps
-        driving both arms on it -- while you watch, look and think -- until you ``stop`` it, send
+        driving both arms on it -- while you wait, look and think -- until you ``stop`` it, send
         another command (which replaces it), ``home`` or ``reset``. It sees the three cameras and
         the joints, nothing else, and it does not know when the step is done: stop it.
 
-        Sending the command that is already running changes nothing. A new command starts Dream-1
-        fresh (it forgets the last one); ``continue_run`` resumes a stopped run of the same command.
-        If no tool is called for 60 s while it runs, it stops by itself."""
-        return session.policy(command, continue_run)
+        Sending the command that is already running changes nothing. Any other command starts
+        Dream-1 fresh: it forgets the last one. If no tool is called for 60 s while it runs, it
+        stops by itself."""
+        return session.policy(command)
 
     @server.tool()
     @one_at_a_time
@@ -304,7 +299,8 @@ def build_server(task, max_calls=200, score_log=None, clips_dir=None, viewer=Fal
         max_seconds: Annotated[float, Field(ge=2, le=20, description="look again after this long "
                                            "at the latest")] = 10,
     ) -> list:
-        """Wait a little, then see the table: returns the **top camera** now, as soon as a gripper
+        """Wait a little, then see the table: returns **all three cameras** now (top large, the two
+        wrists under it), as soon as a gripper
         takes hold of something ("grasp") or stops holding it ("release": let go, or it slipped
         out), or Dream-1 stops by itself, or ``max_seconds`` pass ("time"). Grasp and release
         come from the grippers' own sensors -- hints, not proof: a light grip can go unnoticed.
@@ -312,18 +308,6 @@ def build_server(task, max_calls=200, score_log=None, clips_dir=None, viewer=Fal
         Dream-1 keeps driving meanwhile."""
         result, frame = session.wait(max_seconds)
         return [result, _png(frame)]
-
-    @server.tool()
-    @one_at_a_time
-    def watch(
-        seconds: Annotated[float, Field(ge=1, le=30, description="how long to watch")] = 10,
-    ) -> list:
-        """Let ``seconds`` pass and see all of them: 6 frames from that window (stamped with episode
-        time, all three cameras each), the last one now. For seeing how something goes; to wait for
-        something to happen, ``wait`` is cheaper. Dream-1 keeps driving if it is running; the watch
-        ends early if it stops by itself. Nothing here says whether the step worked: look."""
-        result, grid = session.watch(seconds)
-        return [result, _png(grid)]
 
     @server.tool()
     @one_at_a_time
@@ -336,9 +320,9 @@ def build_server(task, max_calls=200, score_log=None, clips_dir=None, viewer=Fal
     @server.tool()
     @one_at_a_time
     def look(camera: Camera = "all") -> Image:
-        """The robot's cameras right now (Dream-1 may be moving the arms meanwhile). "all": left
-        wrist | top | right wrist, side by side (left and right as the robot sees them); or one of
-        them, larger."""
+        """The robot's cameras right now (Dream-1 may be moving the arms meanwhile). "all": the top
+        camera large with the left and right wrist cameras under it (left and right as the robot
+        sees them); or one of them alone (a wrist camera then at full size)."""
         return _png(session.look(camera))
 
     @server.tool()
