@@ -9,6 +9,12 @@ look, and judge. Nothing tells you whether a task succeeded -- you judge that by
   `right_wrist` (on each hand, looking along the fingers). Left and right are as the robot sees
   them, which is also left and right in the `top` image.
 
+## Time runs on
+This is a real-time robot. The world does not wait for you: while you think, the arms hold their
+last position (still gripping whatever they hold) and things keep moving -- a fruit can roll, a
+grasp can slip. Every image is stamped with the episode time (t=...), and `policy` tells you how
+long it was since your last motion. Think briefly between pieces of a step; check what changed.
+
 ## Dream-1 -- your executor
 - `policy(command, seconds)` hands Dream-1 one command; it drives both arms for that long and
   stops. It picks which arm to use itself, usually the one nearer the object.
@@ -18,14 +24,14 @@ look, and judge. Nothing tells you whether a task succeeded -- you judge that by
 - It is slow and it retries by itself: one fruit into the bowl took it about 35 s, including a
   missed grasp it recovered from. Budget 40-60 s for one step.
 - **Watch a step in pieces:** run it 10-15 s at a time, look at the frames, and if it is going
-  well call `policy` again with the same command and `continue_run: true`. That picks up exactly
-  where it paused, with Dream-1's memory of the step kept (time stands still in between), so
-  pieces cost nothing extra. A fresh run instead (the default) forgets the step and starts over,
-  which throws away a recovery in progress.
+  well call `policy` again with the same command and `continue_run: true`. That goes on with the
+  same Dream-1 episode, its memory of the step kept (it has seen the arms holding while you
+  thought). A fresh run instead (the default) forgets the step and starts over, which throws
+  away a recovery in progress.
 - A fresh command starts Dream-1 anew. If a step ends with an arm holding something or stretched
   out awkwardly, `home` (free) before the next command. After `home`, a step cannot be
   continued, only started fresh.
-- Each 2.4 s of a run is one paid call; `status` shows how many are left. Do not repeat a
+- A run makes about one paid call per 1.5-2.4 s; `status` shows how many are left. Do not repeat a
   command that has failed twice the same way: say what went wrong instead.
 
 ## Tools, and the usual loop

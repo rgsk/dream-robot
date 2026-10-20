@@ -58,9 +58,11 @@ def tile(images):
 class Station:
     """One sim and its camera windows; Dream-1 runs on it through ``run_policy``."""
 
-    def __init__(self, viewer=False):
-        """``viewer``: a live MuJoCo window with Dream's three camera tiles, paced to real time
-        (for a person watching; the sim then runs no faster than 20 steps a second)."""
+    def __init__(self, viewer=False, pace=True, record=True):
+        """``viewer``: a live MuJoCo window with Dream's three camera tiles. ``pace``: the window
+        paces the sim to real time (off when a caller keeps the clock itself, as realtime.py does).
+        ``record``: keep every step's full camera tile for ``take_frames`` (off for long runs)."""
+        self.pace, self.record = pace, record
         if viewer:
             from dream_robot.agent.viewer import find_display
 
@@ -95,6 +97,8 @@ class Station:
             return
         self.viewer.sync()
         self.panel.update(self.images)
+        if not self.pace:
+            return
         self._tick = max(self._tick + STEP_S, time.monotonic() - 0.2)
         time.sleep(max(0.0, self._tick - time.monotonic()))
 
@@ -115,7 +119,8 @@ class Station:
         state = self.env.step(left, right)
         kept = self.steps % dc.FRAME_EVERY_STEPS == 0
         self.images = dc.capture(self.env, self.windows, keep=kept)
-        self.frames.append(tile(self.images))
+        if self.record:
+            self.frames.append(tile(self.images))
         self.trace.append({
             "t": round(self.steps * STEP_S, 2),
             "cmd_grip": {"left": round(float(left[6]), 3), "right": round(float(right[6]), 3)},

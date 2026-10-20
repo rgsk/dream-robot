@@ -81,3 +81,31 @@ Dream-1's own embodiment so the policy works as well as it can. RoboCasa is park
   the end with a top look after home.
 - Fixed: the referee row's sim_s was overwritten by the run's (now `run_sim_s`).
 - Video of the whole run: scratch/dream1/llm_run_3of3.mp4 (16 clips joined).
+
+## Step 6 · Real time: the world does not stop (2026-10-20)
+- User: the sim paused during Dream-1 calls and while the LLM thought; a real robot cannot.
+- `sims/dream_yam/realtime.py`: one loop thread owns the sim at 20 steps/s of wall clock.
+  Between commands the arms hold their last target (grip included) and physics runs. Dream-1
+  is called as the docs' own loop does: get_action on its own thread, `client.refill_due`
+  pacing (async while round trips < 0.7 s: the next chunk is asked for during the current
+  one; sync above it: the arms hold through each call), the row due now by time since the
+  observation, past rows skipped. Frames go to the client every 0.2 s while the episode is
+  open, pauses included. Tools post work to the loop; images are stamped with episode time.
+- Server on it: `policy` reports time since the driver's last motion, the time the arms held
+  waiting for Dream-1, round trip, pacing mode. Prompt: "time runs on"; default piece 15 s.
+- Offline (fake 0.7 s client with the real Pacer): async, 9 calls per 12 s (vs 5 paused),
+  held 0.8 s per run (the first chunk), a 4 s think gap shows up, loop lag 0. A prefetched
+  call can land after a run ends: paid, unused. Cap raised to 200 calls.
+- Paused mode stays in station.py for trial.py (deterministic, replayable).
+- **claude -p, real time: 3/3, verdict agreed.** 94 calls (~$0.13), 220 s episode, 244 s wall,
+  14 turns, tokens read 183k cached (paused run: 86 calls, 223.6 s sim, 388 s wall, 20 turns,
+  344k).
+  - Think gaps (arms holding, world running) 3.8-6.2 s per turn; nothing slipped or rolled in
+    them.
+  - Round trips 0.67-0.85 s, right at the 0.7 s sync threshold: the apple step ran mostly sync
+    (arms held 4-8 s per 15-20 s piece) and took 4 pieces with two missed grasps; orange and
+    banana mostly async (held 0.8-2.4 s), one fresh command plus one continue each. The banana
+    went on the plate at once this time.
+  - Bug: the first policy opened the Dream client on the loop thread and stalled the sim 14 s.
+    Fixed (opened on the tool thread); offline re-check lag 0.
+- Video: scratch/dream1/clips/261020-115124-rt.mp4 (whole episode, real time).

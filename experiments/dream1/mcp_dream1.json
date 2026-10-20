@@ -8,7 +8,7 @@
         "--task",
         "Put the apple and the orange into the bowl, and the banana on the plate.",
         "--max-calls",
-        "100",
+        "200",
         "--score-log",
         "scratch/dream1/referee.jsonl",
         "--clips-dir",
