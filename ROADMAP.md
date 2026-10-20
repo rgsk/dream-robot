@@ -171,6 +171,23 @@ Build order — each step ends in something watchable in the window:
 5. **`fold_act` / `fold_dp` alongside**, trained on the expert's demos, with skill cards.
 6. **World model "preview" tool**, last.
 
+## Next: our own executor — imagine the future, read the actions off it
+
+Decided 2026-10-20, after the Dream-1 runs: every Dream-1 failure was a grasp, so the hands are the
+bottleneck and the thing to build. The design splits the executor in two: a **video model** imagines
+the next frames for the instruction, and an **inverse dynamics model (IDM)** reads the arm motion that
+gets from now to that future. Each step below swaps one fake part for a real one, on T5.
+
+1. **Oracle IDM.** A scripted expert, run in a paused copy of the sim, shows the future frames; a
+   small model reads (now, future) → arm motion. *Can the arm follow a perfect picture of the future?*
+2. **Video model.** Swap in a model that draws that future from the camera frames plus the
+   instruction: world-model-final's flow-matching model, conditioned on words instead of arrow keys.
+   *Can a model draw that picture itself?*
+3. **Latent actions.** world-model-final's guesser labels action-free video with codes, so the
+   video model can learn from cheap video. *Can cheap video make that model better?*
+4. **Action-conditioned world model.** world-model-final's playable model predicts the result of the
+   planned actions before the arm moves. *Can we check a plan before running it?*
+
 ## The sim spine — freeze early
 
 Built once, reused by every rung. Changing any of it later destroys cross-rung comparability, which is

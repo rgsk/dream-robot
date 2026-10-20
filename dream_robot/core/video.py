@@ -31,31 +31,15 @@ def upscale_nearest(frame: np.ndarray, factor: int) -> np.ndarray:
     return np.repeat(np.repeat(frame, factor, axis=0), factor, axis=1)
 
 
-def observation_panel(
-    wide: np.ndarray,
-    images: Mapping[str, np.ndarray],
-    *,
-    order: Sequence[str] = ("top", "wrist"),
+def _camera_column(
+    images: Mapping[str, np.ndarray], order: Sequence[str], height: int
 ) -> np.ndarray:
-    """A wide view on the left, the policy's own cameras stacked on the right.
-
-    The split is the point: everything on the left is for a human, everything on
-    the right is the complete input a policy receives. Reading them side by side
-    is how you notice that a camera has the gripper out of frame during the part
-    of the episode that matters.
-
-    Camera panels are scaled to share the wide view's height, so the right-hand
-    column is honest about relative resolution rather than padded to look equal.
-    """
-    wide = np.asarray(wide)
-    if wide.dtype != np.uint8 or wide.ndim != 3 or wide.shape[2] != 3:
-        raise ValueError(f"wide frame must be uint8 (H, W, 3), got {wide.dtype} {wide.shape}")
-
+    """Cameras stacked top to bottom, integer-scaled to fill ``height``."""
     present = [name for name in order if name in images]
     if not present:
         raise ValueError(f"none of {list(order)} in images {sorted(images)}")
 
-    target_h = wide.shape[0] // len(present)
+    target_h = height // len(present)
     column = []
     for name in present:
         img = np.asarray(images[name])
@@ -69,9 +53,39 @@ def observation_panel(
         column.append(upscale_nearest(img, target_h // img.shape[0]))
 
     stacked = np.concatenate(column, axis=0)
-    if stacked.shape[0] != wide.shape[0]:  # odd heights leave a row or two over
-        stacked = stacked[: wide.shape[0]]
-    return np.concatenate([wide, stacked], axis=1)
+    return stacked[:height]  # odd heights leave a row or two over
+
+
+def observation_panel(
+    wide: np.ndarray,
+    images: Mapping[str, np.ndarray],
+    *,
+    order: Sequence[str] = ("top", "wrist"),
+    aim: Mapping[str, np.ndarray] | None = None,
+) -> np.ndarray:
+    """A wide view on the left, the policy's own cameras stacked on the right.
+
+    The split is the point: everything on the left is for a human, everything on
+    the right is the complete input a policy receives. Reading them side by side
+    is how you notice that a camera has the gripper out of frame during the part
+    of the episode that matters.
+
+    ``aim``, when given, is a third column: the frames the policy is steering
+    toward (an IDM's imagined future), in the same camera order, behind a thin
+    white rule. Comparing the middle and right columns shows whether a miss was
+    the reader's or the imagined target's.
+
+    Camera panels are scaled to share the wide view's height, so the right-hand
+    column is honest about relative resolution rather than padded to look equal.
+    """
+    wide = np.asarray(wide)
+    if wide.dtype != np.uint8 or wide.ndim != 3 or wide.shape[2] != 3:
+        raise ValueError(f"wide frame must be uint8 (H, W, 3), got {wide.dtype} {wide.shape}")
+    h = wide.shape[0]
+    parts = [wide, _camera_column(images, order, h)]
+    if aim:
+        parts += [np.full((h, 4, 3), 255, np.uint8), _camera_column(aim, order, h)]
+    return np.concatenate(parts, axis=1)
 
 
 def write_video(frames: Sequence[np.ndarray], path: Path, *, fps: float) -> Path:

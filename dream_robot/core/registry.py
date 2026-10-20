@@ -147,12 +147,34 @@ def _smolvla(env, *, checkpoint: Path | None = None, device: str | None = None):
     return SmolVLAPolicy.load(env, checkpoint=Path(checkpoint), device=device)
 
 
+def _oracle_idm(env, *, checkpoint: Path | None = None, device: str | None = None,
+                execute: int | None = None):
+    # The IDM fed the expert's future, forked from the live sim (ROADMAP "Next:
+    # our own executor", step 1). Privileged: robosuite tasks with an expert only.
+    import importlib
+
+    import torch
+
+    from dream_robot.policies.idm.policy import IDMPolicy
+    from dream_robot.sims.robosuite.oracle import ExpertFuture
+
+    if checkpoint is None:
+        raise ValueError("policy 'oracle_idm' needs --checkpoint")
+    resolved = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    net, meta = IDMPolicy.load_net(Path(checkpoint), resolved)
+    task_package = type(env).__module__.rsplit(".", 1)[0]
+    expert = importlib.import_module(f"{task_package}.expert")
+    future = ExpertFuture(env, expert.ExpertPolicy(env), k=net.config.k)
+    return IDMPolicy(net, future, device=resolved, execute=execute, metadata=meta)
+
+
 POLICIES: dict[str, Callable] = {
     "expert": _expert,
     "bc": _bc,
     "act": _act,
     "flow_matching": _flow_matching,
     "smolvla": _smolvla,
+    "oracle_idm": _oracle_idm,
 }
 
 

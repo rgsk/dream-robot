@@ -37,6 +37,10 @@ Rung 1 (reach + grasp a rigid cube) is closed in sim for both BC and ACT: record
 | ✅ | `policies/smolvla/` — SmolVLA (450M) fine-tuned with our own training loop; VLM frozen, action expert trains |
 | ✅ | `envs/dream_yam/` + `sims/dream_yam/` — Dream-1 (Dream Labs' API policy) on its own YAM arms, Claude supervising through MCP: [below](#llm-plans-dream-1-executes) |
 
+**Next:** our own executor, a video model that imagines the future plus an IDM that reads the
+actions off it, in four steps starting with an oracle IDM on T5:
+[ROADMAP.md](ROADMAP.md#next-our-own-executor--imagine-the-future-read-the-actions-off-it).
+
 `uv run pytest -m "not slow"` runs the core suite without a simulator.
 
 ### Recording a dataset

@@ -5,6 +5,7 @@
         --pairs seen --wording template --episodes 60 --out experiments/t5/eval_20k/seen
 
     # the one-hot baseline: --policy flow_matching --checkpoint <dir>/checkpoint.pt
+    # the oracle IDM: --policy oracle_idm --checkpoint <dir>/checkpoint.pt [--execute N]
 
 ``core.run`` reports the closed FailureMode histogram, where both halves of T5's
 failure are one bucket, WRONG_TARGET. This script drives the same
@@ -83,7 +84,7 @@ def breakdown(rows: list[dict]) -> dict:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--policy", choices=("smolvla", "flow_matching"), default="smolvla")
+    p.add_argument("--policy", choices=("smolvla", "flow_matching", "oracle_idm"), default="smolvla")
     p.add_argument("--checkpoint", type=Path, required=True)
     p.add_argument("--pairs", choices=("seen", "held_out"), default="seen")
     p.add_argument("--wording", choices=("template", "paraphrase"), default="template")
@@ -91,12 +92,15 @@ def main() -> int:
     p.add_argument("--seed-start", type=int, default=EVAL_SEED_START)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--video-per-outcome", type=int, default=2)
+    p.add_argument("--execute", type=int, default=None,
+                   help="oracle_idm: actions played per plan (default k)")
     args = p.parse_args()
 
     env = InstructedPickPlace(pairs=args.pairs, wording=args.wording)
     tap = _InstructionTap(env)
     try:
-        policy = POLICIES[args.policy](env, checkpoint=args.checkpoint)
+        extra = {"execute": args.execute} if args.policy == "oracle_idm" else {}
+        policy = POLICIES[args.policy](env, checkpoint=args.checkpoint, **extra)
         split = f"{args.pairs}/{args.wording}"
         print(f"{args.policy} on T5 [{split}], "
               f"{args.episodes} episodes from seed {args.seed_start}\n")
