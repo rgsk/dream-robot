@@ -83,3 +83,74 @@ Next: converter T5 (LeRobot) -> their HDF5 + T5 embeddings, local; then stage A 
   idea of this robot's motion yet -- expected before fine-tuning (and its proprio input was a
   placeholder). Nothing learned about colour following from this.
 - Spend: $0.56 so far in total (balance $13.88). Pod terminated.
+
+## Step 6 · stage B config (2026-10-21)
+- `scripts/t5_config.py`: experiment `cosmos_policy_t5_from_libero` = their LIBERO config with our
+  data, chunk 32, demos only, start = LIBERO policy `.pt`. pod_setup.sh copies it into their
+  experiment package (their loader imports every module there; no edits to their files).
+- How dims flow: training reads action / proprio width from the HDF5 arrays (8-D passes as is);
+  stats (min/max -> [-1, 1]) are computed on first load into `<data>/dataset_statistics.json`
+  (eval needs it). Only inference has a fixed width: `cosmos_utils.ACTION_DIM`, chosen by
+  sniffing argv for "libero"/"robocasa"/"aloha" -> 7. Eval must set it to 8.
+- Traps found in their code:
+  - their DCP checkpointer **silently ignores a `.pt` load_path** and logs "Training from
+    scratch". `PtInitCheckpointer` loads the `.pt` the way their inference loader does and asserts
+    no network weights are missing. Smoke run must show "loaded N tensors, missing 0".
+  - policy_fsdp shards over 8 GPUs by default -> `fsdp_shard_size=1`.
+  - action L1 only went to wandb -> small callback prints `[t5] iter N action_l1 ...` every 10.
+- T5 data: 150 eps, 33,385 steps (203-255 per episode), gripper action 0/1, joints within
+  [-2.7, 3.4].
+- Batch 16 for now (LIBERO: 30/GPU, but with optimizer states sharded 8 ways; one GPU holds
+  ~32 GB of weights + grads + Adam). Smoke run sizes it from peak memory. Schedule: warm-up 200,
+  decay to 0.3x by 3000; checkpoint every 500 (~25 GB each with optimizer: pod disk >= 150 GB).
+- Untested until the pod: config composition (child override of the callbacks list).
+Next: eval loop (T5 env + get_action, ACTION_DIM 8, seeds 1000+, seen / held-out).
+
+## Step 7 · eval loop (2026-10-21)
+- Two envs can't share a process (theirs Python 3.10 + cu128 torch, ours 3.14 + robosuite), so:
+  - `scripts/serve.py` (their env): loads the fine-tuned DCP checkpoint through their
+    `get_model` / `get_action` (inference config `cosmos_policy_t5_from_libero__inference`,
+    sigma 80 -> 4 as theirs), sets `ACTION_DIM = 8`, JPEG q95, no flip, 5 denoising steps,
+    actions only (future frames not decoded). Localhost socket; messages are plain
+    str/bytes/lists (numpy 2 pickles don't load under numpy 1).
+  - `dream_robot/policies/cosmos_policy` (ours): registry entry `cosmos_policy`, sends top +
+    wrist uint8, state, prompt; plays the first `execute` of each 32-action chunk (default 16).
+  - `eval_t5.py`: `--policy cosmos_policy --checkpoint localhost:6000 --camera-size 224`; same
+    seeds 1000+, seen / held-out, wrong_cube / wrong_bin; results.json also records the server's
+    checkpoint and mean seconds per call.
+- All 40 prompts the env can say (8 pairs x every wording, seen + held-out) are
+  in the embeddings pickle: none missing.
+- Checked: imports, `--help`, syntax. Not run: anything touching a model.
+- Local plumbing check (free): stub server with the same protocol, answering "hold still,
+  gripper open"; 1 episode, seed 1000. Request arrived as sent (prompt, 224x224 top + wrist,
+  8-D state); 38 calls in 600 steps (one per 16); NO_GRASP as expected; results.json carries
+  server / execute / seconds per call; video written. One fix: at `--camera-size 224` the video
+  render is scaled to 2x the camera height (the panel stacks top over wrist beside it).
+- Imagined frames kept in the eval (decided in another chat): stage A's 0.6 s/call already
+  included decoding the future frames (parallel path, cosmos_utils.py:740), so they are nearly
+  free. serve.py now calls with parallel=True and returns the imagined top + wrist (`chunk` steps
+  ahead) with each chunk; the client puts them in `aim_images`, the eval video's third column.
+  Question it answers per failure: wrong cube imagined, or right cube imagined and missed?
+
+## Step 8 · stage B pod + smoke (2026-10-21)
+- Community A100 80 GB listed but 4 creates failed ("no instances"); secure A100 SXM 80 GB,
+  US-KS-2, $1.79/h, 200 GB disk, CUDA 13.2 host. The image route publishes no 22/tcp: add it
+  with `runpodctl pod update <id> --ports 22/tcp`. A create that hung had succeeded (pod list).
+- Sync: exclude `*.safetensors` / `checkpoints` (SmolVLA checkpoints, 1.7 GB, crawled at ~2 MB/s);
+  data 626 MB took 6.6 min. Token must be on the pod before any gated download.
+- Smoke, 20 iters, batch 16 (`scripts/stage_b_train.sh`):
+  - LIBERO policy loaded: 687 tensors, **missing 0**, 28 unused.
+  - action L1 (normalised) 0.52 at iter 10 -> 0.37 at iter 20; loss 1.53 -> 1.01.
+  - 3.23 s/iter (5 samples/s); first iters slower (tokenizer compile, ~40 s once).
+  - peak GPU memory reserved 70.7 GB at batch 16: no room for their 30.
+  - checkpoint 19 GB (DCP, with optimizer), at /root/out/cosmos_policy/cosmos_policy_t5/<name>/.
+  - stats written to t5_224/dataset_statistics.json (needed by serve.py).
+- Our env on the pod: plain `uv sync` into /root/venv-dream-robot, 1.5 min (no network volume, so
+  scripts/runpod_setup.sh doesn't apply; pod_setup.sh already put in EGL + ffmpeg). 224 px reset OK.
+- Trap 2: their inference loader reads a local checkpoint as ONE torch file, with strict=False.
+  `scripts/to_pt.py` converts DCP -> .pt and checks against the LIBERO .pt: smoke iter 20 has all
+  574 network tensors, 0 shape mismatches, 504 changed. (The 28 `attn_op._extra_state` are
+  TransformerEngine bookkeeping: the 28 "unused" at load.) Conversion ~3 min on CPU.
+- `scripts/stage_b_eval.sh`: convert -> serve.py -> eval_t5 seen + held_out -> server killed.
+- Run b1 (2000 iters, decay to 0.3x by 2000, save every 500) started 00:52 IST; action L1 0.52
+  (10) -> 0.23 (30) -> 0.11 (140).

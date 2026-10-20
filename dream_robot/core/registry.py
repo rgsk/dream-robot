@@ -172,6 +172,15 @@ def _oracle_idm(env, *, checkpoint: Path | None = None, device: str | None = Non
     return IDMPolicy(net, future, device=resolved, execute=execute, metadata=meta)
 
 
+def _cosmos_policy(env, *, checkpoint: Path | str | None = None, device: str | None = None,
+                   execute: int | None = None):
+    # The model runs in its own env as an action server (experiments/cosmos_policy/
+    # scripts/serve.py), which loaded the checkpoint; ``checkpoint`` here is its address.
+    from dream_robot.policies.cosmos_policy.policy import CosmosPolicy
+
+    return CosmosPolicy(env, address=str(checkpoint or "localhost:6000"), execute=execute)
+
+
 POLICIES: dict[str, Callable] = {
     "expert": _expert,
     "bc": _bc,
@@ -179,6 +188,7 @@ POLICIES: dict[str, Callable] = {
     "flow_matching": _flow_matching,
     "smolvla": _smolvla,
     "oracle_idm": _oracle_idm,
+    "cosmos_policy": _cosmos_policy,
 }
 
 

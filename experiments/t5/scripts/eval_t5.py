@@ -6,6 +6,8 @@
 
     # the one-hot baseline: --policy flow_matching --checkpoint <dir>/checkpoint.pt
     # the oracle IDM: --policy oracle_idm --checkpoint <dir>/checkpoint.pt [--execute N]
+    # Cosmos Policy: start serve.py (experiments/cosmos_policy/scripts), then
+    #   --policy cosmos_policy --checkpoint localhost:6000 --camera-size 224 [--execute 16]
 
 ``core.run`` reports the closed FailureMode histogram, where both halves of T5's
 failure are one bucket, WRONG_TARGET. This script drives the same
@@ -28,12 +30,15 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter, defaultdict
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from dream_robot.core.eval import EVAL_SEED_START, evaluate, write_results
 from dream_robot.core.registry import POLICIES
-from dream_robot.sims.robosuite.tasks.instructed_pick_place.env import InstructedPickPlace
+from dream_robot.sims.robosuite.tasks.instructed_pick_place.env import (
+    InstructedPickPlace,
+    TaskConfig,
+)
 
 
 class _InstructionTap:
@@ -84,8 +89,9 @@ def breakdown(rows: list[dict]) -> dict:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--policy", choices=("smolvla", "flow_matching", "oracle_idm"), default="smolvla")
-    p.add_argument("--checkpoint", type=Path, required=True)
+    p.add_argument("--policy", choices=("smolvla", "flow_matching", "oracle_idm", "cosmos_policy"), default="smolvla")
+    p.add_argument("--checkpoint", type=Path, required=True,
+                   help="cosmos_policy: the action server's host:port")
     p.add_argument("--pairs", choices=("seen", "held_out"), default="seen")
     p.add_argument("--wording", choices=("template", "paraphrase"), default="template")
     p.add_argument("--episodes", type=int, default=60)
@@ -93,12 +99,21 @@ def main() -> int:
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--video-per-outcome", type=int, default=2)
     p.add_argument("--execute", type=int, default=None,
-                   help="oracle_idm: actions played per plan (default k)")
+                   help="oracle_idm / cosmos_policy: actions played per plan "
+                        "(default k / half the chunk)")
+    p.add_argument("--camera-size", type=int, default=None,
+                   help="square camera size; must match the training frames (cosmos_policy: 224)")
     p.add_argument("--horizon", default="k",
                    help="oracle_idm: steps imagined per clip: k (one frame), a number, or full")
     args = p.parse_args()
 
-    env = InstructedPickPlace(pairs=args.pairs, wording=args.wording)
+    config = TaskConfig.load()
+    if args.camera_size:
+        # the video panel stacks top over wrist beside the wide render: render 2x camera height
+        (rh, rw), scale = config.render_hw, 2 * args.camera_size / config.render_hw[0]
+        config = replace(config, camera_hw=(args.camera_size, args.camera_size),
+                         render_hw=(round(rh * scale), round(rw * scale)))
+    env = InstructedPickPlace(config, pairs=args.pairs, wording=args.wording)
     tap = _InstructionTap(env)
     try:
         extra = {}
@@ -106,6 +121,8 @@ def main() -> int:
             horizon = {"k": "k", "full": None}.get(args.horizon)
             extra = {"execute": args.execute,
                      "horizon": int(args.horizon) if args.horizon not in ("k", "full") else horizon}
+        elif args.policy == "cosmos_policy":
+            extra = {"execute": args.execute}
         policy = POLICIES[args.policy](env, checkpoint=args.checkpoint, **extra)
         split = f"{args.pairs}/{args.wording}"
         print(f"{args.policy} on T5 [{split}], "
@@ -125,7 +142,10 @@ def main() -> int:
     write_results(result, args.out / "results.json",
                   extra={"checkpoint": str(args.checkpoint), "split": split, "t5": summary,
                          **({"horizon": args.horizon, "clips_per_episode": clips,
-                             "replans_per_episode": policy.replans_per_episode} if clips else {})})
+                             "replans_per_episode": policy.replans_per_episode} if clips else {}),
+                         **({"server": policy.server, "execute": policy.execute,
+                             "mean_call_seconds": sum(policy.call_seconds) / len(policy.call_seconds)}
+                            if args.policy == "cosmos_policy" and policy.call_seconds else {})})
     (args.out / "episodes.json").write_text(json.dumps(tap.rows, indent=1) + "\n")
 
     s = summary["success"]

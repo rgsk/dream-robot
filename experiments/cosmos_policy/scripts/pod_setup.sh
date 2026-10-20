@@ -19,6 +19,8 @@ export PATH="$HOME/.local/bin:$PATH"
 cd /root
 [ -d cosmos-policy ] || git clone -q --depth 1 https://github.com/NVlabs/cosmos-policy
 cd cosmos-policy
+# Our T5 experiment registers itself from their experiment-config package (t5_config.py).
+cp "$(dirname "$(readlink -f "$0")")/t5_config.py" cosmos_policy/config/experiment/
 echo "== uv sync $(date +%T)"
 uv sync --extra cu128 --group libero --python 3.10 2>&1 | tail -3
 # LIBERO asks where to keep its datasets on first import; answer once with the default.
