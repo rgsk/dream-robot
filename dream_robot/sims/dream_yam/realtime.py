@@ -37,17 +37,19 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from dream_robot.sims.dream_yam.grip import GripWatch
+
 STEP_S = 0.05
 STORE_W = 960            # width of a stored tile (all three cameras side by side)
 
 
 @dataclass
 class Run:
-    """One policy run: a command, until a step; what came back while it ran."""
+    """One policy run: a command, until a step (or until stopped); what came back while it ran."""
 
     prompt: str
     start_step: int
-    end_step: int
+    end_step: int | None             # None: runs until stopped
     continued: bool
     plan: tuple | None = None        # (t_obs step, left rows, right rows, step it took over at)
     calls: int = 0
@@ -58,6 +60,8 @@ class Run:
     restarts: int = 0
     held_steps: int = 0              # steps with no row due: the arms held
     error: str | None = None
+    stopped_by: str | None = None    # "stop", "home", "reset", "switch", "watchdog", "time", "calls"
+    stop_step: int | None = None
     done: threading.Event = field(default_factory=threading.Event)
 
 
@@ -103,14 +107,18 @@ class Planner:
 class Realtime:
     """The station on the wall clock. Construct from any thread; the sim lives on its own."""
 
-    def __init__(self, viewer=False, max_calls=200, clips_dir=None):
+    def __init__(self, viewer=False, max_calls=200, clips_dir=None, watchdog_s=60.0):
+        """``watchdog_s``: a run nobody has touched (``touch``) for this long stops itself, so a
+        driver that stalls cannot keep Dream-1 -- and the bill -- going."""
         self.lock = threading.RLock()
+        self.watchdog_s, self.last_touch = watchdog_s, time.monotonic()
         self.max_calls, self.calls = max_calls, 0
         self.clips_dir = clips_dir
         self.jobs = queue.Queue()            # (fn, Future): run on the loop thread at a step's start
         self.stop_flag = False
         self.ready = Future()
         self.lag_s = 0.0                     # how far the loop has fallen behind the wall, worst
+        self.errors = []                     # errors the loop survived
         self.thread = threading.Thread(target=self._main, args=(viewer,), daemon=True, name="sim-loop")
         self.thread.start()
         self.ready.result()
@@ -141,7 +149,11 @@ class Realtime:
             if self.stop_flag:
                 break
             with self.lock:
-                self._step()
+                try:
+                    self._step()
+                except Exception as exc:
+                    # Never let one bad step kill the world: end the run (arms hold), keep going.
+                    self._error(exc)
             due += STEP_S
             late = time.monotonic() - due
             if late > 0.5:                  # fell far behind (a slow render): drop the debt
@@ -164,6 +176,8 @@ class Realtime:
         self.episode_open = False            # the Dream-1 episode can be continued
         self.fed_step = 0
         self.store = []                      # (step, jpeg bytes), 5 Hz
+        self.grip = GripWatch()              # grasp / release, from the gripper's own sensor
+        self.events = []                     # (step, arm, "grasp" | "release", opening)
         self.video = None
         if self.clips_dir:
             import imageio.v2 as imageio
@@ -181,6 +195,9 @@ class Realtime:
             self._run_step(self.run)
         left, right = self.target
         kept = s.play(left, right)
+        row = s.trace[-1]
+        for arm, kind, opening in self.grip.update(row["cmd_grip"], row["opening"]):
+            self.events.append((s.steps, arm, kind, opening))
         if kept:
             self.store.append((s.steps, _jpeg(s.images)))
             if self.episode_open and s.client is not None:
@@ -197,7 +214,12 @@ class Realtime:
             if kind == "ok":
                 from dream_control import validate_chunk
 
-                left, right = validate_chunk(s.env, payload, 48, verbose=False)
+                try:
+                    left, right = validate_chunk(s.env, payload, 48, verbose=False)
+                except ValueError as exc:            # a malformed chunk: skip it, keep the last plan
+                    run.rejected = getattr(run, "rejected", 0) + 1
+                    self._save_rejected(payload, exc)
+                    return
                 run.plan = (t_obs, left, right, s.steps - t_obs)
                 run.calls += 1
                 run.rtt_s.append(round(rtt, 2))
@@ -223,17 +245,62 @@ class Realtime:
                 run.held_steps += 1
         else:
             run.held_steps += 1
-        if s.steps >= run.end_step or run.error:
-            self.run = None
-            run.done.set()
+        if run.end_step is not None and s.steps >= run.end_step:
+            run.stopped_by = "time"
+        elif self.watchdog_s and time.monotonic() - self.last_touch > self.watchdog_s:
+            run.stopped_by = "watchdog"
+        elif self.calls >= self.max_calls and remaining == 0 and not self.planner.busy():
+            run.stopped_by = "calls"
+        if run.stopped_by or run.error:
+            self._end(run, run.stopped_by or "error")
             return
         if (not self.planner.busy() and s.steps >= run.retry_at and self.calls < self.max_calls
                 and s.client.refill_due(executed, remaining)):
             self.planner.request(run, self.fed_step)
 
+    def _error(self, exc):
+        import traceback
+
+        text = "".join(traceback.format_exception(exc))
+        print(f"realtime loop error at step {self.station.steps}:\n{text}", file=sys.stderr)
+        self.errors.append({"step": self.station.steps, "error": f"{type(exc).__name__}: {exc}"})
+        if self.clips_dir:
+            with open(Path(self.clips_dir) / "loop-errors.log", "a") as f:
+                f.write(f"{getattr(self, 'episode', '?')} step {self.station.steps}\n{text}\n")
+        if self.run is not None:
+            self.run.error = f"{type(exc).__name__}: {exc}"
+            self._end(self.run, "error")
+
+    @property
+    def alive(self):
+        return self.thread.is_alive()
+
+    def _end(self, run, why):
+        """On the loop thread: the run is over; the arms hold the last target."""
+        if run is None or run.done.is_set():
+            return
+        run.stopped_by = run.stopped_by or why
+        run.stop_step = self.station.steps
+        if self.run is run:
+            self.run = None
+        run.done.set()
+
     # -- what the tools ask for (called from tool threads) ----------------------------------------
 
+    def _save_rejected(self, payload, exc):
+        print(f"realtime: chunk rejected at step {self.station.steps}: {exc}", file=sys.stderr)
+        self.errors.append({"step": self.station.steps, "error": f"chunk rejected: {exc}"})
+        if self.clips_dir:
+            path = Path(self.clips_dir) / f"{getattr(self, 'episode', 'x')}-rejected-{self.station.steps}.json"
+            path.write_text(json.dumps({"error": str(exc), "reply": payload},
+                                       default=lambda v: np.asarray(v).tolist()))
+
+    def touch(self):
+        """A tool was called: the driver is alive (the watchdog's clock restarts)."""
+        self.last_touch = time.monotonic()
+
     def reset(self):
+        self.on_loop(lambda: self._end(self.run, "reset"))
         self.planner.wait()
         self.save_traces()
         def job():
@@ -242,13 +309,23 @@ class Realtime:
             self._new_episode()
         self.on_loop(job)
 
-    def policy(self, prompt, seconds, continued):
-        """Dream-1 on ``prompt`` for ``seconds`` of wall clock; returns when they are up."""
+    def policy(self, prompt, continued=False, seconds=None):
+        """Start Dream-1 on ``prompt``; returns ``(run, already)`` at once, ``already`` when that
+        command was running anyway. It drives until ``stop``, ``home``, ``reset``, another command,
+        the watchdog, or the call cap. ``seconds``: instead, run that long and return when done.
+
+        Not ``continued``: a fresh Dream-1 episode (a running other command is stopped first).
+        ``continued``: resume the stopped run's episode -- same command, no home/reset since."""
         s = self.station
-        if continued and not (self.episode_open and s.prompt == prompt):
+        current = self.run
+        if current is not None and current.prompt == prompt:
+            return current, True
+        if continued and (current is not None or not (self.episode_open and s.prompt == prompt)):
             raise ValueError("cannot continue: a different command, or home/reset since")
         if self.calls >= self.max_calls:
             raise ValueError(f"no Dream-1 calls left ({self.max_calls} used)")
+        if current is not None:
+            self.on_loop(lambda: self._end(current, "switch"))
         self.planner.wait()                       # reset_episode refuses to run beside a call
         if s.client is None:
             s._open()                             # network, ~14 s the first time: not on the loop
@@ -264,18 +341,27 @@ class Realtime:
                 s._feed(every=0)                  # the last 9 frames of the world as it is now
                 self.fed_step = s.steps
                 self.episode_open = True
-            self.run = Run(prompt, s.steps, s.steps + round(seconds / STEP_S), continued)
+            end = None if seconds is None else s.steps + round(seconds / STEP_S)
+            self.run = Run(prompt, s.steps, end, continued)
             return self.run
 
+        self.touch()
         run = self.on_loop(start)
-        run.done.wait(timeout=seconds + 120)
+        if seconds is not None:
+            run.done.wait(timeout=seconds + 120)
+        return run, False
+
+    def stop(self):
+        """Stop Dream-1; the arms hold where they are. Returns the run stopped, or None."""
+        run = self.run
+        self.on_loop(lambda: self._end(run, "stop"))
         return run
 
     def home(self, seconds=2.0):
         from yam_env import home_path
 
         def start():
-            self.run = None
+            self._end(self.run, "home")
             self.episode_open = False
             path = home_path(self.station.env.state(), seconds=seconds)
             self.path.extend(path)
@@ -305,11 +391,15 @@ class Realtime:
         return self.station.steps
 
     def save_traces(self):
+        """trace / chunks / grip events of this episode, rewritten whole: called after every tool,
+        so a server killed mid-run (as claude -p's end does) still leaves them."""
         if self.clips_dir and getattr(self, "episode", None):
             with self.lock:
-                base = Path(self.clips_dir) / f"{self.episode}-rt"
-                Path(f"{base}-trace.json").write_text(json.dumps(self.station.trace))
-                Path(f"{base}-chunks.json").write_text(json.dumps(self.station.chunks))
+                trace, chunks, events = list(self.station.trace), list(self.station.chunks), list(self.events)
+            base = Path(self.clips_dir) / f"{self.episode}-rt"
+            Path(f"{base}-trace.json").write_text(json.dumps(trace))
+            Path(f"{base}-chunks.json").write_text(json.dumps(chunks))
+            Path(f"{base}-events.json").write_text(json.dumps(events))
 
     def close(self):
         self.planner.wait()

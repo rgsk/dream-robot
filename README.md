@@ -35,6 +35,7 @@ Rung 1 (reach + grasp a rigid cube) is closed in sim for both BC and ACT: record
 | ✅ | `watch/watch_file.sh` — live view of runs and results, marks each log in progress / finished |
 | ✅ | `sims/robosuite/tasks/instructed_pick_place/` — T5: two cubes, two bins, a sentence picks one of each |
 | ✅ | `policies/smolvla/` — SmolVLA (450M) fine-tuned with our own training loop; VLM frozen, action expert trains |
+| ✅ | `envs/dream_yam/` + `sims/dream_yam/` — Dream-1 (Dream Labs' API policy) on its own YAM arms, Claude supervising through MCP: [below](#llm-plans-dream-1-executes) |
 
 `uv run pytest -m "not slow"` runs the core suite without a simulator.
 
@@ -243,6 +244,48 @@ Zero-shot, the base model moves but never approaches a cube: it was pretrained o
 LeRobot's config parser breaks on Python 3.14, so the training loop is written out in
 `policies/smolvla/train.py`; 20k steps took 97 min on a rented 4090 (~$1.20). Full log in
 [experiments/t5/notes.md](experiments/t5/notes.md).
+
+## LLM plans, Dream-1 executes
+
+The ROADMAP split with a learned executor bought, not trained: **Claude plans, [Dream-1](https://dreamlabs.ai/research/dream-1/)
+moves the arms.** The sim is Dream Labs' own *Dream YAM Sim* (it ships in the `dreamlabs` wheel): two YAM
+arms, a top camera and a wrist camera on each arm, which is Dream-1's training robot. So Dream-1 answers
+with joint targets directly, with no IK and no tool-centre-point guess between them.
+
+```- 
+envs/dream_yam/setup.sh                       # Python 3.12 venv, dreamlabs pinned; key: DREAM_LABS_API_KEY in .env
+MCP_CONFIG=experiments/dream1/mcp_dream1.json SERVER=dream-yam \
+    experiments/agent/scripts/headless_drive.sh 0 dream1       # a fresh claude -p drives one episode
+npx @modelcontextprotocol/inspector@0.22.0 --config .mcp.json --server dream-yam   # or drive it yourself
+```
+
+The driver never moves a joint. It gets camera images and the gripper's own sensor, never the sim's
+state:
+
+- `policy(command)` starts Dream-1 on a short command ("put apple into the bowl") and returns. Dream-1
+  keeps driving until `stop`, the next command, or `home`.
+- `wait` returns the top camera when a gripper grasps or releases something, or after 10 s. The image
+  decides when a step is done; grasp and release are only hints.
+- `look`, `watch` and `review` show the cameras now, over a stretch, or for any earlier time.
+
+**The world runs on the wall clock, as a real robot's does.** While Dream-1 answers and while the LLM
+thinks, time passes. Dream-1 is called the way Dream's own control loop calls it: the next chunk is
+requested while the current one plays. Paid calls are capped per server, and a watchdog stops Dream-1
+if the driver goes quiet. A referee scores from sim positions into a log that no tool can read.
+
+Task: "put the apple and the orange into the bowl, and the banana on the plate" (3 steps).
+Dream-1-beta costs $0.0014 per call.
+
+| how the LLM drove it | result | Dream-1 calls | wall time |
+|---|---|---|---|
+| sim paused during every call and every LLM turn | 3/3 | 86 | 388 s |
+| real time, Dream-1 run in fixed pieces | 3/3 | 94 | 244 s |
+| real time, Dream-1 continuous, LLM waits on grasp / release + image | **3/3** | **64 (~$0.09)** | **133 s** |
+
+In every run the LLM's verdict per object matched the referee. Not done yet: the safety layer Dream's
+docs require on hardware (easing into each chunk, speed limits, holding on a stale camera), a scene
+that changes between resets, and a driver for a real YAM in place of the sim. Full log in
+[experiments/dream1/notes.md](experiments/dream1/notes.md).
 
 ## The shape
 

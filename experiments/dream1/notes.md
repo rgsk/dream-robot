@@ -109,3 +109,87 @@ Dream-1's own embodiment so the policy works as well as it can. RoboCasa is park
   - Bug: the first policy opened the Dream client on the loop thread and stalled the sim 14 s.
     Fixed (opened on the tool thread); offline re-check lag 0.
 - Video: scratch/dream1/clips/261020-115124-rt.mp4 (whole episode, real time).
+
+## Step 7 · Dream-1 keeps driving while the LLM thinks (2026-10-20)
+- User: the arms still stood still between the LLM's turns (~4-6 s each), and while waiting on
+  sync-mode calls.
+- Tools now: `policy(command)` starts Dream-1 and returns at once; it drives until `stop`,
+  another command (replaces it), `home`, `reset`, the call cap, or the watchdog (60 s with no
+  tool; `watch` counts as attending). `watch(seconds)`: time passes, frames of that window.
+  `review(start, end)` by episode time. Prompt: the driver supervises; Dream-1 does not know
+  when a step is done, so stop it promptly.
+- Offline (fake 0.7 s client): 3 s of "thinking" = 60 steps and 2 calls (it kept driving);
+  resend = no-op; stop / continue / switch / home / watchdog as intended; lag 0.
+- Cost: ~0.75 calls/s whenever a command is live, including the driver's thinking time.
+
+## Step 8 · wait: supervise by gripper events, not by polling (2026-10-20)
+- User: `watch` every 10-15 s is wasteful (a frame grid + an LLM turn per check, Dream-1 calls
+  meanwhile); the driver only needs the moments something changes.
+- `sims/dream_yam/grip.py`: holding = measured opening > commanded + 0.08 with fingers still, for
+  0.3 s; release = gap < 0.04 for 0.3 s. The gripper's own sensor, no sim state.
+  - On the 50-call apple trace: one grasp at 30.45 s (truth 30.1), one release at 35.85 s (apple
+    falling over the bowl). No false event for the 20 s miss or the later empty closes.
+  - Two Inspector traces with no grasps: no events.
+  - Orange / banana not checked yet: their next run logs `<episode>-rt-events.json`.
+- `wait(max_seconds)`: returns on grasp / release / Dream-1 stopping / time, with one frame of all
+  three cameras. Prompt: policy, then wait; at a release check and stop at once; `watch` /
+  `review` only when unsure. `status` shows what each gripper holds.
+- Offline replay: woke on the grasp (apple 15 cm up) and on the release (apple already in the
+  bowl). Letting it run 60 s more cost 43 calls for nothing: that is what stopping at the release
+  saves.
+- Fixed: traces only written at reset / clean shutdown, so both LLM runs' traces were lost when
+  claude -p's end killed the server. Now rewritten after every tool (+ events.json).
+- First wait-based claude -p run, stopped at t=68 s: **the sim loop thread died** during the
+  orange step (time froze; wait returned at once, watch errored).
+  - Before that: apple done with events exactly as designed. Grasp at 15.6 s, release at 20.0 s
+    (in the bowl), driver stopped and moved on: 2 waits, 9 calls for the step.
+  - The cause was not captured: the loop had no error handling and stderr went to claude -p.
+    The last chunk played was normal, so the likely cause is validate_chunk raising on the next
+    reply (a gripper value outside 0..1).
+  - Fix: the loop survives any error. A malformed chunk is skipped and saved
+    (`<episode>-rejected-<step>.json`); any other error ends the run (arms hold) and goes to
+    `clips/loop-errors.log`. Tools refuse with a clear message if the loop is ever dead; the
+    referee rows carry the loop's errors. Fault test (gripper 1.3 chunk + an injected crash):
+    loop alive, next policy fine.
+- **Rerun: 3/3, verdict agreed, 63 calls (~$0.09), 160 s episode, 183 s wall, 16 turns**
+  (realtime with fixed pieces: 94 calls, 244 s wall, 14 turns). No loop errors.
+  - The grip events were right for all three fruits: apple grasp 0.66 / release; orange grasp
+    0.57 / release; banana grasp 0.33 / release. No false events.
+  - Bug: the apple release (16.9 s) and orange release (97.6 s) came while the LLM was thinking
+    between waits (grasp to release takes ~3.5 s, about one turn). wait counted only events after
+    its own start, so it slept through them to the time limit (30 s, 25 s) with Dream-1 still
+    driving: ~25 calls and ~55 s for nothing. The banana's release was caught and stopped on.
+  - Fix: wait reports every event the driver has not been told of, returning at once for one
+    that came while it thought ("before this wait"). A new command starts with a clean slate.
+    Offline: release 1.8 s before the wait, the wait returned in 0.2 s with it.
+- Run 3 (fixed wait), stopped by the user at t=264 s: **the banana was on the plate from 86 s,
+  but the LLM kept waiting and re-commanded it** (~60 calls wasted).
+  - Apple step fine (grasp 36.0, release 39.1).
+  - The banana grasp was at 82.3 s. Then Dream-1 loosened its grip command to just under the
+    banana's width while carrying it: gap 0.02-0.03, read as "release" at 83.7 s with the
+    banana still 6 cm up. The real drop onto the plate at ~86 s gave no event.
+  - The LLM trusted events and never judged its pictures, though every wait returned one with
+    the banana on the plate (user: "it doesn't check the world state").
+- Fixes:
+  - release = gap < 0.01 (was 0.04). Re-run on every saved trace: the banana's release is now
+    86.15 s (the real drop); the others unchanged.
+  - wait returns the **top camera** at every wake, default 10 s (max 20).
+  - Prompt: the image decides; every wake, check whether the object is at its goal and stop at
+    once if so. Events are hints and can be missed.
+- Run 4 (image-first waits), stopped by the user at t=248 s.
+  - The image-first wait works: apple and orange stopped ~2-3 s after landing; both in 26 calls
+    (49 in run 2).
+  - Banana on the plate (referee) from ~114 s, but the LLM judged it "half off the plate" (it
+    overhangs the rim) and re-ran it twice: ~50 calls on a finished step (121 total, ~$0.17).
+  - Prompt fix: good enough is done (mostly on the plate counts, overhang fine); at most 2 fresh
+    retries per step, then report not done and go on.
+- **Run 5: 3/3, verdict agreed, 64 calls (~$0.09), 112 s episode, 133 s wall, 18 turns.** No loop
+  errors. The LLM stopped ~3 s after each landing: apple landed 38 s (22 calls), orange 52 s (11),
+  banana 103 s (31, no retries). No wasted calls.
+
+| run | calls | wall | turns |
+|---|---|---|---|
+| paused (step 5) | 86 | 388 s | 20 |
+| realtime, fixed pieces (step 6) | 94 | 244 s | 14 |
+| continuous + wait, missed releases (run 2) | 63 | 183 s | 16 |
+| continuous + image-first wait (run 5) | 64 | 133 s | 18 |
