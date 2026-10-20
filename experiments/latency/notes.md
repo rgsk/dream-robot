@@ -71,3 +71,25 @@ Seed 1000 each, videos in `videos/`. One episode per row: an illustration, not a
 - RTC brings the seam back to no-lag smoothness; naive async gets worse with longer thinking
   (more dropped actions per seam), RTC barely moves. Success not recorded in this measurement.
 - Video `rtc_exec8_lat0.16_clean.mp4`: success, 7.2 s, 2% frozen (first plan only).
+
+## Step 5 · IDM: async clips (2026-10-20)
+- `idm_lag.py --mode async`: the next clip is asked for while the current one is walked; when it
+  lands, frames already behind are skipped (only the steps the arm moved count). No RTC: the IDM is
+  a regression net and the oracle's clips already agree with each other; RTC returns with a
+  sampled video model.
+- Rule found the hard way: with one draw in flight, a clip must cover **2x** the drawing time
+  (its first drawing-time is past when it lands; the rest must last while the next is drawn).
+  Same for FM: chunk >= 2 x delay (16 vs 5 worked; 4 actions per plan vs 9 thinking did not).
+- Seed 1000, clip 3 s (90 steps):
+| clip length | mode | result | time | frozen | clips |
+|---|---|---|---|---|---|
+| 4 s (120) | no lag | dropped | 20 s | 0% | 5 |
+| 4 s | hold | dropped | 20 s | 45% | 3 |
+| 4 s | async | dropped | 20 s | 38% | 6 |
+| 8 s (240) | no lag | success | 7.1 s | 0% | 1 |
+| 8 s | hold | success | 10.1 s | 30% | 1 |
+| 8 s | async | success | 10.1 s | 30% | 2 (2nd unused) |
+- 4 s clips fail even with no lag: mid-episode redraws of the oracle are the old H = 10 problem
+  (step 3 in idm/notes.md), not lag. 4 s also breaks the 2x rule (120 < 180).
+- 8 s covers the whole 7 s episode: one clip, so async has nothing to walk during the only draw
+  and equals hold. Async clips only pay off on tasks longer than one clip.
