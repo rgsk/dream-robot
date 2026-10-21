@@ -36,10 +36,13 @@ Rung 1 (reach + grasp a rigid cube) is closed in sim for both BC and ACT: record
 | ✅ | `sims/robosuite/tasks/instructed_pick_place/` — T5: two cubes, two bins, a sentence picks one of each |
 | ✅ | `policies/smolvla/` — SmolVLA (450M) fine-tuned with our own training loop; VLM frozen, action expert trains |
 | ✅ | `envs/dream_yam/` + `sims/dream_yam/` — Dream-1 (Dream Labs' API policy) on its own YAM arms, Claude supervising through MCP: [below](#llm-plans-dream-1-executes) |
+| ✅ | `policies/idm/` — oracle IDM: a scripted expert draws the future, a 1M-param model reads the actions off it |
+| ✅ | `policies/cosmos_policy/`, `policies/uwm/`, `vpp2` — video-model policies served from their own envs over a local socket, one T5 eval for all: [below](#our-own-executor-video-model-policies-on-t5) |
 
-**Next:** our own executor, a video model that imagines the future plus an IDM that reads the
-actions off it, in four steps starting with an oracle IDM on T5:
-[ROADMAP.md](ROADMAP.md#next-our-own-executor--imagine-the-future-read-the-actions-off-it).
+**Next:** a generalization test instead of another single-task score: train on several tasks with
+recovery demos, hold one task out, and measure success on it with 0, 10 and 50 of its demos; a
+multi-task Cosmos Policy is the baseline, with force inputs and an RL fine-tune of the grasp as the
+two levers aimed at the failure every model shares.
 
 `uv run pytest -m "not slow"` runs the core suite without a simulator.
 
@@ -248,6 +251,39 @@ Zero-shot, the base model moves but never approaches a cube: it was pretrained o
 LeRobot's config parser breaks on Python 3.14, so the training loop is written out in
 `policies/smolvla/train.py`; 20k steps took 97 min on a rented 4090 (~$1.20). Full log in
 [experiments/t5/notes.md](experiments/t5/notes.md).
+
+## Our own executor: video-model policies on T5
+
+Every Dream-1 failure was a grasp, so the hands are the part to build
+([ROADMAP.md](ROADMAP.md#next-our-own-executor--imagine-the-future-read-the-actions-off-it)). The
+question: does a model that has learned how video unfolds make a better executor? Same T5 task and
+splits as above; each big model runs in its own environment as an action server, and our eval
+(`experiments/t5/scripts/eval_t5.py --policy cosmos_policy|uwm|vpp2`) plays its action chunks.
+
+| executor | what it is | seen | held-out | time per call (A100) |
+|---|---|---|---|---|
+| oracle IDM | scripted expert draws the future, small model reads the actions | **59/60** | **59/60** | — (not a real model) |
+| SmolVLA (for reference) | VLA, 450M | 22/60 | 11/60 | |
+| **Cosmos Policy** | 2B video model; actions are extra frames of the imagined clip; fine-tuned whole | **27/30** | **27/30** | 1.7 s (5 steps) |
+| UWM | 0.3B video + action diffusion, from LIBERO-90; best of 3 versions | 0/10 | 1/10 | ~0.1 s (on the 4060) |
+| VPP2 | Wan 14B video frozen + 1B action expert, from LIBERO | 0/10 | 0/10 | 0.86 s (4 steps) |
+
+**What it says.**
+
+- **A strong video prior reads the instruction.** Cosmos never picks the wrong cube or bin, held-out
+  colour pairs included. VPP2's frozen 14B model, never trained on T5, *imagines* the arm taking the
+  named cube 9 times out of 9.
+- **UWM never heard the colour word.** Swapping the colour in the instruction moved its actions 4-10x
+  less than re-sampling did. Image patches, word tokens and joint angles didn't change that.
+- **Every model fails the same way off the demo path.** UWM and VPP2 reach the cube and hover a few
+  centimetres off without closing; Cosmos's 3 failures are the touching-cubes layout. On recorded
+  demo frames they are accurate (VPP2 closes the gripper on time; UWM within 0.02 rad), and a replay
+  check ruled out the sim hookup. The demos never show a miss and a retry, so nothing learns one.
+- **Speed is the other wall.** A pick at 1,500/hour is 2.4 s; a 1-1.7 s call per 16 steps doesn't
+  fit. VPP2's floor is the 14B pass itself (0.53 s).
+
+Logs: [cosmos_policy](experiments/cosmos_policy/notes.md), [uwm](experiments/uwm/notes.md),
+[vpp](experiments/vpp/notes.md), [idm](experiments/idm/notes.md). About $16 of rented GPUs in all.
 
 ## LLM plans, Dream-1 executes
 
