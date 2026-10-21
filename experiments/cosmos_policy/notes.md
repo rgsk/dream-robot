@@ -154,3 +154,39 @@ Next: eval loop (T5 env + get_action, ACTION_DIM 8, seeds 1000+, seen / held-out
 - `scripts/stage_b_eval.sh`: convert -> serve.py -> eval_t5 seen + held_out -> server killed.
 - Run b1 (2000 iters, decay to 0.3x by 2000, save every 500) started 00:52 IST; action L1 0.52
   (10) -> 0.23 (30) -> 0.11 (140).
+
+## Step 9 · stage B result (2026-10-21, run overnight)
+- Run b1: 2000 iters x batch 16 (32k samples, ~1 pass over 33,385 frames), lr 1e-4 warm-up 200,
+  decay to 0.3x by 2000, from the LIBERO policy. 1.8 h on the A100. Action L1 (normalised):
+  0.52 (10) -> 0.11 (200) -> 0.052 (1000) -> 0.037 (1600) -> **0.030 (2000)**, still falling
+  (their full runs stop at ~0.010-0.015). Curve: `stage_b/action_l1.txt`; logs `stage_b/logs/`.
+- Eval, final checkpoint, template wording, execute 16 of 32, 5 denoising steps:
+| split | seeds | success | wrong cube | wrong bin | other |
+|---|---|---|---|---|---|
+| seen | 1000-1009 | 9/10 | 0 | 0 | 1 no_grasp |
+| seen | 1010-1029 | 18/20 | 0 | 0 | 2 no_grasp |
+| **seen** | **1000-1029** | **27/30** | 0 | 0 | 3 |
+| held-out | 1000-1009 | 9/10 | 0 | 0 | 1 no_grasp |
+| held-out | 1010-1029 | 18/20 | 0 | 0 | 1 no_grasp, 1 dropped |
+| **held-out** | **1000-1029** | **27/30** | 0 | 0 | 3 |
+- Against the same eval: SmolVLA 22/60 seen, 11/60 held-out; oracle IDM 59/59. Colour following,
+  where SmolVLA and our FM sat at chance, is solved here: 0 wrong-cube, 0 wrong-bin in 60, and
+  held-out pairs (green->right, yellow->left, never in training) as good as seen ones.
+  Successes take 221-244 steps (~7.5 s; demos 203-255).
+- Failures (all 6 are execution, none language): every no_grasp has the two cubes nearly touching,
+  one in front of the other; the arm hovers over the pair until timeout. Imagined frames (third
+  video column) say why in two of them: seeds 1010 (blue named, red in front) and 1018 (red named,
+  yellow in front) imagine the *front, wrong* cube in the wrist view; seed 1008 (blue named and
+  in front) imagines the right one and still stalls. Seed 1022: carried green, dropped near the
+  right bin. Frame grids: `stage_b/eval_b1_iter2000/*_failure_grid.png`.
+- Speed: 1.72 s per call on the A100 with future frames decoded (stage A: 0.6 s on the L40S;
+  not re-measured without decoding). Physics pauses during calls in this eval, so it doesn't show
+  in success, but it matters for real time (latency notes: chunk must cover 2x the call).
+- Cost: stage B $5.50 (secure A100 $1.79/h x ~3.05 h: setup, smoke, 1.8 h train, 2 evals).
+  RunPod balance $8.38. Pod terminated 03:27 IST.
+- Not kept: the fine-tuned checkpoint (3.9 GB .pt) -- ~40 min to download at ~1.6 MB/s would have
+  broken the $6 stop. Rebuilding it = this run again (~$3.5 incl. setup). Dataset stats from
+  training are home (`data/cosmos_policy/t5_224/dataset_statistics*.json`).
+- Answer to stage B's question: yes on both -- action error falls fast, and it picks the named
+  cube. Open: (1) the touching-cubes layout; (2) paraphrase wording not evaluated; (3) 1.7 s/call;
+  (4) keep the checkpoint next time (upload to HF from the pod, or a network volume).

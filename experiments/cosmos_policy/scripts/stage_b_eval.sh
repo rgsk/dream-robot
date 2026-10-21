@@ -6,7 +6,7 @@
 set -euo pipefail
 export PYTHONUNBUFFERED=1 HF_HOME=/root/hf UV_CACHE_DIR=/root/uv-cache
 export PATH="$HOME/.local/bin:$PATH" MUJOCO_GL=egl PYOPENGL_PLATFORM=egl
-CKPT=${CKPT:?set CKPT} EPISODES=${EPISODES:-10} PORT=${PORT:-6000}
+CKPT=${CKPT:?set CKPT} EPISODES=${EPISODES:-10} PORT=${PORT:-6000} SEED=${SEED:-1000}
 DATA=/root/data/cosmos_policy/t5_224
 SCRIPTS=/workspace/dream-robot/experiments/cosmos_policy/scripts
 OUT=/workspace/results/$(basename "$(dirname "$(dirname "$CKPT")")")_$(basename "$CKPT")
@@ -31,6 +31,7 @@ export UV_PROJECT_ENVIRONMENT=/root/venv-dream-robot
 for pairs in seen held_out; do
     uv run python experiments/t5/scripts/eval_t5.py --policy cosmos_policy \
         --checkpoint "localhost:$PORT" --camera-size 224 --execute 16 \
-        --pairs "$pairs" --episodes "$EPISODES" --out "$OUT/$pairs" 2>&1 | grep -v "robosuite"
+        --pairs "$pairs" --episodes "$EPISODES" --seed-start "$SEED" \
+        --out "$OUT/$pairs$([ "$SEED" = 1000 ] || echo "_s$SEED")" 2>&1 | grep -v "robosuite"
 done
 echo "eval done $(date +%T)"

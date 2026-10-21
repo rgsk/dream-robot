@@ -1,0 +1,194 @@
+{
+  "task": "robosuite/instructed_pick_place[seen/template]",
+  "policy": "cosmos_policy",
+  "episodes": 20,
+  "success_rate": 0.9,
+  "successes": 18,
+  "cycle_time_seconds": 7.72,
+  "mean_steps": 267.4,
+  "failure_histogram": {
+    "no_grasp": 2
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "successes": "/workspace/results/b1_iter_000002000/seen_s1010/videos/successes.mp4",
+    "failures": "/workspace/results/b1_iter_000002000/seen_s1010/videos/failures.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1010,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1011,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 236
+    },
+    {
+      "seed": 1012,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 227
+    },
+    {
+      "seed": 1013,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 232
+    },
+    {
+      "seed": 1014,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 232
+    },
+    {
+      "seed": 1015,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 226
+    },
+    {
+      "seed": 1016,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 229
+    },
+    {
+      "seed": 1017,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 221
+    },
+    {
+      "seed": 1018,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1019,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 225
+    },
+    {
+      "seed": 1020,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 235
+    },
+    {
+      "seed": 1021,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 231
+    },
+    {
+      "seed": 1022,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 233
+    },
+    {
+      "seed": 1023,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 233
+    },
+    {
+      "seed": 1024,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 225
+    },
+    {
+      "seed": 1025,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 227
+    },
+    {
+      "seed": 1026,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 234
+    },
+    {
+      "seed": 1027,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 239
+    },
+    {
+      "seed": 1028,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 234
+    },
+    {
+      "seed": 1029,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 230
+    }
+  ],
+  "provenance": {
+    "checkpoint": "localhost:6000",
+    "split": "seen/template",
+    "t5": {
+      "success": {
+        "success": 18,
+        "episodes": 20
+      },
+      "instruction_failures": {
+        "other": 2
+      },
+      "by": {
+        "blue->left": {
+          "success": 0,
+          "episodes": 1
+        },
+        "blue->right": {
+          "success": 2,
+          "episodes": 2
+        },
+        "green->left": {
+          "success": 3,
+          "episodes": 3
+        },
+        "red->left": {
+          "success": 3,
+          "episodes": 4
+        },
+        "red->right": {
+          "success": 8,
+          "episodes": 8
+        },
+        "slot 0": {
+          "success": 11,
+          "episodes": 13
+        },
+        "slot 1": {
+          "success": 7,
+          "episodes": 7
+        },
+        "yellow->right": {
+          "success": 2,
+          "episodes": 2
+        }
+      }
+    },
+    "server": {
+      "ckpt": "/root/out/cosmos_policy/cosmos_policy_t5/b1/checkpoints/iter_000002000.pt",
+      "chunk": 32,
+      "action_dim": 8,
+      "denoise": 5
+    },
+    "execute": 16,
+    "mean_call_seconds": 1.6963883973550105
+  }
+}
