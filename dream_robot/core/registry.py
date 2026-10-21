@@ -181,6 +181,15 @@ def _cosmos_policy(env, *, checkpoint: Path | str | None = None, device: str | N
     return CosmosPolicy(env, address=str(checkpoint or "localhost:6000"), execute=execute)
 
 
+def _uwm(env, *, checkpoint: Path | str | None = None, device: str | None = None,
+         execute: int | None = None):
+    # Like cosmos_policy: the model runs in its own env as an action server
+    # (experiments/uwm/scripts/serve.py); ``checkpoint`` here is its address.
+    from dream_robot.policies.uwm.policy import UWMPolicy
+
+    return UWMPolicy(env, address=str(checkpoint or "localhost:6001"), execute=execute)
+
+
 POLICIES: dict[str, Callable] = {
     "expert": _expert,
     "bc": _bc,
@@ -189,6 +198,7 @@ POLICIES: dict[str, Callable] = {
     "smolvla": _smolvla,
     "oracle_idm": _oracle_idm,
     "cosmos_policy": _cosmos_policy,
+    "uwm": _uwm,
 }
 
 

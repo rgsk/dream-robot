@@ -51,23 +51,29 @@ class CosmosPolicy:
         self._prompt = self._env.prompt
         self.aim_images = None
 
+    def _request(self, observation: Observation) -> dict:
+        """The server message for a new chunk. Subclasses send more (UWM: two frames)."""
+        top, wrist = (np.ascontiguousarray(observation.images[k], np.uint8) for k in ("top", "wrist"))
+        return {
+            "prompt": self._prompt,
+            "top": top.tobytes(), "wrist": wrist.tobytes(), "hw": list(top.shape[:2]),
+            "proprio": np.asarray(observation.state, np.float32).tolist(),
+        }
+
     def __call__(self, observation: Observation) -> np.ndarray:
         if self._prompt is None:
             raise RuntimeError("call reset() after env.reset() before stepping")
         if not self._queue:
-            top, wrist = (np.ascontiguousarray(observation.images[k], np.uint8) for k in ("top", "wrist"))
-            self._conn.send({
-                "prompt": self._prompt,
-                "top": top.tobytes(), "wrist": wrist.tobytes(), "hw": list(top.shape[:2]),
-                "proprio": np.asarray(observation.state, np.float32).tolist(),
-            })
+            self._conn.send(self._request(observation))
             reply = self._conn.recv()
             self.call_seconds.append(reply["seconds"])
             self._queue = list(np.asarray(reply["actions"], np.float32)[: self.execute])
-            self.aim_images = {
-                name: np.frombuffer(reply[f"future_{name}"], np.uint8).reshape(top.shape)
-                for name in ("top", "wrist")
-            }
+            if "future_top" in reply:   # Cosmos draws the future; action-only servers don't
+                shape = observation.images["top"].shape
+                self.aim_images = {
+                    name: np.frombuffer(reply[f"future_{name}"], np.uint8).reshape(shape)
+                    for name in ("top", "wrist")
+                }
         action = self._queue.pop(0)
         grip = self._env.embodiment.gripper_slice
         action[grip] = np.clip(action[grip], 0.0, 1.0)    # 0 closed .. 1 open

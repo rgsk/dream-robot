@@ -1,0 +1,134 @@
+{
+  "task": "robosuite/instructed_pick_place[seen/template]",
+  "policy": "uwm",
+  "episodes": 10,
+  "success_rate": 0.0,
+  "successes": 0,
+  "cycle_time_seconds": null,
+  "mean_steps": 600,
+  "failure_histogram": {
+    "no_grasp": 10
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "failures": "/workspace/results/uwm_d7500_viz_joint/seen_s1010/videos/failures.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1010,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1011,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1012,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1013,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1014,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1015,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1016,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1017,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1018,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1019,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    }
+  ],
+  "provenance": {
+    "checkpoint": "localhost:6003",
+    "split": "seen/template",
+    "t5": {
+      "success": {
+        "success": 0,
+        "episodes": 10
+      },
+      "instruction_failures": {
+        "other": 10
+      },
+      "by": {
+        "blue->left": {
+          "success": 0,
+          "episodes": 1
+        },
+        "blue->right": {
+          "success": 0,
+          "episodes": 1
+        },
+        "green->left": {
+          "success": 0,
+          "episodes": 3
+        },
+        "red->left": {
+          "success": 0,
+          "episodes": 1
+        },
+        "red->right": {
+          "success": 0,
+          "episodes": 3
+        },
+        "slot 0": {
+          "success": 0,
+          "episodes": 9
+        },
+        "slot 1": {
+          "success": 0,
+          "episodes": 1
+        },
+        "yellow->right": {
+          "success": 0,
+          "episodes": 1
+        }
+      }
+    },
+    "server": {
+      "ckpt": "/workspace/runs/d/model_7500.pt",
+      "chunk": 16,
+      "drop": false,
+      "joint": true,
+      "registers": 24
+    },
+    "execute": 16,
+    "mean_call_seconds": 0.1625143527984619
+  }
+}
