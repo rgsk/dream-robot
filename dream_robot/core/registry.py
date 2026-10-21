@@ -190,6 +190,15 @@ def _uwm(env, *, checkpoint: Path | str | None = None, device: str | None = None
     return UWMPolicy(env, address=str(checkpoint or "localhost:6001"), execute=execute)
 
 
+def _vpp2(env, *, checkpoint: Path | str | None = None, device: str | None = None,
+          execute: int | None = None):
+    # VPP2 speaks the Cosmos server protocol (experiments/vpp/scripts/serve.py), so the
+    # Cosmos client plays its 32-action chunks; ``checkpoint`` here is its address.
+    from dream_robot.policies.cosmos_policy.policy import CosmosPolicy
+
+    return CosmosPolicy(env, address=str(checkpoint or "localhost:6002"), execute=execute)
+
+
 POLICIES: dict[str, Callable] = {
     "expert": _expert,
     "bc": _bc,
@@ -199,6 +208,7 @@ POLICIES: dict[str, Callable] = {
     "oracle_idm": _oracle_idm,
     "cosmos_policy": _cosmos_policy,
     "uwm": _uwm,
+    "vpp2": _vpp2,
 }
 
 

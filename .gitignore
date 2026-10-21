@@ -23,6 +23,7 @@ experiments/*/checkpoints/
 experiments/*/rollouts/
 # run logs: the numbers that matter are copied into notes.md
 experiments/**/*.log
+experiments/**/*.pid
 checkpoints/
 *.pt
 *.ckpt
@@ -55,6 +56,6 @@ rough.ipynb
 .env
 
 # --- envs/<name>/: per-simulator venvs, source clones, assets ---
-envs/*/.venv/
+envs/*/.venv*/
 envs/*/src/
 envs/*/setup.log

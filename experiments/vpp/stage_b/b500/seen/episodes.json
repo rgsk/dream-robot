@@ -1,0 +1,57 @@
+[
+ {
+  "seed": 1000,
+  "prompt": "put the yellow cube in the right box",
+  "color": "yellow",
+  "side": "right",
+  "distractor_color": "green",
+  "target_slot": 0,
+  "success": false,
+  "failure_mode": "no_grasp",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1001,
+  "prompt": "put the green cube in the left box",
+  "color": "green",
+  "side": "left",
+  "distractor_color": "blue",
+  "target_slot": 0,
+  "success": false,
+  "failure_mode": "no_grasp",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1002,
+  "prompt": "put the yellow cube in the right box",
+  "color": "yellow",
+  "side": "right",
+  "distractor_color": "red",
+  "target_slot": 0,
+  "success": false,
+  "failure_mode": "no_grasp",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1003,
+  "prompt": "put the yellow cube in the right box",
+  "color": "yellow",
+  "side": "right",
+  "distractor_color": "red",
+  "target_slot": 0,
+  "success": false,
+  "failure_mode": "no_grasp",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1004,
+  "prompt": "put the blue cube in the left box",
+  "color": "blue",
+  "side": "left",
+  "distractor_color": "yellow",
+  "target_slot": 0,
+  "success": false,
+  "failure_mode": "no_grasp",
+  "instruction_failure": null
+ }
+]

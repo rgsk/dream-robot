@@ -1,0 +1,86 @@
+{
+  "task": "robosuite/instructed_pick_place[seen/template]",
+  "policy": "vpp2",
+  "episodes": 5,
+  "success_rate": 0.0,
+  "successes": 0,
+  "cycle_time_seconds": null,
+  "mean_steps": 600,
+  "failure_histogram": {
+    "no_grasp": 5
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "failures": "/workspace/results/vpp2_b500/seen/videos/failures.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1000,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1001,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1002,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1003,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1004,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    }
+  ],
+  "provenance": {
+    "checkpoint": "localhost:6002",
+    "split": "seen/template",
+    "t5": {
+      "success": {
+        "success": 0,
+        "episodes": 5
+      },
+      "instruction_failures": {
+        "other": 5
+      },
+      "by": {
+        "blue->left": {
+          "success": 0,
+          "episodes": 1
+        },
+        "green->left": {
+          "success": 0,
+          "episodes": 1
+        },
+        "slot 0": {
+          "success": 0,
+          "episodes": 5
+        },
+        "yellow->right": {
+          "success": 0,
+          "episodes": 3
+        }
+      }
+    },
+    "server": {
+      "ckpt": "runs/t5/b/checkpoints/weights/step_000500.pt",
+      "chunk": 32,
+      "video": true
+    },
+    "execute": 16,
+    "mean_call_seconds": 1.7346551204982557
+  }
+}
