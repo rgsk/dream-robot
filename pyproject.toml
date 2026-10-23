@@ -94,3 +94,6 @@ markers = ["slow: needs a simulator and offscreen rendering"]
 # read by the editor (byname lsp) and Alt+L (`byname tool basedpyright`) alike. No extraPaths: dream_robot
 # resolves from the project root, as the editable install puts it on sys.path
 typeCheckingMode = "standard"
+# cloned simulators (envs/, 63k .py files), datasets and checkpoints: not checked, and byname mirrors each
+# as one link instead of walking it. Setting exclude drops pyright's defaults, so they're listed too
+exclude = ["envs", "data", "checkpoints", "**/node_modules", "**/__pycache__", "**/.*"]

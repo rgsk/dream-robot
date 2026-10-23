@@ -1,3 +1,10 @@
 user = (name="rahul", age=26)
 (name=, age=) = user
 print(name, age)
+
+
+users = [user]
+for user in users:
+    updated = (**user, sex="male")
+    print(updated)
+# hi
