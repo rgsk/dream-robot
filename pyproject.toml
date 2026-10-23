@@ -63,6 +63,8 @@ dev = [
     # cell -- outputs land but the spinner never resolves, needing a reload
     "ipykernel>=6.29,<7",
     "matplotlib>=3.9",
+    # any-check / annotation-check: names that show white, annotations that don't earn their place
+    "ml-tools",
 ]
 
 [build-system]
@@ -74,6 +76,7 @@ packages = ["dream_robot"]
 
 [tool.uv.sources]
 byname = { path = "../../projects/byname", editable = true }
+ml-tools = { path = "../../projects/ml-tools", editable = true }
 
 [tool.ruff]
 target-version = "py314"

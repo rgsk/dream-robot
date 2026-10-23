@@ -633,6 +633,7 @@ dev = [
     { name = "ipykernel" },
     { name = "jupytext" },
     { name = "matplotlib" },
+    { name = "ml-tools" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -659,6 +660,7 @@ dev = [
     { name = "ipykernel", specifier = ">=6.29,<7" },
     { name = "jupytext", specifier = ">=1.16" },
     { name = "matplotlib", specifier = ">=3.9" },
+    { name = "ml-tools", editable = "../../projects/ml-tools" },
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.16.2" },
 ]
@@ -1512,6 +1514,16 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/27/79/af73f2d6938b99f6284b411dd05d25711ae2a7a00c26fc86070efc768c28/mink-1.2.0.tar.gz", hash = "sha256:4e909fa6af682fa7a009d884c53ed7e0e28f942c15ec091d5029174f97c65208", size = 55343, upload-time = "2026-06-20T19:29:22.063Z" }
+
+[[package]]
+name = "ml-tools"
+version = "0.1.0"
+source = { editable = "../../projects/ml-tools" }
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "mpmath"
