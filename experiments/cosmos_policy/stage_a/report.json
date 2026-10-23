@@ -1,0 +1,46 @@
+{
+  "libero_sample": {
+    "actions_shape": [
+      16,
+      7
+    ],
+    "seconds_per_call": [
+      2.217,
+      0.916,
+      0.6
+    ],
+    "peak_gb": 6.21
+  },
+  "zero_shot": [
+    {
+      "file": "00_put_the_blue_cube_in_the_left_box_t0.png",
+      "prompt": "put the blue cube in the left box",
+      "t": 0
+    },
+    {
+      "file": "01_put_the_blue_cube_in_the_right_box_t0.png",
+      "prompt": "put the blue cube in the right box",
+      "t": 0
+    },
+    {
+      "file": "02_put_the_green_cube_in_the_left_box_t0.png",
+      "prompt": "put the green cube in the left box",
+      "t": 0
+    },
+    {
+      "file": "03_put_the_red_cube_in_the_left_box_t0.png",
+      "prompt": "put the red cube in the left box",
+      "t": 0
+    },
+    {
+      "file": "04_put_the_red_cube_in_the_right_box_t0.png",
+      "prompt": "put the red cube in the right box",
+      "t": 0
+    },
+    {
+      "file": "05_put_the_blue_cube_in_the_left_box_t75.png",
+      "prompt": "put the blue cube in the left box",
+      "t": 75
+    }
+  ]
+}

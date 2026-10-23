@@ -43,6 +43,10 @@ dependencies = [
     # .pyn files (rough/scratch.pyn and friends) import and run through it
     "byname",
     "joblib>=1.6.0",
+    "mcp>=1.20",
+    # agent perception: splitting a colour mask into separate objects
+    # (ndimage.label). Already pulled in by robosuite; declared because we import it.
+    "scipy>=1.18.0",
 ]
 
 [dependency-groups]

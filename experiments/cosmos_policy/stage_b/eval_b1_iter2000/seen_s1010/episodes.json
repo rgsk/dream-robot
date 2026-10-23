@@ -1,0 +1,222 @@
+[
+ {
+  "seed": 1010,
+  "prompt": "put the blue cube in the left box",
+  "color": "blue",
+  "side": "left",
+  "distractor_color": "red",
+  "target_slot": 0,
+  "success": false,
+  "failure_mode": "no_grasp",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1011,
+  "prompt": "put the red cube in the right box",
+  "color": "red",
+  "side": "right",
+  "distractor_color": "yellow",
+  "target_slot": 0,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1012,
+  "prompt": "put the blue cube in the right box",
+  "color": "blue",
+  "side": "right",
+  "distractor_color": "green",
+  "target_slot": 0,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1013,
+  "prompt": "put the red cube in the right box",
+  "color": "red",
+  "side": "right",
+  "distractor_color": "blue",
+  "target_slot": 0,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1014,
+  "prompt": "put the yellow cube in the right box",
+  "color": "yellow",
+  "side": "right",
+  "distractor_color": "blue",
+  "target_slot": 0,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1015,
+  "prompt": "put the green cube in the left box",
+  "color": "green",
+  "side": "left",
+  "distractor_color": "yellow",
+  "target_slot": 0,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1016,
+  "prompt": "put the green cube in the left box",
+  "color": "green",
+  "side": "left",
+  "distractor_color": "yellow",
+  "target_slot": 0,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1017,
+  "prompt": "put the green cube in the left box",
+  "color": "green",
+  "side": "left",
+  "distractor_color": "yellow",
+  "target_slot": 0,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1018,
+  "prompt": "put the red cube in the left box",
+  "color": "red",
+  "side": "left",
+  "distractor_color": "yellow",
+  "target_slot": 0,
+  "success": false,
+  "failure_mode": "no_grasp",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1019,
+  "prompt": "put the red cube in the right box",
+  "color": "red",
+  "side": "right",
+  "distractor_color": "green",
+  "target_slot": 1,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1020,
+  "prompt": "put the red cube in the right box",
+  "color": "red",
+  "side": "right",
+  "distractor_color": "green",
+  "target_slot": 1,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1021,
+  "prompt": "put the red cube in the left box",
+  "color": "red",
+  "side": "left",
+  "distractor_color": "yellow",
+  "target_slot": 1,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1022,
+  "prompt": "put the red cube in the right box",
+  "color": "red",
+  "side": "right",
+  "distractor_color": "green",
+  "target_slot": 1,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1023,
+  "prompt": "put the red cube in the right box",
+  "color": "red",
+  "side": "right",
+  "distractor_color": "green",
+  "target_slot": 1,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1024,
+  "prompt": "put the red cube in the left box",
+  "color": "red",
+  "side": "left",
+  "distractor_color": "green",
+  "target_slot": 0,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1025,
+  "prompt": "put the yellow cube in the right box",
+  "color": "yellow",
+  "side": "right",
+  "distractor_color": "red",
+  "target_slot": 1,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1026,
+  "prompt": "put the blue cube in the right box",
+  "color": "blue",
+  "side": "right",
+  "distractor_color": "red",
+  "target_slot": 1,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1027,
+  "prompt": "put the red cube in the right box",
+  "color": "red",
+  "side": "right",
+  "distractor_color": "yellow",
+  "target_slot": 0,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1028,
+  "prompt": "put the red cube in the left box",
+  "color": "red",
+  "side": "left",
+  "distractor_color": "green",
+  "target_slot": 0,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ },
+ {
+  "seed": 1029,
+  "prompt": "put the red cube in the right box",
+  "color": "red",
+  "side": "right",
+  "distractor_color": "yellow",
+  "target_slot": 0,
+  "success": true,
+  "failure_mode": "none",
+  "instruction_failure": null
+ }
+]

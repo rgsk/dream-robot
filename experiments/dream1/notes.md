@@ -1,0 +1,233 @@
+# Dream-1 + our LLM
+
+Goal: Dream-1 (Dream Labs' API policy) executes and our LLM driver plans. The sim is built around
+Dream-1's own embodiment so the policy works as well as it can. RoboCasa is parked
+(`experiments/kitchen/`).
+
+## Step 1 · The sim and the env (2026-10-20)
+- Dream ships its own sim, **Dream YAM Sim**, inside the `dreamlabs` wheel
+  (`dream_examples/yam_mujoco`). It has two YAM arms with the station's top + wrist cameras, plus
+  an apple, orange, banana, water bottle, bowl and plate. Its own notes: apple/orange into the
+  bowl worked once each live; banana onto the plate is inconsistent; nothing scores success.
+- `envs/dream_yam/setup.sh`: Python 3.12, dreamlabs 1.0.1 pinned, MCP, `dream_robot.pth`. Offline
+  checks pass (sim steps; dry-run request = 9 frames x 3 cameras).
+- The docs' route (`ik` arm `yam` on the model's own keys) is refused for dream-1-beta today: the
+  server drops the poses the client adds. The sim sends the older station keys
+  (`state.arm_r.joint_pos`, `image_window.top`, ...) and the server computes the poses itself.
+  `scripts/trial.py` reuses that code.
+- `scripts/trial.py`: one task, a cap on paid calls, physics held during each call, an mp4 of the
+  three cameras, and a score from sim positions (bowl r 7 cm, plate r 6.5 cm; referee only).
+  The key comes from `.env` `DREAM_LABS_API_KEY` and is never printed.
+- Every reset puts the objects in the same places: apple (0.15, 0.105), orange (0, 0.13),
+  banana (-0.115, 0.085), bowl (0, -0.04), plate (-0.22, -0.045).
+- Price (Billing page): dream-1-beta $0.0014, dream-1-beta-flash $0.0009 per get_action call
+  (docs: billed per successful call; refusals free). $10 credit ~ 7000 calls.
+
+## Step 2 · First paid trial (2026-10-20)
+- "put apple into the bowl", 15 calls (~$0.02), RTT 0.63-0.95 s, no pool warming; 37.6 s sim.
+- Not in the bowl: the apple moved 5 mm. Video: still for ~11 s, then the **left arm** (the apple's
+  side) went to the apple at ~13 s (apple between the fingers in the left wrist view) and hovered
+  or adjusted until the end. The right arm stayed home. No lift.
+- Reading: the integration is right (correct arm, object and aim) but slow; Dream's own sim gives
+  120 s. Next: log grip + apple z per call, rerun with 50 calls (~2 min sim).
+
+## Step 3 · 50 calls: apple in the bowl (2026-10-20)
+- "put apple into the bowl", 50 calls (~$0.07), 121.7 s sim. **Success**: apple ends at
+  (-0.019, -0.035, 0.802), in the bowl. Done by ~36 s; the left arm only, again.
+- `scripts/grip_events.py` on the trace:
+  - 20.3 s first close: one fingertip touched, then none (opening 0.11), so it closed on air beside
+    / on top of the apple.
+  - ~26 s the empty hand went toward the bowl (lift before a grasp), then came back.
+  - 30.1 s both tips on the apple at opening 0.69; lifted at 30.8 s, peak +17.8 cm.
+  - ~36 s released over the bowl and the apple settled at z 0.80. Later closes were empty, the
+    apple stayed in the bowl.
+- The commanded grip never went below ~0.49 (it is not 0/1). The hold comes from the position gap:
+  command 0.5 against the apple at 0.69. It held anyway.
+- All three of the user's guesses showed up once (close on top/beside, lift before grasp); the
+  retry recovered. 15 calls were simply too few.
+
+## Step 4 · The LLM on top: an MCP server over the sim (2026-10-20)
+- `dream_robot/sims/dream_yam/station.py`: the sim, Dream's request code, the policy loop (capped
+  calls, fresh episode per run), trace, chunks, referee. `trial.py` now uses it.
+- `dream_robot/sims/dream_yam/server.py` + `driver_prompt.md`: tools reset / look / policy(command,
+  seconds) / home / review_clip / status. Each run of 2.4 s is one paid call; a server-wide cap
+  (`--max-calls`); the referee goes to `--score-log` after every motion, never a tool.
+- Offline check (`scratch/dream1/offline_server_test.py`): every tool through the MCP layer, policy
+  on a fake client replaying the 50-call run's chunks. Open-loop replay put the apple in the
+  bowl again. The sim is deterministic enough that a paid run can be replayed free.
+- `experiments/dream1/mcp_dream1.json`: server `dream-yam`, task apple + orange -> bowl,
+  banana -> plate, cap 100 calls (~$0.14).
+- `policy(..., continue_run=true)` (user asked: review mid-run): goes on with the last run, same
+  episode and camera windows, the sim held in between. Refused for a different command or after
+  home/reset. Offline: 15 + 15 + 30 s pieces = the same continuous replay; apple in the bowl
+  again; a refused continue left the run continuable. The prompt now says: run 10-15 s, look,
+  continue.
+- `--viewer` on the server: Dream's MuJoCo window + their three camera tiles, paced to real time
+  (user wants to watch runs live). Replay check opened it fine (one GL 0x502 warning at start).
+- First claude -p run stopped by the user after 7-14 calls (apple step, run in pieces as
+  prompted): no window to watch.
+
+## Step 5 · claude -p drives Dream-1: 3/3 (2026-10-20)
+- Task: apple + orange -> bowl, banana -> plate. Fresh `claude -p`, dream-yam tools only, live
+  window. **Referee: apple bowl, orange bowl, banana plate. Driver's verdict agreed on all three.**
+- 86 Dream-1 calls (~$0.12), 223.6 s sim, 388 s wall, 20 turns; tokens read 344k cached + 26k.
+- Per step (pieces of 15 s, continue_run as prompted, home between steps):
+  - apple: 12 calls (in by the first 15 s piece);
+  - orange: 28 calls, four pieces, ~35 s hovering before a clean grasp;
+  - banana: 4 pieces of "put banana on the plate" (28 calls) hovered without a grasp. The driver
+    sent the arms home, re-worded it "pick up the banana and place it on the plate" and started
+    fresh: on the plate after 18 calls. Re-wording or the fresh start: not separated.
+- The planner's part was real: it judged "stuck" from the frames, changed course, and verified at
+  the end with a top look after home.
+- Fixed: the referee row's sim_s was overwritten by the run's (now `run_sim_s`).
+- Video of the whole run: scratch/dream1/llm_run_3of3.mp4 (16 clips joined).
+
+## Step 6 · Real time: the world does not stop (2026-10-20)
+- User: the sim paused during Dream-1 calls and while the LLM thought; a real robot cannot.
+- `sims/dream_yam/realtime.py`: one loop thread owns the sim at 20 steps/s of wall clock.
+  Between commands the arms hold their last target (grip included) and physics runs. Dream-1
+  is called as the docs' own loop does: get_action on its own thread, `client.refill_due`
+  pacing (async while round trips < 0.7 s: the next chunk is asked for during the current
+  one; sync above it: the arms hold through each call), the row due now by time since the
+  observation, past rows skipped. Frames go to the client every 0.2 s while the episode is
+  open, pauses included. Tools post work to the loop; images are stamped with episode time.
+- Server on it: `policy` reports time since the driver's last motion, the time the arms held
+  waiting for Dream-1, round trip, pacing mode. Prompt: "time runs on"; default piece 15 s.
+- Offline (fake 0.7 s client with the real Pacer): async, 9 calls per 12 s (vs 5 paused),
+  held 0.8 s per run (the first chunk), a 4 s think gap shows up, loop lag 0. A prefetched
+  call can land after a run ends: paid, unused. Cap raised to 200 calls.
+- Paused mode stays in station.py for trial.py (deterministic, replayable).
+- **claude -p, real time: 3/3, verdict agreed.** 94 calls (~$0.13), 220 s episode, 244 s wall,
+  14 turns, tokens read 183k cached (paused run: 86 calls, 223.6 s sim, 388 s wall, 20 turns,
+  344k).
+  - Think gaps (arms holding, world running) 3.8-6.2 s per turn; nothing slipped or rolled in
+    them.
+  - Round trips 0.67-0.85 s, right at the 0.7 s sync threshold: the apple step ran mostly sync
+    (arms held 4-8 s per 15-20 s piece) and took 4 pieces with two missed grasps; orange and
+    banana mostly async (held 0.8-2.4 s), one fresh command plus one continue each. The banana
+    went on the plate at once this time.
+  - Bug: the first policy opened the Dream client on the loop thread and stalled the sim 14 s.
+    Fixed (opened on the tool thread); offline re-check lag 0.
+- Video: scratch/dream1/clips/261020-115124-rt.mp4 (whole episode, real time).
+
+## Step 7 · Dream-1 keeps driving while the LLM thinks (2026-10-20)
+- User: the arms still stood still between the LLM's turns (~4-6 s each), and while waiting on
+  sync-mode calls.
+- Tools now: `policy(command)` starts Dream-1 and returns at once; it drives until `stop`,
+  another command (replaces it), `home`, `reset`, the call cap, or the watchdog (60 s with no
+  tool; `watch` counts as attending). `watch(seconds)`: time passes, frames of that window.
+  `review(start, end)` by episode time. Prompt: the driver supervises; Dream-1 does not know
+  when a step is done, so stop it promptly.
+- Offline (fake 0.7 s client): 3 s of "thinking" = 60 steps and 2 calls (it kept driving);
+  resend = no-op; stop / continue / switch / home / watchdog as intended; lag 0.
+- Cost: ~0.75 calls/s whenever a command is live, including the driver's thinking time.
+
+## Step 8 · wait: supervise by gripper events, not by polling (2026-10-20)
+- User: `watch` every 10-15 s is wasteful (a frame grid + an LLM turn per check, Dream-1 calls
+  meanwhile); the driver only needs the moments something changes.
+- `sims/dream_yam/grip.py`: holding = measured opening > commanded + 0.08 with fingers still, for
+  0.3 s; release = gap < 0.04 for 0.3 s. The gripper's own sensor, no sim state.
+  - On the 50-call apple trace: one grasp at 30.45 s (truth 30.1), one release at 35.85 s (apple
+    falling over the bowl). No false event for the 20 s miss or the later empty closes.
+  - Two Inspector traces with no grasps: no events.
+  - Orange / banana not checked yet: their next run logs `<episode>-rt-events.json`.
+- `wait(max_seconds)`: returns on grasp / release / Dream-1 stopping / time, with one frame of all
+  three cameras. Prompt: policy, then wait; at a release check and stop at once; `watch` /
+  `review` only when unsure. `status` shows what each gripper holds.
+- Offline replay: woke on the grasp (apple 15 cm up) and on the release (apple already in the
+  bowl). Letting it run 60 s more cost 43 calls for nothing: that is what stopping at the release
+  saves.
+- Fixed: traces only written at reset / clean shutdown, so both LLM runs' traces were lost when
+  claude -p's end killed the server. Now rewritten after every tool (+ events.json).
+- First wait-based claude -p run, stopped at t=68 s: **the sim loop thread died** during the
+  orange step (time froze; wait returned at once, watch errored).
+  - Before that: apple done with events exactly as designed. Grasp at 15.6 s, release at 20.0 s
+    (in the bowl), driver stopped and moved on: 2 waits, 9 calls for the step.
+  - The cause was not captured: the loop had no error handling and stderr went to claude -p.
+    The last chunk played was normal, so the likely cause is validate_chunk raising on the next
+    reply (a gripper value outside 0..1).
+  - Fix: the loop survives any error. A malformed chunk is skipped and saved
+    (`<episode>-rejected-<step>.json`); any other error ends the run (arms hold) and goes to
+    `clips/loop-errors.log`. Tools refuse with a clear message if the loop is ever dead; the
+    referee rows carry the loop's errors. Fault test (gripper 1.3 chunk + an injected crash):
+    loop alive, next policy fine.
+- **Rerun: 3/3, verdict agreed, 63 calls (~$0.09), 160 s episode, 183 s wall, 16 turns**
+  (realtime with fixed pieces: 94 calls, 244 s wall, 14 turns). No loop errors.
+  - The grip events were right for all three fruits: apple grasp 0.66 / release; orange grasp
+    0.57 / release; banana grasp 0.33 / release. No false events.
+  - Bug: the apple release (16.9 s) and orange release (97.6 s) came while the LLM was thinking
+    between waits (grasp to release takes ~3.5 s, about one turn). wait counted only events after
+    its own start, so it slept through them to the time limit (30 s, 25 s) with Dream-1 still
+    driving: ~25 calls and ~55 s for nothing. The banana's release was caught and stopped on.
+  - Fix: wait reports every event the driver has not been told of, returning at once for one
+    that came while it thought ("before this wait"). A new command starts with a clean slate.
+    Offline: release 1.8 s before the wait, the wait returned in 0.2 s with it.
+- Run 3 (fixed wait), stopped by the user at t=264 s: **the banana was on the plate from 86 s,
+  but the LLM kept waiting and re-commanded it** (~60 calls wasted).
+  - Apple step fine (grasp 36.0, release 39.1).
+  - The banana grasp was at 82.3 s. Then Dream-1 loosened its grip command to just under the
+    banana's width while carrying it: gap 0.02-0.03, read as "release" at 83.7 s with the
+    banana still 6 cm up. The real drop onto the plate at ~86 s gave no event.
+  - The LLM trusted events and never judged its pictures, though every wait returned one with
+    the banana on the plate (user: "it doesn't check the world state").
+- Fixes:
+  - release = gap < 0.01 (was 0.04). Re-run on every saved trace: the banana's release is now
+    86.15 s (the real drop); the others unchanged.
+  - wait returns the **top camera** at every wake, default 10 s (max 20).
+  - Prompt: the image decides; every wake, check whether the object is at its goal and stop at
+    once if so. Events are hints and can be missed.
+- Run 4 (image-first waits), stopped by the user at t=248 s.
+  - The image-first wait works: apple and orange stopped ~2-3 s after landing; both in 26 calls
+    (49 in run 2).
+  - Banana on the plate (referee) from ~114 s, but the LLM judged it "half off the plate" (it
+    overhangs the rim) and re-ran it twice: ~50 calls on a finished step (121 total, ~$0.17).
+  - Prompt fix: good enough is done (mostly on the plate counts, overhang fine); at most 2 fresh
+    retries per step, then report not done and go on.
+- **Run 5: 3/3, verdict agreed, 64 calls (~$0.09), 112 s episode, 133 s wall, 18 turns.** No loop
+  errors. The LLM stopped ~3 s after each landing: apple landed 38 s (22 calls), orange 52 s (11),
+  banana 103 s (31, no retries). No wasted calls.
+
+| run | calls | wall | turns |
+|---|---|---|---|
+| paused (step 5) | 86 | 388 s | 20 |
+| realtime, fixed pieces (step 6) | 94 | 244 s | 14 |
+| continuous + wait, missed releases (run 2) | 63 | 183 s | 16 |
+| continuous + image-first wait (run 5) | 64 | 133 s | 18 |
+- Tool use over runs 2-5: wait 6-15 per run, policy 3-5, stop 1-2, home 0-4, look 0-2,
+  watch 0-2, review once, status never; `continue_run` never used (a leftover of the fixed-piece
+  design). Dropped it: every command is a fresh Dream-1 episode. Offline tests pass.
+- User: the top view gets hidden by an arm. wait (and look "all", reset, stop, home) now return
+  one 640x540 image: top full size, the two wrist cameras at half size under it (~460 tokens,
+  1.5x the top alone). Prompt: judge from the wrist views before moving an arm away. Offline
+  frame: the gripper hides the bowl from the top camera; the left wrist view shows the apple in it.
+- `experiments/agent/scripts/run_viewer.py`: a live web view of a headless run
+  (localhost:8765). It reads claude -p's stream log, so the LLM's text, every call with its
+  args, and every result with the images exactly as the model got them; follows the run while
+  it goes. Standard library only; works for T7 / kitchen runs too.
+- Run 6 (top + wrist views): 3/3 by the referee, **138 calls (~$0.19), 274 s wall, 23 turns**
+  (run 5: 64 calls, 133 s). Dream-1, not the setup, made the difference:
+  - apple 12 calls;
+  - orange grasped then dropped (56-57 s), retried by itself, in at 95 s (41 calls);
+  - banana slipped beside the plate (119 s), then hovered ~2 min without a grasp (85 calls). The
+    LLM waited ~1.5 min before changing course.
+  - The banana landed partly by luck: Dream-1, still driving during the LLM's last turn, grasped
+    it at 239.8 s; the home move then carried it and released over the plate. The LLM judged the
+    final image right.
+  - The same setup gave 64 vs 138 calls, so one run cannot rank prompt / view changes: 3-5 runs
+    per variant. The prompt's "~40 s of no progress" is too loose (the LLM took ~90 s).
+- Viewer scroll, tested in real Chrome with Playwright (a real run replayed live into a temp
+  folder; `experiments/agent/scripts/tests/`). Two bugs:
+  - follow turned off only on a wheel event, so scrollbar / PageUp / some trackpads got yanked
+    back. Now decided by where the scroll lands.
+  - opening a long run stopped 900 px short: Chrome's scroll anchoring moved the page as images
+    loaded above, which read as the user scrolling away. Off (`overflow-anchor: none`).
+  - All cases pass, entries arriving throughout.
+- Run 7 (same setup as 6): **3/3, 100 calls (~$0.14), 190 s wall, 21 turns**, no errors.
+  - Apple 11 calls.
+  - Orange 49: the first grasp slipped at once, retried by itself, in at 103 s.
+  - Banana 40: three grasps, two slipped.
+  - LLM slip: a 20 s `watch` (which does not wake on events) right before the banana landed,
+    ~20 s / ~15 calls late. Same setup, runs 5-7: 64 / 138 / 100 calls: Dream-1's grasp luck.
+- Dropped `watch` (user): it holds the LLM for the future with no early wake; `wait` covers the
+  future (wakes on events, with a picture), `review` the past. Tools now: reset, policy, wait,
+  stop, home, look, review, status. Offline tests pass.

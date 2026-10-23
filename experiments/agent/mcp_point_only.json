@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "t7-pick-place-objects": {
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "-m",
+        "dream_robot.agent.server",
+        "--env",
+        "robosuite/assorted_pick_place",
+        "--viewer",
+        "own",
+        "--score-log",
+        "scratch/agent/referee_t7.jsonl",
+        "--clips-dir",
+        "scratch/agent/clips",
+        "--horizon-seconds",
+        "300",
+        "--all-objects",
+        "--hide-tools",
+        "find_objects"
+      ],
+      "env": {
+        "MUJOCO_GL": "egl"
+      }
+    }
+  }
+}

@@ -27,8 +27,10 @@ import numpy as np
 import robosuite as suite
 import yaml
 from robosuite.environments.manipulation.lift import Lift
+from robosuite.utils.binding_utils import MjRenderContext
 from robosuite.utils.mjcf_utils import array_to_string, new_body, new_geom
 
+from dream_robot.core.camera import RGBD
 from dream_robot.core.env_api import FailureMode, StepResult
 from dream_robot.core.schema import (
     PANDA,
@@ -37,6 +39,35 @@ from dream_robot.core.schema import (
     build_observation,
     validate_action,
 )
+
+def _own_context(method):
+    """Make this render context's GL context current, then run ``method``.
+
+    robosuite never does, and every hard reset leaves the old sim's context for the
+    garbage collector. Its ``__del__`` then frees GL buffers by id in whatever
+    context is current -- the live one, whose buffers share those ids -- and
+    detaches it. Renders after a delayed free read garbage: NaN depth, empty masks.
+    Seen under pytest, where old sims live longer. Wrapping ``__del__`` frees the
+    right buffers; wrapping ``render`` re-attaches the live context. Both cheap.
+    """
+
+    def wrapped(self, *args, **kwargs):
+        try:
+            self.gl_ctx.make_current()
+        except Exception:
+            if method.__name__ != "__del__":
+                raise
+            # At interpreter exit EGL may already be gone; nothing left to protect.
+        return method(self, *args, **kwargs)
+
+    wrapped.__wrapped__ = method
+    return wrapped
+
+
+for _name in ("render", "__del__"):
+    if not hasattr(getattr(MjRenderContext, _name), "__wrapped__"):
+        setattr(MjRenderContext, _name, _own_context(getattr(MjRenderContext, _name)))
+
 
 TASK_YAML = Path(__file__).with_name("task.yaml")
 
@@ -197,6 +228,11 @@ class PickPlaceCube:
         return PANDA
 
     @property
+    def horizon_steps(self) -> int:
+        """Steps until the episode times out: the harness's clock, not a task fact."""
+        return self._cfg.horizon_steps
+
+    @property
     def control_hz(self) -> float:
         return float(self._cfg.control_hz)
 
@@ -248,6 +284,80 @@ class PickPlaceCube:
             width=w, height=h, camera_name=self._cfg.render_camera
         )
         return np.ascontiguousarray(frame[::-1])
+
+    def frame(self, camera: str, hw: tuple[int, int] = (512, 512)) -> np.ndarray:
+        """One RGB frame, rows top-down, from "scene" (the wide render camera) or a
+        canonical camera ("top", "wrist"), at any resolution. For recording: the
+        observation's own images stay at the dataset's size."""
+        if camera == "scene":
+            backend = self._cfg.render_camera
+        else:
+            backend = {v: k for k, v in self._cfg.camera_mapping.items()}[camera]
+        h, w = hw
+        frame = self._env.sim.render(width=w, height=h, camera_name=backend)
+        return np.ascontiguousarray(frame[::-1])
+
+    def rgbd(self, camera: str = "top", hw: tuple[int, int] = (256, 256)) -> RGBD:
+        """A calibrated depth frame from a canonical camera, for the executor.
+
+        Not part of the observation, and not privileged: a real RGB-D camera
+        gives exactly this. Rendered at ``hw``, independent of the dataset's
+        camera resolution -- perception may look closer than the policy does.
+        """
+        backend = {v: k for k, v in self._cfg.camera_mapping.items()}[camera]
+        sim = self._env.sim
+        h, w = hw
+        rgb, depth = sim.render(width=w, height=h, camera_name=backend, depth=True)
+        # Bottom-up (OpenGL) rows, as everywhere in this adapter; flip to top-down.
+        rgb, depth = rgb[::-1], depth[::-1]
+
+        # The depth buffer is non-linear in [0, 1]; MuJoCo's near/far planes
+        # (scaled by the model's extent) turn it into metres along the axis.
+        m = sim.model._model
+        near, far = m.vis.map.znear * m.stat.extent, m.vis.map.zfar * m.stat.extent
+        metres = near / (1.0 - depth * (1.0 - near / far))
+
+        cam_id = sim.model.camera_name2id(backend)
+        f = 0.5 * h / np.tan(np.deg2rad(m.cam_fovy[cam_id]) / 2)
+        K = np.array([[f, 0, w / 2], [0, f, h / 2], [0, 0, 1]])
+
+        # MuJoCo's camera looks down its own -z with y up; OpenCV's looks down
+        # +z with y down. Same x, flipped y and z.
+        T = np.eye(4)
+        T[:3, :3] = sim.data.cam_xmat[cam_id].reshape(3, 3) @ np.diag([1.0, -1.0, -1.0])
+        T[:3, 3] = sim.data.cam_xpos[cam_id]
+        return RGBD(rgb=np.ascontiguousarray(rgb), depth=metres, K=K, cam_to_world=T)
+
+    @property
+    def table_xy(self) -> tuple[float, float, float, float]:
+        """(x_min, x_max, y_min, y_max) of the table top, world frame: the workspace.
+
+        Not privileged: where the robot works is set up, not sensed, on a real
+        cell too. Everything *on* the table is for perception to find.
+        """
+        (cx, cy, _), (sx, sy, _) = self._env.table_offset, self._env.table_full_size
+        return (cx - sx / 2, cx + sx / 2, cy - sy / 2, cy + sy / 2)
+
+    def robot_mask(self, camera: str = "top", hw: tuple[int, int] = (256, 256)) -> np.ndarray:
+        """(H, W) bool: the pixels showing the robot itself, rows top-down as rgbd's.
+
+        Self-filtering, as a real cell does it: the arm's model and joint angles
+        are known, so where it appears in a calibrated camera is too. Says
+        nothing about anything else in the scene.
+        """
+        backend = {v: k for k, v in self._cfg.camera_mapping.items()}[camera]
+        sim = self._env.sim
+        h, w = hw
+        seg = sim.render(width=w, height=h, camera_name=backend, segmentation=True)[::-1]
+        m = sim.model._model
+        robot_roots = {
+            int(m.body_rootid[sim.model.body_name2id(r.robot_model.root_body)])
+            for r in self._env.robots
+        }
+        is_robot_geom = np.isin(m.body_rootid[m.geom_bodyid], list(robot_roots))
+        geom = seg[..., 1]
+        is_geom = seg[..., 0] == int(mujoco.mjtObj.mjOBJ_GEOM)
+        return is_geom & is_robot_geom[np.clip(geom, 0, m.ngeom - 1)]
 
     def close(self) -> None:
         self._env.close()

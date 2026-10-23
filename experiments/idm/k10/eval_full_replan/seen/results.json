@@ -1,0 +1,551 @@
+{
+  "task": "robosuite/instructed_pick_place[seen/template]",
+  "policy": "oracle_idm",
+  "episodes": 60,
+  "success_rate": 0.9833,
+  "successes": 59,
+  "cycle_time_seconds": 7.33,
+  "mean_steps": 226.6,
+  "failure_histogram": {
+    "no_grasp": 1
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "successes": "experiments/idm/k10/eval_full_replan/seen/videos/successes.mp4",
+    "failures": "experiments/idm/k10/eval_full_replan/seen/videos/failures.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1000,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 212
+    },
+    {
+      "seed": 1001,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 218
+    },
+    {
+      "seed": 1002,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 224
+    },
+    {
+      "seed": 1003,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 214
+    },
+    {
+      "seed": 1004,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 224
+    },
+    {
+      "seed": 1005,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 215
+    },
+    {
+      "seed": 1006,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 224
+    },
+    {
+      "seed": 1007,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 208
+    },
+    {
+      "seed": 1008,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 234
+    },
+    {
+      "seed": 1009,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 249
+    },
+    {
+      "seed": 1010,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1011,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 218
+    },
+    {
+      "seed": 1012,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 208
+    },
+    {
+      "seed": 1013,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 218
+    },
+    {
+      "seed": 1014,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 208
+    },
+    {
+      "seed": 1015,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 214
+    },
+    {
+      "seed": 1016,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 215
+    },
+    {
+      "seed": 1017,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 219
+    },
+    {
+      "seed": 1018,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 225
+    },
+    {
+      "seed": 1019,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 224
+    },
+    {
+      "seed": 1020,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 229
+    },
+    {
+      "seed": 1021,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 228
+    },
+    {
+      "seed": 1022,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 228
+    },
+    {
+      "seed": 1023,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 225
+    },
+    {
+      "seed": 1024,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 212
+    },
+    {
+      "seed": 1025,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 228
+    },
+    {
+      "seed": 1026,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 224
+    },
+    {
+      "seed": 1027,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 223
+    },
+    {
+      "seed": 1028,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 228
+    },
+    {
+      "seed": 1029,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 224
+    },
+    {
+      "seed": 1030,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 214
+    },
+    {
+      "seed": 1031,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 228
+    },
+    {
+      "seed": 1032,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 225
+    },
+    {
+      "seed": 1033,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 216
+    },
+    {
+      "seed": 1034,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 228
+    },
+    {
+      "seed": 1035,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 215
+    },
+    {
+      "seed": 1036,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 206
+    },
+    {
+      "seed": 1037,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 204
+    },
+    {
+      "seed": 1038,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 224
+    },
+    {
+      "seed": 1039,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 214
+    },
+    {
+      "seed": 1040,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 211
+    },
+    {
+      "seed": 1041,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 219
+    },
+    {
+      "seed": 1042,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 229
+    },
+    {
+      "seed": 1043,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 220
+    },
+    {
+      "seed": 1044,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 214
+    },
+    {
+      "seed": 1045,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 226
+    },
+    {
+      "seed": 1046,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 224
+    },
+    {
+      "seed": 1047,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 224
+    },
+    {
+      "seed": 1048,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 213
+    },
+    {
+      "seed": 1049,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 214
+    },
+    {
+      "seed": 1050,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 219
+    },
+    {
+      "seed": 1051,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 234
+    },
+    {
+      "seed": 1052,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 209
+    },
+    {
+      "seed": 1053,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 229
+    },
+    {
+      "seed": 1054,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 234
+    },
+    {
+      "seed": 1055,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 204
+    },
+    {
+      "seed": 1056,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 230
+    },
+    {
+      "seed": 1057,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 214
+    },
+    {
+      "seed": 1058,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 215
+    },
+    {
+      "seed": 1059,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 220
+    }
+  ],
+  "provenance": {
+    "checkpoint": "experiments/idm/k10/checkpoint.pt",
+    "split": "seen/template",
+    "t5": {
+      "success": {
+        "success": 59,
+        "episodes": 60
+      },
+      "instruction_failures": {
+        "other": 1
+      },
+      "by": {
+        "blue->left": {
+          "success": 4,
+          "episodes": 5
+        },
+        "blue->right": {
+          "success": 9,
+          "episodes": 9
+        },
+        "green->left": {
+          "success": 13,
+          "episodes": 13
+        },
+        "red->left": {
+          "success": 11,
+          "episodes": 11
+        },
+        "red->right": {
+          "success": 9,
+          "episodes": 9
+        },
+        "slot 0": {
+          "success": 38,
+          "episodes": 39
+        },
+        "slot 1": {
+          "success": 21,
+          "episodes": 21
+        },
+        "yellow->right": {
+          "success": 13,
+          "episodes": 13
+        }
+      }
+    },
+    "horizon": "full",
+    "clips_per_episode": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      3,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "replans_per_episode": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+}

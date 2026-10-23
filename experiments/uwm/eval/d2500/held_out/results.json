@@ -1,0 +1,120 @@
+{
+  "task": "robosuite/instructed_pick_place[held_out/template]",
+  "policy": "uwm",
+  "episodes": 10,
+  "success_rate": 0.1,
+  "successes": 1,
+  "cycle_time_seconds": 7.13,
+  "mean_steps": 561.4,
+  "failure_histogram": {
+    "no_grasp": 8,
+    "wrong_target": 1
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "successes": "/workspace/results/uwm_d2500/held_out/videos/successes.mp4",
+    "failures": "/workspace/results/uwm_d2500/held_out/videos/failures.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1000,
+      "success": true,
+      "failure_mode": "none",
+      "steps": 214
+    },
+    {
+      "seed": 1001,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1002,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1003,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1004,
+      "success": false,
+      "failure_mode": "wrong_target",
+      "steps": 600
+    },
+    {
+      "seed": 1005,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1006,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1007,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1008,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1009,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    }
+  ],
+  "provenance": {
+    "checkpoint": "localhost:6002",
+    "split": "held_out/template",
+    "t5": {
+      "success": {
+        "success": 1,
+        "episodes": 10
+      },
+      "instruction_failures": {
+        "other": 8,
+        "wrong_cube": 1
+      },
+      "by": {
+        "green->right": {
+          "success": 1,
+          "episodes": 4
+        },
+        "slot 0": {
+          "success": 0,
+          "episodes": 7
+        },
+        "slot 1": {
+          "success": 1,
+          "episodes": 3
+        },
+        "yellow->left": {
+          "success": 0,
+          "episodes": 6
+        }
+      }
+    },
+    "server": {
+      "ckpt": "/workspace/runs/d/model_2500.pt",
+      "chunk": 16,
+      "drop": false,
+      "registers": 24
+    },
+    "execute": 16,
+    "mean_call_seconds": 0.1621070242999645
+  }
+}

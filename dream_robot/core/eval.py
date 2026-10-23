@@ -209,14 +209,18 @@ def evaluate(
             success, failure_mode = False, FailureMode.TIMEOUT
 
             while max_steps is None or steps < max_steps:
+                action = policy(observation)
                 if recording:
                     # The wide view is for a human and never enters the dataset;
                     # the small panels are the policy's complete input. Seeing
                     # them together is how you notice the wrist camera went blind.
-                    episode_frames.append(
-                        observation_panel(env.render(), observation.images)
-                    )
-                action = policy(observation)
+                    # Filmed after the call, before the step: same state, and a
+                    # policy that aims at something (an IDM's imagined future)
+                    # has decided what by now -- shown as a third column.
+                    episode_frames.append(observation_panel(
+                        env.render(), observation.images,
+                        aim=getattr(policy, "aim_images", None),
+                    ))
                 result = env.step(action if perturb is None else perturb(action, rng))
                 observation = result.observation
                 steps += 1

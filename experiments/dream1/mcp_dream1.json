@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "dream-yam": {
+      "command": "envs/dream_yam/.venv/bin/python",
+      "args": [
+        "-m",
+        "dream_robot.sims.dream_yam.server",
+        "--task",
+        "Put the apple and the orange into the bowl, and the banana on the plate.",
+        "--max-calls",
+        "200",
+        "--score-log",
+        "scratch/dream1/referee.jsonl",
+        "--clips-dir",
+        "scratch/dream1/clips",
+        "--viewer"
+      ],
+      "env": {
+        "MUJOCO_GL": "egl"
+      }
+    }
+  }
+}

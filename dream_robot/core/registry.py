@@ -49,6 +49,12 @@ def _robosuite_instructed_pick_place(**kwargs):
     return InstructedPickPlace(**kwargs)
 
 
+def _robosuite_assorted_pick_place(**kwargs):
+    from dream_robot.sims.robosuite.tasks.assorted_pick_place.env import AssortedPickPlace
+
+    return AssortedPickPlace(**kwargs)
+
+
 def _robosuite_two_arm_lift(**kwargs):
     from dream_robot.sims.robosuite.tasks.two_arm_lift.env import TwoArmLiftTask
 
@@ -63,13 +69,30 @@ TASKS: dict[str, Callable] = {
     # T5. One entry; the eval splits are constructor arguments, not tasks:
     # pairs="held_out" and/or wording="paraphrase".
     "robosuite/instructed_pick_place": _robosuite_instructed_pick_place,
+    # T7. Assorted objects, one named; the agent stack's generalization test.
+    "robosuite/assorted_pick_place": _robosuite_assorted_pick_place,
 }
 
 
+def task_factory(name: str) -> Callable:
+    """The constructor for ``name``. ``robocasa/<Task>`` names any RoboCasa task, from
+    its own venv (envs/robocasa) -- there are hundreds, so they are not listed."""
+    if name in TASKS:
+        return TASKS[name]
+    if name.startswith("robocasa/"):
+        task = name.split("/", 1)[1]
+
+        def _robocasa(**kwargs):
+            from dream_robot.sims.robocasa.kitchen import Kitchen
+
+            return Kitchen(task, **kwargs)
+
+        return _robocasa
+    raise KeyError(f"unknown task {name!r}; registered: {sorted(TASKS)} or robocasa/<Task>")
+
+
 def make_env(name: str, **kwargs):
-    if name not in TASKS:
-        raise KeyError(f"unknown task {name!r}; registered: {sorted(TASKS)}")
-    return TASKS[name](**kwargs)
+    return task_factory(name)(**kwargs)
 
 
 # --- policies ---------------------------------------------------------------
@@ -124,12 +147,68 @@ def _smolvla(env, *, checkpoint: Path | None = None, device: str | None = None):
     return SmolVLAPolicy.load(env, checkpoint=Path(checkpoint), device=device)
 
 
+def _oracle_idm(env, *, checkpoint: Path | None = None, device: str | None = None,
+                execute: int | None = None, horizon: int | None | str = "k"):
+    # The IDM fed the expert's future, forked from the live sim (ROADMAP "Next:
+    # our own executor", step 1). Privileged: robosuite tasks with an expert only.
+    import importlib
+
+    import torch
+
+    from dream_robot.policies.idm.policy import IDMPolicy
+    from dream_robot.sims.robosuite.oracle import ExpertFuture
+
+    if checkpoint is None:
+        raise ValueError("policy 'oracle_idm' needs --checkpoint")
+    resolved = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    net, meta = IDMPolicy.load_net(Path(checkpoint), resolved)
+    task_package = type(env).__module__.rsplit(".", 1)[0]
+    expert = importlib.import_module(f"{task_package}.expert")
+    # horizon "k": one frame per imagination (the first runs); None: the whole
+    # remaining episode as one clip.
+    k = net.config.k
+    future = ExpertFuture(env, expert.ExpertPolicy(env), spacing=k,
+                          horizon=k if horizon == "k" else horizon)
+    return IDMPolicy(net, future, device=resolved, execute=execute, metadata=meta)
+
+
+def _cosmos_policy(env, *, checkpoint: Path | str | None = None, device: str | None = None,
+                   execute: int | None = None):
+    # The model runs in its own env as an action server (experiments/cosmos_policy/
+    # scripts/serve.py), which loaded the checkpoint; ``checkpoint`` here is its address.
+    from dream_robot.policies.cosmos_policy.policy import CosmosPolicy
+
+    return CosmosPolicy(env, address=str(checkpoint or "localhost:6000"), execute=execute)
+
+
+def _uwm(env, *, checkpoint: Path | str | None = None, device: str | None = None,
+         execute: int | None = None):
+    # Like cosmos_policy: the model runs in its own env as an action server
+    # (experiments/uwm/scripts/serve.py); ``checkpoint`` here is its address.
+    from dream_robot.policies.uwm.policy import UWMPolicy
+
+    return UWMPolicy(env, address=str(checkpoint or "localhost:6001"), execute=execute)
+
+
+def _vpp2(env, *, checkpoint: Path | str | None = None, device: str | None = None,
+          execute: int | None = None):
+    # VPP2 speaks the Cosmos server protocol (experiments/vpp/scripts/serve.py), so the
+    # Cosmos client plays its 32-action chunks; ``checkpoint`` here is its address.
+    from dream_robot.policies.cosmos_policy.policy import CosmosPolicy
+
+    return CosmosPolicy(env, address=str(checkpoint or "localhost:6002"), execute=execute)
+
+
 POLICIES: dict[str, Callable] = {
     "expert": _expert,
     "bc": _bc,
     "act": _act,
     "flow_matching": _flow_matching,
     "smolvla": _smolvla,
+    "oracle_idm": _oracle_idm,
+    "cosmos_policy": _cosmos_policy,
+    "uwm": _uwm,
+    "vpp2": _vpp2,
 }
 
 

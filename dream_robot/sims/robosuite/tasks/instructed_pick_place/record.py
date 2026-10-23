@@ -18,13 +18,16 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from dream_robot.core.dataset import episode_frames, open_dataset
 from dream_robot.core.record import JointNoise, record_episodes
 from dream_robot.core.video import camera_strip, write_video
-from dream_robot.sims.robosuite.tasks.instructed_pick_place.env import InstructedPickPlace
+from dream_robot.sims.robosuite.tasks.instructed_pick_place.env import (
+    InstructedPickPlace,
+    TaskConfig,
+)
 from dream_robot.sims.robosuite.tasks.instructed_pick_place.expert import (
     ExpertActor,
     ExpertPolicy,
@@ -69,13 +72,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seed-start", type=int, default=0)
     p.add_argument("--max-attempts", type=int, default=None)
     p.add_argument("--noise-sigma", type=float, default=0.0)
+    p.add_argument("--camera-size", type=int, default=None,
+                   help="square camera frames of this size instead of task.yaml's (128); "
+                        "same seeds give the same episodes, only the pictures differ")
     p.add_argument("--verify", action="store_true")
     p.add_argument("--verify-episode", type=int, default=0)
     p.add_argument("--verify-out", type=Path, default=DEFAULT_VIDEO)
     p.add_argument("--verify-scale", type=int, default=3)
     args = p.parse_args(argv)
 
-    env = InstructedPickPlace(pairs="seen", wording="template")
+    config = TaskConfig.load()
+    if args.camera_size:
+        config = replace(config, camera_hw=(args.camera_size, args.camera_size))
+    env = InstructedPickPlace(config, pairs="seen", wording="template")
     actor = _InstructionLog(ExpertPolicy(env))
     try:
         summary = record_episodes(
