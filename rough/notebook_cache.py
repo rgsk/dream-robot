@@ -3,8 +3,10 @@
 #     cache = NotebookCache("../artifacts/cache/<notebook>")
 #     @cache
 #     def train(steps): ...
-# Results are keyed by the arguments and the source of the function's whole cell,
-# so editing anything in that cell recomputes, and restoring a cell restores its results.
+# Results are keyed by the arguments and the source of the function's whole cell. A cell text
+# never run before recomputes; one that ran before, even restored after other edits, replays
+# that old result. So the one sure way to recompute is bumping the version (below).
+# Defining one prints whether this cell text has results stored: "cached" or "not cached".
 # Keep each cached function alone in its cell. Edits to other cells it uses don't recompute;
 # to recompute after those, bump its version: `@cache` is version 1, then `@cache(2)`, ...
 # So a version above 1 reads: this cell was rerun for changes in other cells, not its own.
@@ -25,6 +27,7 @@ from pathlib import Path
 from typing import TextIO, cast, overload
 
 from joblib import Memory
+from joblib.memory import MemorizedFunc
 
 VERSION = re.compile(r"(@\w+)\(\s*\d+\s*\)")  # `@cache(3)`, read as `@cache` when comparing cells
 
@@ -43,6 +46,7 @@ class Tee(io.StringIO):
 class NotebookCache:
     def __init__(self, path: str | Path) -> None:
         self.memory = Memory(location=path, verbose=0)
+        self.path = Path(path)
         self.versions = Path(path) / "versions.json"  # each cell's highest version so far
 
     def check_version(self, func: Callable, version: int) -> None:
@@ -90,7 +94,13 @@ class NotebookCache:
         captured.__code__ = captured.__code__.replace(co_filename=inspect.getfile(func))
         # func's name, and its source for joblib's change check
         functools.update_wrapper(captured, func)
-        cached = cast(Callable[P, tuple[R, str]], self.memory.cache(captured))
+        memorized = cast(MemorizedFunc, self.memory.cache(captured))
+        cached = cast(Callable[P, tuple[R, str]], memorized)
+        # this cell text's stored calls, one folder per set of arguments
+        folder = self.path / "joblib" / memorized.func_id
+        stored = sum((d / "output.pkl").exists() for d in folder.iterdir()) if folder.exists() else 0
+        name = func.__qualname__
+        print(f"{name}: cached, {stored} call(s) stored" if stored else f"{name}: not cached, will compute")
 
         @functools.wraps(func)
         def replay(*args: P.args, **kwargs: P.kwargs) -> R:
