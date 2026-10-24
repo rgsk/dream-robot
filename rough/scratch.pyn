@@ -8,3 +8,13 @@ for user in users:
     updated = (**user, sex="male")
     print(updated)
 # hi
+
+
+class User:
+    def __init__(self, name: str, age: int) -> None:
+        self.name = name
+        self.aged = age
+
+
+u = User(name="rahul", age=1)
+print(u.aged)
