@@ -1,0 +1,2 @@
+# merge split print outputs before git stores or compares a notebook (scripts/nb_merge_streams.py)
+*.ipynb filter=nbstreams
