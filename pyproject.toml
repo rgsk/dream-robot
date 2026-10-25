@@ -87,6 +87,9 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.format]
+quote-style = "single"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # "slow" = builds a MuJoCo scene and renders offscreen. `-m "not slow"`
