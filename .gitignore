@@ -44,7 +44,6 @@ MUJOCO_LOG.TXT
 
 # --- editor / OS ---
 .DS_Store
-.vscode/settings.json
 
 scratch/
 cache/
