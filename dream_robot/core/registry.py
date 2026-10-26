@@ -190,6 +190,15 @@ def _uwm(env, *, checkpoint: Path | str | None = None, device: str | None = None
     return UWMPolicy(env, address=str(checkpoint or "localhost:6001"), execute=execute)
 
 
+def _uva(env, *, checkpoint: Path | str | None = None, device: str | None = None,
+         execute: int | None = None):
+    # Like uwm: the model runs in its own env as an action server
+    # (experiments/uva/scripts/serve.py); ``checkpoint`` here is its address.
+    from dream_robot.policies.uva.policy import UVAPolicy
+
+    return UVAPolicy(env, address=str(checkpoint or "localhost:6003"), execute=execute)
+
+
 def _vpp2(env, *, checkpoint: Path | str | None = None, device: str | None = None,
           execute: int | None = None):
     # VPP2 speaks the Cosmos server protocol (experiments/vpp/scripts/serve.py), so the
@@ -208,6 +217,7 @@ POLICIES: dict[str, Callable] = {
     "oracle_idm": _oracle_idm,
     "cosmos_policy": _cosmos_policy,
     "uwm": _uwm,
+    "uva": _uva,
     "vpp2": _vpp2,
 }
 

@@ -70,9 +70,9 @@ class CosmosPolicy:
             self._queue = list(np.asarray(reply["actions"], np.float32)[: self.execute])
             if "future_top" in reply:   # Cosmos draws the future; action-only servers don't
                 shape = observation.images["top"].shape
-                self.aim_images = {
+                self.aim_images = {     # UVA (--imagine) draws the top camera only
                     name: np.frombuffer(reply[f"future_{name}"], np.uint8).reshape(shape)
-                    for name in ("top", "wrist")
+                    for name in ("top", "wrist") if f"future_{name}" in reply
                 }
         action = self._queue.pop(0)
         grip = self._env.embodiment.gripper_slice

@@ -12,6 +12,8 @@
     #   --policy uwm --checkpoint localhost:6001 --camera-size 224 [--execute 16]
     # VPP2: start experiments/vpp/scripts/serve.py, then
     #   --policy vpp2 --checkpoint localhost:6002 --camera-size 224 [--execute 16]
+    # UVA: start experiments/uva/scripts/serve.py [--imagine], then
+    #   --policy uva --checkpoint localhost:6003 --camera-size 224 [--execute 8]
 
 ``core.run`` reports the closed FailureMode histogram, where both halves of T5's
 failure are one bucket, WRONG_TARGET. This script drives the same
@@ -93,7 +95,7 @@ def breakdown(rows: list[dict]) -> dict:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--policy", choices=("smolvla", "flow_matching", "oracle_idm", "cosmos_policy", "uwm", "vpp2"), default="smolvla")
+    p.add_argument("--policy", choices=("smolvla", "flow_matching", "oracle_idm", "cosmos_policy", "uwm", "vpp2", "uva"), default="smolvla")
     p.add_argument("--checkpoint", type=Path, required=True,
                    help="cosmos_policy: the action server's host:port")
     p.add_argument("--pairs", choices=("seen", "held_out"), default="seen")

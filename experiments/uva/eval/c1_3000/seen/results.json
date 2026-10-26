@@ -1,0 +1,125 @@
+{
+  "task": "robosuite/instructed_pick_place[seen/template]",
+  "policy": "uva",
+  "episodes": 10,
+  "success_rate": 0.0,
+  "successes": 0,
+  "cycle_time_seconds": null,
+  "mean_steps": 600,
+  "failure_histogram": {
+    "no_grasp": 10
+  },
+  "control_hz": 30.0,
+  "videos": {
+    "failures": "experiments/uva/eval/c1_3000/seen/videos/failures.mp4"
+  },
+  "rollouts": [
+    {
+      "seed": 1000,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1001,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1002,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1003,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1004,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1005,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1006,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1007,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1008,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    },
+    {
+      "seed": 1009,
+      "success": false,
+      "failure_mode": "no_grasp",
+      "steps": 600
+    }
+  ],
+  "provenance": {
+    "checkpoint": "localhost:6003",
+    "split": "seen/template",
+    "t5": {
+      "success": {
+        "success": 0,
+        "episodes": 10
+      },
+      "instruction_failures": {
+        "other": 10
+      },
+      "by": {
+        "blue->left": {
+          "success": 0,
+          "episodes": 1
+        },
+        "blue->right": {
+          "success": 0,
+          "episodes": 1
+        },
+        "green->left": {
+          "success": 0,
+          "episodes": 1
+        },
+        "red->left": {
+          "success": 0,
+          "episodes": 1
+        },
+        "red->right": {
+          "success": 0,
+          "episodes": 1
+        },
+        "slot 0": {
+          "success": 0,
+          "episodes": 8
+        },
+        "slot 1": {
+          "success": 0,
+          "episodes": 2
+        },
+        "yellow->right": {
+          "success": 0,
+          "episodes": 5
+        }
+      }
+    }
+  }
+}
