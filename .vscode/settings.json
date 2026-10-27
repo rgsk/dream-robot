@@ -6,19 +6,19 @@
     // .py files and plain notebooks: no errors or warnings in the editor (syntax errors and faded unused
     // code still show); Alt+L checks them
     "byname.pythonDiagnostics": false,
-    "byname.diagnosticsOnSave": false,
+    "byname.diagnosticsOnSave": true,
     // any-check as you type: the checker reports with its rules on, ml-tools keeps the names that show white
     // (warnings). .pyn files and byname notebooks; pythonDiagnostics above keeps .py files quiet
-    "byname.checkerRules": {
-        "reportAny": "warning",
-        "reportUnknownVariableType": "warning",
-        "reportUnknownParameterType": "warning",
-        "reportUnknownMemberType": "warning"
-    },
-    "byname.diagnosticsFilter": "ml_tools.any_check:lsp_filter",
-    // and annotation-check's redundant / untyped annotations, live: the checker answers its probes in the
-    // same pass
-    "byname.diagnosticsReveals": "ml_tools.annotation_check:lsp_reveals",
+    // "byname.checkerRules": {
+    //     "reportAny": "warning",
+    //     "reportUnknownVariableType": "warning",
+    //     "reportUnknownParameterType": "warning",
+    //     "reportUnknownMemberType": "warning"
+    // },
+    // "byname.diagnosticsFilter": "ml_tools.any_check:lsp_filter",
+    // // and annotation-check's redundant / untyped annotations, live: the checker answers its probes in the
+    // // same pass
+    // "byname.diagnosticsReveals": "ml_tools.annotation_check:lsp_reveals",
     // --- Ruff: format and fix on save, all through byname (the project's ruff, pyproject.toml's [tool.ruff]) ---
     "[pyn]": {
         "editor.formatOnSave": true,
@@ -61,5 +61,6 @@
     "files.readonlyInclude": {
         "**/*.jsonl": true,
         "**/*.log": true,
-    }
+    },
+    "problems.visibility": true,
 }
