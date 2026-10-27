@@ -40,8 +40,6 @@ dependencies = [
     # --- rule 5: every run writes results.json and a video ---
     "imageio[ffmpeg]>=2.34",
     "ipywidgets>=8.1.9",
-    # .pyn files (rough/scratch.pyn and friends) import and run through it
-    "byname",
     "joblib>=1.6.0",
     "mcp>=1.20",
     # agent perception: splitting a colour mask into separate objects
@@ -51,7 +49,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    # the tools byname runs: basedpyright behind the editor and Alt+L, ruff for format and fixes on save
+    # basedpyright behind the editor, ruff for format and fixes on save
     "basedpyright>=1.40.1",
     "ruff>=0.16.2",
     "pytest>=8",
@@ -63,8 +61,6 @@ dev = [
     # cell -- outputs land but the spinner never resolves, needing a reload
     "ipykernel>=6.29,<7",
     "matplotlib>=3.9",
-    # any-check / annotation-check: names that show white, annotations that don't earn their place
-    "ml-tools",
 ]
 
 [build-system]
@@ -73,10 +69,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["dream_robot"]
-
-[tool.uv.sources]
-byname = { path = "../../projects/byname", editable = true }
-ml-tools = { path = "../../projects/ml-tools", editable = true }
 
 [tool.ruff]
 target-version = "py314"
@@ -97,9 +89,9 @@ testpaths = ["tests"]
 markers = ["slow: needs a simulator and offscreen rendering"]
 
 [tool.basedpyright]
-# read by the editor (byname lsp) and Alt+L (`byname tool basedpyright`) alike. No extraPaths: dream_robot
+# read by the editor. No extraPaths: dream_robot
 # resolves from the project root, as the editable install puts it on sys.path
 typeCheckingMode = "standard"
-# cloned simulators (envs/, 63k .py files), datasets and checkpoints: not checked, and byname mirrors each
-# as one link instead of walking it. Setting exclude drops pyright's defaults, so they're listed too
+# cloned simulators (envs/, 63k .py files), datasets and checkpoints: not checked.
+# Setting exclude drops pyright's defaults, so they're listed too
 exclude = ["envs", "data", "checkpoints", "**/node_modules", "**/__pycache__", "**/.*"]

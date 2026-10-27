@@ -1,43 +1,23 @@
 {
-    // --- type checking: byname (basedpyright behind it) for .pyn, .py and notebooks ---
+    // --- type checking: the basedpyright extension for .py and notebooks ---
     // no second language server from the Python extension (it would start Jedi, Pylance not being installed).
     // Checker and Ruff config live in pyproject.toml ([tool.basedpyright], [tool.ruff]), not here
     "python.languageServer": "None",
-    // .py files and plain notebooks: no errors or warnings in the editor (syntax errors and faded unused
-    // code still show); Alt+L checks them
-    "byname.pythonDiagnostics": false,
-    "byname.diagnosticsOnSave": true,
-    // any-check as you type: the checker reports with its rules on, ml-tools keeps the names that show white
-    // (warnings). .pyn files and byname notebooks; pythonDiagnostics above keeps .py files quiet
-    // "byname.checkerRules": {
-    //     "reportAny": "warning",
-    //     "reportUnknownVariableType": "warning",
-    //     "reportUnknownParameterType": "warning",
-    //     "reportUnknownMemberType": "warning"
-    // },
-    // "byname.diagnosticsFilter": "ml_tools.any_check:lsp_filter",
-    // // and annotation-check's redundant / untyped annotations, live: the checker answers its probes in the
-    // // same pass
-    // "byname.diagnosticsReveals": "ml_tools.annotation_check:lsp_reveals",
-    // --- Ruff: format and fix on save, all through byname (the project's ruff, pyproject.toml's [tool.ruff]) ---
-    "[pyn]": {
-        "editor.formatOnSave": true,
-        "editor.codeActionsOnSave": {
-            "source.fixAll": "explicit",
-            "source.organizeImports": "explicit"
-        }
-    },
+    // the project's basedpyright (dev group), not the one bundled with the extension
+    "basedpyright.importStrategy": "fromEnvironment",
+    "basedpyright.analysis.diagnosticMode": "openFilesOnly",
+    // --- Ruff: format and fix on save via ruffgrid (Ruff + grid packing; the project's .venv/bin/ruff,
+    // pyproject.toml's [tool.ruff]). Replaces the Ruff extension: don't run both ---
     "[python]": {
-        "editor.defaultFormatter": "rgsk.byname",
+        "editor.defaultFormatter": "rgsk.ruffgrid",
         "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
             "source.fixAll": "explicit",
             "source.organizeImports": "explicit"
         }
     },
-    // notebooks (byname or plain): notebook-wide, Ruff seeing the whole notebook (an import used in a
-    // later cell is used)
-    "notebook.defaultFormatter": "rgsk.byname",
+    // notebooks: notebook-wide, Ruff seeing the whole notebook (an import used in a later cell is used)
+    "notebook.defaultFormatter": "rgsk.ruffgrid",
     "notebook.formatOnSave.enabled": true,
     "notebook.codeActionsOnSave": {
         // "notebook.source.fixAll": "explicit",
@@ -56,8 +36,6 @@
         // ever shows what pytest itself writes out
         "-rP"
     ],
-    // re-discover on save so gutter ticks follow line shifts; the default is **/*.py, which skips .pyn
-    "python.testing.autoTestDiscoverOnSavePattern": "**/*.{py,pyn}",
     "files.readonlyInclude": {
         "**/*.jsonl": true,
         "**/*.log": true,
