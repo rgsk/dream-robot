@@ -204,24 +204,6 @@ wheels = [
 ]
 
 [[package]]
-name = "byname"
-version = "0.1.0"
-source = { editable = "../../projects/byname" }
-
-[package.metadata]
-requires-dist = [{ name = "basedpyright", marker = "extra == 'lsp'", specifier = ">=1.40.1" }]
-provides-extras = ["lsp"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "basedpyright", specifier = ">=1.40.1" },
-    { name = "ipykernel", specifier = ">=7.4.0" },
-    { name = "ipython", specifier = ">=9.17.1" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "ruff", specifier = ">=0.16.10" },
-]
-
-[[package]]
 name = "certifi"
 version = "2026.7.22"
 source = { registry = "https://pypi.org/simple" }
@@ -613,7 +595,7 @@ name = "dream-robot"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "byname" },
+    { name = "einops" },
     { name = "imageio", extra = ["ffmpeg"] },
     { name = "ipywidgets" },
     { name = "joblib" },
@@ -633,14 +615,14 @@ dev = [
     { name = "ipykernel" },
     { name = "jupytext" },
     { name = "matplotlib" },
-    { name = "ml-tools" },
     { name = "pytest" },
     { name = "ruff" },
+    { name = "ruffgrid" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "byname", editable = "../../projects/byname" },
+    { name = "einops", specifier = ">=0.8.2" },
     { name = "imageio", extras = ["ffmpeg"], specifier = ">=2.34" },
     { name = "ipywidgets", specifier = ">=8.1.9" },
     { name = "joblib", specifier = ">=1.6.0" },
@@ -660,9 +642,9 @@ dev = [
     { name = "ipykernel", specifier = ">=6.29,<7" },
     { name = "jupytext", specifier = ">=1.16" },
     { name = "matplotlib", specifier = ">=3.9" },
-    { name = "ml-tools", editable = "../../projects/ml-tools" },
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.16.2" },
+    { name = "ruffgrid", editable = "../../projects/ruffgrid" },
 ]
 
 [[package]]
@@ -1514,16 +1496,6 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/27/79/af73f2d6938b99f6284b411dd05d25711ae2a7a00c26fc86070efc768c28/mink-1.2.0.tar.gz", hash = "sha256:4e909fa6af682fa7a009d884c53ed7e0e28f942c15ec091d5029174f97c65208", size = 55343, upload-time = "2026-06-20T19:29:22.063Z" }
-
-[[package]]
-name = "ml-tools"
-version = "0.1.0"
-source = { editable = "../../projects/ml-tools" }
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "mpmath"
@@ -2676,6 +2648,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0a/e8/1e186578076aff7a80735f625005fde678412ab609cd323ed182eb7d6b87/ruff-0.17.1-py3-none-win32.whl", hash = "sha256:1de0030a8aa78c65c5fecb84b2e5c390ac684c0452875a02afc7c083d49a496a", size = 9895093, upload-time = "2026-10-15T15:23:10.582Z" },
     { url = "https://files.pythonhosted.org/packages/6a/2e/da3d9589bae8e8b58f3a48bd5bc0b980232fb14a83bf02c3be7660f87c1b/ruff-0.17.1-py3-none-win_amd64.whl", hash = "sha256:5df76f16580fab58d0f6c98a3ac254a4abceb7b2489b8b678335869cff77b3d7", size = 10097955, upload-time = "2026-10-15T15:23:13.309Z" },
     { url = "https://files.pythonhosted.org/packages/df/c9/0f2a4dea06a5e12c1191ee3d96b1e1233797d0d5e18f97a2b909a95a9836/ruff-0.17.1-py3-none-win_arm64.whl", hash = "sha256:42400b9a6ff8515ff27796f07f92e0195be011c86e81e381606f58ea5502fef4", size = 9853542, upload-time = "2026-10-15T15:23:16.05Z" },
+]
+
+[[package]]
+name = "ruffgrid"
+version = "0.1.0"
+source = { editable = "../../projects/ruffgrid" }
+dependencies = [
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "ruff", specifier = ">=0.16.10" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipykernel", specifier = ">=7.4.0" },
+    { name = "pytest", specifier = ">=8" },
 ]
 
 [[package]]

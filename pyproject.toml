@@ -45,6 +45,8 @@ dependencies = [
     # agent perception: splitting a colour mask into separate objects
     # (ndimage.label). Already pulled in by robosuite; declared because we import it.
     "scipy>=1.18.0",
+    # named reshapes (patches <-> frames in rough/uva.ipynb)
+    "einops>=0.8.2",
 ]
 
 [dependency-groups]
@@ -61,6 +63,8 @@ dev = [
     # cell -- outputs land but the spinner never resolves, needing a reload
     "ipykernel>=6.29,<7",
     "matplotlib>=3.9",
+    # format and fixes on save in VS Code (rgsk.ruffgrid) and `uv run ruffgrid save FILE` from the shell
+    "ruffgrid",
 ]
 
 [build-system]
@@ -95,3 +99,6 @@ typeCheckingMode = "standard"
 # cloned simulators (envs/, 63k .py files), datasets and checkpoints: not checked.
 # Setting exclude drops pyright's defaults, so they're listed too
 exclude = ["envs", "data", "checkpoints", "**/node_modules", "**/__pycache__", "**/.*"]
+
+[tool.uv.sources]
+ruffgrid = { path = "../../projects/ruffgrid", editable = true }
