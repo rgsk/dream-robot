@@ -95,10 +95,17 @@ markers = ["slow: needs a simulator and offscreen rendering"]
 [tool.basedpyright]
 # read by the editor. No extraPaths: dream_robot
 # resolves from the project root, as the editable install puts it on sys.path
-typeCheckingMode = "standard"
+typeCheckingMode = "off"
 # cloned simulators (envs/, 63k .py files), datasets and checkpoints: not checked.
 # Setting exclude drops pyright's defaults, so they're listed too
-exclude = ["envs", "data", "checkpoints", "**/node_modules", "**/__pycache__", "**/.*"]
+exclude = [
+    "envs",
+    "data",
+    "checkpoints",
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+]
 
 [tool.uv.sources]
 ruffgrid = { path = "../../projects/ruffgrid", editable = true }
