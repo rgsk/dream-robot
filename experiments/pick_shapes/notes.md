@@ -320,3 +320,30 @@ best.pt is now automatic (lowest val action, every 500 steps) in all head/predic
   auxiliary job even on the labelled clips. Adding 100 video clips: 11 -> 14, its internal future
   sharpens 0.52 -> 0.39. Inside noise; one seed each.
 - Every future-using arm lands at 11-14/60 vs now-only 6/60. Again val action ranks the opposite way.
+
+## Step 15 · 5 labelled (first 5 of the 10), best.pt (2026-11-06)
+| arm | best step | val action | internal future val/copy @best | 60 seeds |
+|---|---|---|---|---|
+| A5 (now only, 8k) | 2000 | 0.590 | - | 2/60 |
+| T5 (future target, 8k; cancelled ~5.5k) | 2000 | 0.620 | 0.67 | 4/60 |
+| T5+v100 (4k plan) | 2000 | 0.622 | 0.53 (0.41 by 4k) | 1/60 |
+- Floor: val action ~0.6 (10 labels: ~0.14). 5 demos are too few for any arm; no gap opens.
+- best.pt picks step 2000, before the video-trained future has formed (0.53 -> 0.41 later).
+- -> scarce-label gap has to be measured at 10 labels, with seed repeats.
+- Checkpoint rule check (10 labelled): final step 8000 vs best.pt -- T10 12/60 (best@4500: 11),
+  T10+v100 13/60 (best@4000: 14). Same within noise -> on the 8k cosine plan, either rule works;
+  last step needs no validation to pick. (Old 20k plan: A10 9 -> 7 -> 4 past the val minimum.)
+
+## Step 16 · training-seed repeats, 10 labelled, 8k plan, last step, 60 seeds each (2026-11-06)
+| arm | seed 0 | seed 1 | seed 2 | total /180 |
+|---|---|---|---|---|
+| A10 now only | 7 | 13 | 9 | **29 (16%)** |
+| T10 future target | 12 | 13 | 24 | **49 (27%)** |
+| T10 + 100 video clips | 13 | 16 | 15 | **44 (24%)** |
+- **The future target helps:** 29 -> 49 of 180 (z ~2.5, p ~0.01); beats or ties A on every seed.
+- **Extra video adds nothing on top** at this scale: 49 vs 44 (T10 seed 2 = 24 is the outlier).
+  T10+video beats A on all 3 seeds (z ~2.0) but not T10.
+- Training-seed spread is large (T10 12-24, A10 7-13): single runs can't rank arms; the earlier
+  one-seed "video adds +3" readings were noise.
+- Here the video clips are the same task, same apple, same kitchen as the labels -> they show
+  nothing the 10 labelled clips don't. Video should matter when it covers what labels don't.
