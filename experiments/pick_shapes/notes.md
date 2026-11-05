@@ -304,3 +304,19 @@ Predictors unchanged (step 5000): P10 = 10 clips, P25 = the 25 head clips, P75 =
 | B10 | 50 | 0.357 | 12/60 |
 | C10 | 100 | 0.319 | 13/60 |
 - Honest future: 6 -> 12; doubling video after that: 12 -> 13 (predictor better, lifts flat).
+
+## Step 14 · future as a training target (uwm_dino_target.py), 10 labelled, best.pt by val action
+One transformer: 4 seen frames -> actions + 64 internal future slots (t+16 DINOv2 features).
+Video-only rows train the future only; batches 64 labelled + 64 video. No predictor; plans like A.
+best.pt is now automatic (lowest val action, every 500 steps) in all head/predictor trainers.
+
+| arm | video-only clips | best step | val action | internal future val/copy | 60 seeds |
+|---|---|---|---|---|---|
+| A10 (ref, 8k@5000) | - | - | 0.118 | - | 6/60 |
+| T10 | 0 | 4500 | 0.137 | 0.52 | **11/60** |
+| T10+v100 | 100 | 4000 | 0.143 | 0.39 | **14/60** |
+| C10 (ref: predictor input, 100 clips) | 100 | - | 0.153 | (0.32) | 13/60 |
+- The future target alone (no video) already lifts 6 -> 11: imagining the future is a useful
+  auxiliary job even on the labelled clips. Adding 100 video clips: 11 -> 14, its internal future
+  sharpens 0.52 -> 0.39. Inside noise; one seed each.
+- Every future-using arm lands at 11-14/60 vs now-only 6/60. Again val action ranks the opposite way.

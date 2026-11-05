@@ -166,7 +166,7 @@ def main() -> None:
                     out['val_action_nofuture'] = loss(val_rows[:1024], m=model(), blank=True).item()
         return out
 
-    history, t0 = [], time.time()
+    history, t0, best = [], time.time(), (0, float('inf'))
     for step in range(1, args.steps + 1):
         rows = lab_rows[torch.randint(0, len(lab_rows), (args.batch,), device=dev)]
         with torch.autocast('cuda', dtype=torch.bfloat16):
@@ -185,12 +185,17 @@ def main() -> None:
             print(f"step {step:5d}  train action {la.item():.4f}  val action {v['val_action']:.4f}{nf}  "
                   f"first-action {v['first_action_mrad']:6.2f} mrad  lr {opt.param_groups[0]['lr']:.1e}  "
                   f"({time.time() - t0:.0f}s)", flush=True)
-        if step % args.save_every == 0 or step == args.steps:
-            torch.save({'state_dict': model().state_dict(), 'step': step, 'kind': 'dino',
+        blob = lambda: {'state_dict': model().state_dict(), 'step': step, 'kind': 'dino',
                         'args': vars(args) | {'out': str(args.out)},
-                        'split': {'val': val_eps.tolist(), 'labelled': lab_eps.tolist()}},
-                       args.out / f'step{step}.pt')
+                        'split': {'val': val_eps.tolist(), 'labelled': lab_eps.tolist()}}
+        if step % 500 == 0 and v['val_action'] < best[1]:   # best.pt: lowest val action so far
+            best = (step, v['val_action'])
+            torch.save(blob(), args.out / 'best.pt')
+        if step % args.save_every == 0 or step == args.steps:
+            torch.save(blob(), args.out / f'step{step}.pt')
     (args.out / 'history.json').write_text(json.dumps(history, indent=1))
+    (args.out / 'best.json').write_text(json.dumps({'step': best[0], 'val_action': best[1]}))
+    print(f'best val action {best[1]:.4f} at step {best[0]} -> best.pt')
     print(f'done in {(time.time() - t0) / 60:.1f} min -> {args.out}')
 
 

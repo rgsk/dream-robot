@@ -155,7 +155,7 @@ def main() -> None:
         copy_val = (z(PASTR[val_rows][:, -1]) - z(AFTER[val_rows])).pow(2).mean().item()
     print(f'copy baseline (future = now), val: {copy_val:.4f}', flush=True)
 
-    history, t0 = [], time.time()
+    history, t0, best = [], time.time(), (0, float('inf'))
     for step in range(1, args.steps + 1):
         rows = train_rows[torch.randint(0, len(train_rows), (args.batch,), device=dev)]
         with torch.autocast('cuda', dtype=torch.bfloat16):
@@ -173,6 +173,10 @@ def main() -> None:
             history.append({'step': step, 'train': lt.item(), 'val': lv, 'copy_val': copy_val})
             print(f'step {step:5d}  train {lt.item():.4f}  val {lv:.4f}  val/copy {lv / copy_val:.3f}  '
                   f"lr {opt.param_groups[0]['lr']:.1e}  ({time.time() - t0:.0f}s)", flush=True)
+        if step % 500 == 0 and lv < best[1]:              # best.pt: lowest val so far
+            best = (step, lv)
+            torch.save({'state_dict': model().state_dict(), 'step': step, 'kind': 'dino_pred',
+                        'args': vars(args) | {'out': str(args.out)}}, args.out / 'best.pt')
         if step % args.save_every == 0 or step == args.steps:
             torch.save({'state_dict': model().state_dict(), 'step': step, 'kind': 'dino_pred',
                         'args': vars(args) | {'out': str(args.out)},
@@ -180,6 +184,8 @@ def main() -> None:
                                   'more_video': n_more}},
                        args.out / f'step{step}.pt')
     (args.out / 'history.json').write_text(json.dumps(history, indent=1))
+    (args.out / 'best.json').write_text(json.dumps({'step': best[0], 'val_over_copy': best[1] / copy_val}))
+    print(f'best val/copy {best[1] / copy_val:.3f} at step {best[0]} -> best.pt', flush=True)
 
     # one held-out episode: now / predicted / real t+16, from the start of the reach to the lift
     ep_rows = np.flatnonzero(d['episode'] == val_eps[0])

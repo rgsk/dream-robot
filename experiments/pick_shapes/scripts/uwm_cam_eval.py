@@ -38,10 +38,14 @@ def run_seeds(checkpoint: str, seeds: list[int], video_seeds: set[int], n_exec: 
 
     torch.set_num_threads(2)                           # workers share the cores
     blob = torch.load(checkpoint, map_location=device, weights_only=False)
-    if blob.get('kind') == 'dino':                     # uwm_dino.py: frozen DINOv2 features in
+    if blob.get('kind') in ('dino', 'dino_target'):    # uwm_dino(_target).py: frozen DINOv2 features in
         from dino_cache import Dino, pool8
         from uwm_dino import DinoAct
-        net = DinoAct(torch.zeros(8), torch.ones(8)).to(device).eval()
+        if blob['kind'] == 'dino_target':              # future is an internal target: plans like A
+            from uwm_dino_target import DinoTarget
+            net = DinoTarget(torch.zeros(8), torch.ones(8), torch.zeros(384), torch.ones(384)).to(device).eval()
+        else:
+            net = DinoAct(torch.zeros(8), torch.ones(8)).to(device).eval()
         dino = Dino(device)
         # what one frame is remembered as: its 8x8 x 384 features [64, 384]
         see = lambda im: torch.from_numpy(pool8(dino(im[None])[0]).reshape(64, -1))
