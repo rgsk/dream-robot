@@ -9,6 +9,21 @@ Plan (stages):
    point at the far one, count right-object picks.
 3. Maybe language.
 
+Hypotheses from T5 (experiments/t5/notes.md), to check results against (2026-11-05):
+- **Stage 2 (pick the specified object), point not name.** T5 *was* "pick the specified object":
+  by colour it sat at chance (SmolVLA, FM + clean one-hot, FM + FiLM); by side (left/right) it
+  was obeyed every time. The spatial-softmax encoder keeps *where*, drops *what colour*. A
+  blurred dot at the target pixel is a "where" instruction, and a bright spot is exactly what
+  spatial softmax reads -> predict: obeyed like side, not chance like colour. If it lands at
+  chance, the T5 explanation was incomplete. Test: 2+ objects, dot on the far one, right-object rate.
+- **Verbs (pick + lift lid in one model, verb one-hot).** Pick and lift-the-lid are different
+  motions, not a subtle visual difference between two similar targets. The instruction that
+  worked in T5 was the one that changed where and how to move -> a verb input should be easier
+  than the colour word was. Risk: a scene where both verbs fit (pot with lid). First check there:
+  same start frame, swap the verb, does the plan change (T5's planned condition-swap, never run).
+- Order per new verb: specialist first (reference), then joint model, compare each verb to its
+  specialist. Grow the model only if the joint one underfits. Pick bar before lid: rung 2 ~80%+.
+
 Stage 1 as rungs (each ends in a video + number; next rung only when this one works):
 - 0: one apple mesh, test new positions (pipeline base case)
 - 1: some apple meshes, test other apple meshes
@@ -92,3 +107,83 @@ Demos: scripted top-down picker using sim state (data only, never drives at test
 - Mesh-attributable fails: apple_6 0/2, apple_10 0/2, apple_3 1/2. apple_10 and apple_3 are the
   narrowest (5.5-5.8 cm vs apple_0 6.8). apple_6 is the same size and look as apple_4 (2/2), so
   2 episodes per mesh can't separate colour / size / chance.
+
+## Step 6 · thesis test setup: camera-only UWM, video-only clips (2026-11-05)
+- Goal (user): the gripper policy improves from *any* video, ultimately the user's own hand used
+  as a 2-finger gripper. Rung 2 on hold. Approach 4, joint training (UWM): one transformer,
+  frame-t+16 head trained by all clips, action head by labelled ones only.
+- Camera-only from the start (user): wrist frames t-12/-8/-4/t at 128 px, no joints, no touch.
+  Arm action = change from q[t] over the 16-step chunk; run time adds q[t] back. Gripper = command.
+- Video-only episodes: action tokens pure noise (tau_a = 0), action loss masked.
+- scripts/uwm_cam.py (train, main venv; 1.45M params, ~23 s / 500 steps) and
+  scripts/uwm_cam_eval.py (kitchen, robocasa venv). Split fixed: 5 val eps, then labelled, then
+  video-only, from the same 30 rung-0 demos (same robot, actions dropped = mechanism test).
+- Bar: untrained net (says the average change) scores 24.9 mrad first-action error.
+- Smoke: 500 steps 23.7 mrad; eval runs end to end (0/1, as expected at 500 steps).
+- Plan: anchor l25_v0 (10k steps, save every 2.5k) vs FM joints+touch 16/20. Then the curve:
+  labelled 3 / 10 with and without the remaining train episodes as video-only.
+
+## Step 7 · camera-only anchor, 25 labelled, no video-only (2026-11-05)
+- l25_v0_s0 (flat lr 1e-3, no EMA, 10k): first-action 16.0 mrad, **1/20**. Wrist view shows the
+  hand tilting (brick wall in view) and losing the apple; joint changes drift with no anchor.
+  The one success (2005) needs that run's exact noise; alone it fails.
+- Added cosine lr (1e-3 -> 1e-5) + EMA 0.999 (validated and saved). l25_v0_s0_30k:
+  step 4000 already 10.6 mrad (flat run 26.8 there) -- the EMA alone did most of it.
+
+| step | first-action mrad | val action | kitchen |
+|---|---|---|---|
+| 5000 | ~9 | ~0.05 | 3/20 |
+| 15000 | ~5 | ~0.04 | **10/20** |
+| 20000 | 4.9 | 0.045 | **10/20** |
+| 30000 | 4.9 | 0.056 | 9/20 |
+
+- Plateau ~10/20 from 15k to 30k (joints+touch FM: 16/20); 9/20 at 30k as val action climbs.
+  Seeds 2006, 2012, 2013, 2015, 2017 fail at every checkpoint -> the anchor's hard set.
+- Anchor for the curve: **20k steps** (peak, before most of the memorising). Val action rises from ~10k (0.035 -> 0.048 at 26k)
+  while train action -> 0.002: memorising 25 demos.
+- Successes **over-lift** 13-48 cm (demos 15): no sense of "lifted enough". 2/40 knocked the apple
+  off the counter (-0.92 m).
+- **Unprompted recovery** (step20000/seed2001.mp4): grasp misses, hand rises, then re-descends
+  and re-centres on the apple, twice. No demo has a retry (failed picker episodes were dropped).
+  Camera-only acts on what it sees: "apple below, empty fingers" = approach again.
+
+## Step 8 · the video comparison, camera-only UWM, 20k steps (2026-11-05)
+| run | labelled | video-only | 10k | 20k |
+|---|---|---|---|---|
+| l25_v0_s0_30k | 25 | 0 | -- | 10/20 |
+| l10_v0_s0 | 10 | 0 | 3/20 | **6/20** |
+| l10_v15_s0 (unbalanced) | 10 | 15 | -- (5k: 0/20) | **0/20** |
+| l10_v15bal_s0 (balanced) | 10 | 15 | 2/20 (5k 2/20, 15k 2/20) | **5/20** |
+- l10_v0: val action climbs to 0.27 (l25: ~0.045) -- heavy memorising with 10 demos.
+- Fairness issue (user): random batches over all train rows -> in l10_v15 only ~26 of 64 rows
+  carry actions, 2.5x fewer action examples than l10_v0. A null result there is ambiguous.
+  Balanced version: each step 64 labelled rows (as l10_v0) + 64 video-only rows (frame loss only).
+- l10_v15 (unbalanced) 20k: **0/20**, apple never touched. Arm rises and swings toward the wall,
+  never approaches (step20000/seed2000.mp4). Training end: first-action 16.6 mrad (l10_v0: 6.5),
+  val action 0.109 (l10_v0: 0.276) -- lower val loss, far worse policy. Video-only rows hurt here,
+  confounded by 2.5x fewer action examples. Balanced run (l10_v15bal_s0) training.
+- Balanced (64 labelled + 64 video-only rows per step): action side matched l10_v0 (first-action
+  8.4 vs 8.0 mrad at 5k), val action ~10% lower at every step, but kitchen **5/20 vs 6/20**.
+  -> pixel-target video clips don't help here; the unbalanced 0/20 was action starvation.
+  Successes lift 20-27 cm (l10_v0: 13-51) -- maybe steadier, small sample. One seed each.
+- Parallel eval (5 workers, net on CPU): 266 s with training on the GPU, 248 s without -- no
+  faster than serial; each worker ~5x slower per episode. CPU-side contention, not profiled yet.
+- Next for the thesis: frozen-feature video target (DINOv2 features of frame t+16 instead of pixels).
+- Parallel eval fixed: the slowness was the net on CPU (43 s per rollout vs 3.5 s on GPU), not
+  contention. GPU workers need ~1.34 GB each -> 3 fit on the 8 GB 4060. **3 workers: 56 s for 20
+  seeds** (serial ~4-5 min). Defaults now --device cuda --workers 3; per-episode build_s / run_s logged.
+- Noise check from the timing runs: l25_v0_s0_30k step20000 with per-episode noise seeds = **7/20**
+  (serial-noise run: 10/20). Same weights, same seeds, only the plan noise differs -> a 20-episode
+  score moves by ~3 from sampling noise alone. Differences like 5 vs 6/20 are inside that.
+
+## Step 9 · re-score at 60 seeds (2000-2059), step 20000, per-episode noise seeds (2026-11-05)
+| run | labelled | video-only | 20 seeds | **60 seeds** |
+|---|---|---|---|---|
+| l25_v0_s0_30k | 25 | 0 | 10/20, 7/20 | **18/60 (30%)** |
+| l10_v0_s0 | 10 | 0 | 6/20 | **9/60 (15%)** |
+| l10_v15_s0 (unbalanced) | 10 | 15 | 0/20 | **0/60** |
+| l10_v15bal_s0 (balanced) | 10 | 15 | 5/20 | **4/60 (7%)** |
+- Halving labels (25 -> 10) halves success (30% -> 15%). Pixel-target video does not win it back;
+  balanced is *below* no-video (4 vs 9 of 60; ~1.7 binomial sd, suggestive not certain).
+- Pixel video target: no help, maybe mild harm. Next: frozen DINOv2 feature target (plan in chat),
+  then frozen-feature inputs (the full video-features thesis) if the target alone doesn't move it.

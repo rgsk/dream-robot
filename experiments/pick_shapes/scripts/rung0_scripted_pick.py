@@ -136,18 +136,42 @@ def episode(env: PickKitchen, skills: ArmSkills, seed: int, on_step=None) -> tup
     return bool(lifted > SUCCESS_LIFT and log['holding']), frames, log
 
 
+# Rung 2 training pool (objaverse): apple_0 + apple_11..22 (apple_1..10 are rung 1's test),
+# every orange, peach, lemon. Test categories tomato and onion stay out.
+def pool(name: str) -> list[str]:
+    if name == 'apple0':
+        return [APPLE]
+    if name == 'rung2':
+        obj = ASSETS / 'objaverse'
+        apples = [obj / 'apple' / f'apple_{i}' for i in [0, *range(11, 23)]]
+        others = [d for c in ('orange', 'peach', 'lemon') for d in sorted((obj / c).iterdir())]
+        return [str(d / 'model.xml') for d in apples + others if (d / 'model.xml').exists()]
+    raise ValueError(name)
+
+
+def mesh_for(meshes: list[str], seed: int) -> str:
+    # the mesh a seed gets: fixed per seed, so a recording and its check agree
+    return meshes[np.random.default_rng(seed).integers(len(meshes))]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('--seeds', type=int, nargs='+', default=[0, 1, 2, 3, 4])
+    ap.add_argument('--pool', default='apple0', help='apple0 (rung 0) or rung2')
+    ap.add_argument('--out', type=Path, default=OUT)
     args = ap.parse_args()
-    OUT.mkdir(parents=True, exist_ok=True)
+    args.out.mkdir(parents=True, exist_ok=True)
+    meshes = pool(args.pool)
     env = PickKitchen()
     skills = make_skills(env)
     wins = 0
     for seed in args.seeds:
+        env.obj_xml = mesh_for(meshes, seed)
         ok, frames, log = episode(env, skills, seed)
+        log['mesh'] = Path(env.obj_xml).parent.name
+        log['size_m'] = np.round(env._env.objects['obj'].size, 3).tolist()
         wins += ok
-        imageio.mimsave(OUT / f'seed{seed}.mp4', frames, fps=20)
+        imageio.mimsave(args.out / f'seed{seed}.mp4', frames, fps=20)
         print('OK ' if ok else 'FAIL', log, flush=True)
     print(f'{wins}/{len(args.seeds)} lifted')
 

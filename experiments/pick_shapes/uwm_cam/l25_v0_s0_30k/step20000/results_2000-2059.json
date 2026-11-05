@@ -1,0 +1,426 @@
+{
+ "wins": 18,
+ "n": 60,
+ "episodes": [
+  {
+   "seed": 2000,
+   "ok": false,
+   "lifted_m": -0.538,
+   "build_s": 5.8,
+   "run_s": 3.7
+  },
+  {
+   "seed": 2001,
+   "ok": true,
+   "lifted_m": 0.282,
+   "build_s": 5.9,
+   "run_s": 3.7
+  },
+  {
+   "seed": 2002,
+   "ok": true,
+   "lifted_m": 0.308,
+   "build_s": 5.9,
+   "run_s": 4.0
+  },
+  {
+   "seed": 2003,
+   "ok": true,
+   "lifted_m": 0.463,
+   "build_s": 3.7,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2004,
+   "ok": false,
+   "lifted_m": -0.919,
+   "build_s": 3.8,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2005,
+   "ok": false,
+   "lifted_m": -0.537,
+   "build_s": 3.7,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2006,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.7,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2007,
+   "ok": true,
+   "lifted_m": 0.386,
+   "build_s": 3.8,
+   "run_s": 3.4
+  },
+  {
+   "seed": 2008,
+   "ok": false,
+   "lifted_m": -0.538,
+   "build_s": 3.7,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2009,
+   "ok": false,
+   "lifted_m": 0.042,
+   "build_s": 3.6,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2010,
+   "ok": true,
+   "lifted_m": 0.369,
+   "build_s": 3.7,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2011,
+   "ok": false,
+   "lifted_m": -0.925,
+   "build_s": 3.7,
+   "run_s": 3.6
+  },
+  {
+   "seed": 2012,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 3.6
+  },
+  {
+   "seed": 2013,
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.7,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2014,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.7,
+   "run_s": 3.7
+  },
+  {
+   "seed": 2015,
+   "ok": false,
+   "lifted_m": -0.001,
+   "build_s": 3.5,
+   "run_s": 3.7
+  },
+  {
+   "seed": 2016,
+   "ok": true,
+   "lifted_m": 0.445,
+   "build_s": 3.6,
+   "run_s": 3.7
+  },
+  {
+   "seed": 2017,
+   "ok": false,
+   "lifted_m": -0.004,
+   "build_s": 3.6,
+   "run_s": 3.9
+  },
+  {
+   "seed": 2018,
+   "ok": false,
+   "lifted_m": -0.003,
+   "build_s": 3.5,
+   "run_s": 3.6
+  },
+  {
+   "seed": 2019,
+   "ok": true,
+   "lifted_m": 0.255,
+   "build_s": 3.5,
+   "run_s": 3.7
+  },
+  {
+   "seed": 2020,
+   "ok": false,
+   "lifted_m": -0.001,
+   "build_s": 3.5,
+   "run_s": 3.6
+  },
+  {
+   "seed": 2021,
+   "ok": false,
+   "lifted_m": 0.001,
+   "build_s": 3.5,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2022,
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.5,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2023,
+   "ok": false,
+   "lifted_m": -0.014,
+   "build_s": 3.5,
+   "run_s": 3.8
+  },
+  {
+   "seed": 2024,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 3.4
+  },
+  {
+   "seed": 2025,
+   "ok": false,
+   "lifted_m": -0.008,
+   "build_s": 3.4,
+   "run_s": 3.6
+  },
+  {
+   "seed": 2026,
+   "ok": true,
+   "lifted_m": 0.312,
+   "build_s": 3.4,
+   "run_s": 3.8
+  },
+  {
+   "seed": 2027,
+   "ok": false,
+   "lifted_m": -0.015,
+   "build_s": 3.4,
+   "run_s": 3.6
+  },
+  {
+   "seed": 2028,
+   "ok": false,
+   "lifted_m": -0.006,
+   "build_s": 3.4,
+   "run_s": 4.1
+  },
+  {
+   "seed": 2029,
+   "ok": false,
+   "lifted_m": -0.004,
+   "build_s": 3.3,
+   "run_s": 3.6
+  },
+  {
+   "seed": 2030,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 3.4
+  },
+  {
+   "seed": 2031,
+   "ok": true,
+   "lifted_m": 0.129,
+   "build_s": 3.4,
+   "run_s": 3.7
+  },
+  {
+   "seed": 2032,
+   "ok": true,
+   "lifted_m": 0.375,
+   "build_s": 3.5,
+   "run_s": 3.8
+  },
+  {
+   "seed": 2033,
+   "ok": false,
+   "lifted_m": -0.004,
+   "build_s": 3.4,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2034,
+   "ok": true,
+   "lifted_m": 0.326,
+   "build_s": 3.4,
+   "run_s": 3.8
+  },
+  {
+   "seed": 2035,
+   "ok": true,
+   "lifted_m": 0.364,
+   "build_s": 3.5,
+   "run_s": 3.8
+  },
+  {
+   "seed": 2036,
+   "ok": false,
+   "lifted_m": -0.012,
+   "build_s": 3.5,
+   "run_s": 3.9
+  },
+  {
+   "seed": 2037,
+   "ok": true,
+   "lifted_m": 0.404,
+   "build_s": 3.4,
+   "run_s": 3.8
+  },
+  {
+   "seed": 2038,
+   "ok": true,
+   "lifted_m": 0.402,
+   "build_s": 3.5,
+   "run_s": 3.8
+  },
+  {
+   "seed": 2039,
+   "ok": false,
+   "lifted_m": -0.007,
+   "build_s": 3.4,
+   "run_s": 3.8
+  },
+  {
+   "seed": 2040,
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 3.6
+  },
+  {
+   "seed": 2041,
+   "ok": false,
+   "lifted_m": -0.002,
+   "build_s": 3.4,
+   "run_s": 3.6
+  },
+  {
+   "seed": 2042,
+   "ok": true,
+   "lifted_m": 0.44,
+   "build_s": 3.5,
+   "run_s": 3.7
+  },
+  {
+   "seed": 2043,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 3.4
+  },
+  {
+   "seed": 2044,
+   "ok": false,
+   "lifted_m": 0.056,
+   "build_s": 3.4,
+   "run_s": 4.2
+  },
+  {
+   "seed": 2045,
+   "ok": true,
+   "lifted_m": 0.286,
+   "build_s": 3.4,
+   "run_s": 3.7
+  },
+  {
+   "seed": 2046,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2047,
+   "ok": false,
+   "lifted_m": -0.013,
+   "build_s": 3.4,
+   "run_s": 4.3
+  },
+  {
+   "seed": 2048,
+   "ok": false,
+   "lifted_m": -0.005,
+   "build_s": 3.5,
+   "run_s": 3.9
+  },
+  {
+   "seed": 2049,
+   "ok": true,
+   "lifted_m": 0.419,
+   "build_s": 3.5,
+   "run_s": 3.9
+  },
+  {
+   "seed": 2050,
+   "ok": false,
+   "lifted_m": -0.012,
+   "build_s": 3.4,
+   "run_s": 3.8
+  },
+  {
+   "seed": 2051,
+   "ok": true,
+   "lifted_m": 0.375,
+   "build_s": 3.4,
+   "run_s": 4.0
+  },
+  {
+   "seed": 2052,
+   "ok": false,
+   "lifted_m": -0.006,
+   "build_s": 3.5,
+   "run_s": 3.8
+  },
+  {
+   "seed": 2053,
+   "ok": false,
+   "lifted_m": -0.001,
+   "build_s": 3.4,
+   "run_s": 4.3
+  },
+  {
+   "seed": 2054,
+   "ok": false,
+   "lifted_m": -0.005,
+   "build_s": 3.4,
+   "run_s": 3.9
+  },
+  {
+   "seed": 2055,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 3.5
+  },
+  {
+   "seed": 2056,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 3.6
+  },
+  {
+   "seed": 2057,
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.5,
+   "run_s": 3.7
+  },
+  {
+   "seed": 2058,
+   "ok": false,
+   "lifted_m": -0.008,
+   "build_s": 3.5,
+   "run_s": 3.9
+  },
+  {
+   "seed": 2059,
+   "ok": false,
+   "lifted_m": -0.007,
+   "build_s": 3.3,
+   "run_s": 3.9
+  }
+ ]
+}

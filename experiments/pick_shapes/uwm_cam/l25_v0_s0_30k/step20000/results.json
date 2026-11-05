@@ -1,0 +1,106 @@
+{
+ "wins": 10,
+ "n": 20,
+ "episodes": [
+  {
+   "seed": 2000,
+   "ok": true,
+   "lifted_m": 0.357
+  },
+  {
+   "seed": 2001,
+   "ok": false,
+   "lifted_m": 0.003
+  },
+  {
+   "seed": 2002,
+   "ok": true,
+   "lifted_m": 0.174
+  },
+  {
+   "seed": 2003,
+   "ok": true,
+   "lifted_m": 0.476
+  },
+  {
+   "seed": 2004,
+   "ok": true,
+   "lifted_m": 0.431
+  },
+  {
+   "seed": 2005,
+   "ok": false,
+   "lifted_m": 0.047
+  },
+  {
+   "seed": 2006,
+   "ok": false,
+   "lifted_m": -0.0
+  },
+  {
+   "seed": 2007,
+   "ok": true,
+   "lifted_m": 0.389
+  },
+  {
+   "seed": 2008,
+   "ok": false,
+   "lifted_m": -0.924
+  },
+  {
+   "seed": 2009,
+   "ok": true,
+   "lifted_m": 0.135
+  },
+  {
+   "seed": 2010,
+   "ok": true,
+   "lifted_m": 0.189
+  },
+  {
+   "seed": 2011,
+   "ok": true,
+   "lifted_m": 0.434
+  },
+  {
+   "seed": 2012,
+   "ok": false,
+   "lifted_m": -0.0
+  },
+  {
+   "seed": 2013,
+   "ok": false,
+   "lifted_m": 0.0
+  },
+  {
+   "seed": 2014,
+   "ok": false,
+   "lifted_m": -0.003
+  },
+  {
+   "seed": 2015,
+   "ok": false,
+   "lifted_m": -0.002
+  },
+  {
+   "seed": 2016,
+   "ok": true,
+   "lifted_m": 0.449
+  },
+  {
+   "seed": 2017,
+   "ok": false,
+   "lifted_m": -0.006
+  },
+  {
+   "seed": 2018,
+   "ok": false,
+   "lifted_m": -0.003
+  },
+  {
+   "seed": 2019,
+   "ok": true,
+   "lifted_m": 0.351
+  }
+ ]
+}
