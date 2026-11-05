@@ -233,3 +233,74 @@ clips (labelled + video-only), then the head on labelled only with the predictor
 | A: now only | - | 9/60 | 42 |
 | B: now + future, predictor on 10 clips | 0.458 | 10/60 | 40 |
 | B+video: now + future, predictor on 10 + 15 video | 0.410 | **13/60** | **32** |
+
+## Step 11 · video-amount curve: 65 video-only clips (2026-11-05)
+- Recorded 50 more scripted picks (seeds 1100+, 50 kept of 54; drops = "down blocked" near the
+  robot base), used as video only: data/robocasa/pick_apple_rung0_video_n50 (raw + dino cache).
+- Predictor on 10 labelled + 65 video-only (6892 rows): val/copy **0.323** at 4-7.5k, flat
+  (0.325 at 8k; stopped). Curve at step 5000: **0 video 0.458 -> 15 video 0.410 -> 65 video 0.323**.
+  Overfits much later (train 0.11 at 5k vs 0.037 with 10 clips).
+- Head on the 65-clip predictor (step 5000; val min 0.164 at 4-5k, stopped ~7k): **14/60**,
+  never-touched 32. vs the 15-clip arm: 5 seeds both, 9 only 65, 8 only 15 -> same rate, different seeds.
+
+| video-only clips (predictor) | val/copy @5k | 60 seeds | never touched |
+|---|---|---|---|
+| A (no future) | - | 9/60 | 42 |
+| 0 (B) | 0.458 | 10/60 | 40 |
+| 15 | 0.410 | 13/60 | 32 |
+| 65 | 0.323 | 14/60 | 32 |
+- Predictor keeps improving with video (-30%); lifts creep 10 -> 13 -> 14 -- monotone but each step
+  inside noise, and 15 -> 65 clips barely moves lifts. Bottleneck now likely the head (10 labelled
+  demos, overfits by 5k), not the imagined future. One training seed per arm.
+
+## Step 12 · 25 labelled, predictors swapped, 8k-step cosine (2026-11-05)
+Head on all 25 labelled demos, --steps 8000 (lr fully decayed at the end), final checkpoint, 60 seeds.
+Predictors unchanged (step 5000): P10 = 10 clips, P25 = the 25 head clips, P75 = those + 50 video.
+
+| arm | val action @8k | no-future val | 60 seeds |
+|---|---|---|---|
+| A25 (now only) | 0.032 | - | **30/60** |
+| + P10 | 0.035 | 0.039 | 15/60 |
+| + P25 | 0.040 | 0.049 | 16/60 |
+| + P75 | 0.042 | 0.052 | 13/60 |
+- **A25 = 30/60: best camera-only result so far** (pixel UWM 25 labelled: 18/60). Frozen DINOv2
+  input + the short full cosine schedule.
+- **Adding the predicted future halves success at 25 labels**, whatever the predictor's quality.
+  Better predictor -> head leans on it more (no-future gap 0.004 -> 0.010) -> worse val.
+- Likely cause (the step-10 caveat): P25/P75 trained on the head's own clips, so in training the
+  head sees near-perfect futures (pred train err ~0.04-0.11) but rough ones at test (~0.3-0.4) ->
+  over-trust. P10 saw only 10 of the 25 -> rougher training futures -> least bad on val.
+- Correction: "never touched" counts in steps 10-11 used a regex that missed 3-decimal lifts.
+  Correct (|lift| < 2 cm among fails): A 48, B 47, B+15 44, B+65 45. All failures are flat; the
+  32-vs-42 "fewer whiffs" claim was wrong.
+- **No overlap** (user's fix): predictor on the 50 new clips only (none of the head's), 8k cosine,
+  final: val/copy 0.357 (best 0.337 at 4k). Head 25 labelled + its future, 8k: val 0.037
+  (no-future 0.044; A25 0.032). Kitchen **24/60** (overlapping predictors 13-16, A25 30/60).
+  -> overlap was most of the damage (13-16 -> 24). An honest future still doesn't beat
+  now-only at 25 labels (24 vs 30, ~1 sd).
+- Same, predictor step 5000 (val/copy 0.342) instead of 8000, head step 5000: val 0.042, kitchen
+  **19/60**. Honest-future heads: 19, 24 of 60 vs A25 30/60 -> at 25 labels the future as an
+  *input* doesn't help; checkpoint choice moves scores by ~5 (noise).
+
+## Step 13 · 10 labelled, honest future (predictor on the 50 new clips only), 8k recipe, step 5000
+| arm | val action @5k | 60 seeds |
+|---|---|---|
+| A10 (now only) | 0.118 | **6/60** |
+| B10 + honest future | 0.162 (no-future 0.198) | **12/60** |
+- **With scarce labels the honest predicted future doubles success** (6 -> 12); with 25 labels it
+  doesn't help (30 vs 19-24). Video helps exactly where labels are scarce. ~1.5 sd, one seed.
+- Val loss says the opposite (B worse) -- again not a kitchen predictor.
+- Earlier A10 on the 20k schedule at step 5000: 9/60 -> A10 range 6-9 across schedules.
+- C10: recorded 50 more clips (seeds 1200+, 50 of 53; pick_apple_rung0_video2_n50). Predictor on
+  all 100 new clips (none labelled), 8k: val/copy **0.328** (best 0.319 at 4k; 50-clip: 0.357).
+  Head 10 labelled, **4k-step** schedule, final: val 0.159 (no-future 0.193). Kitchen **10/60**
+  (B10, 50 clips, 8k@5000: 12/60). Schedule differs from A10/B10 -> not a clean third point.
+- C10 on B10's exact recipe (predictor step 4000, val/copy 0.319; head 8k@5000): val 0.153
+  (no-future 0.182), kitchen **13/60**; vs B10 9 seeds shared, 4 only C, 3 only B -> nearly the same policy.
+
+| 10 labelled, head 8k@5000 | video clips (predictor) | val/copy | 60 seeds |
+|---|---|---|---|
+| A10 | - | - | 6/60 |
+| B10 | 50 | 0.357 | 12/60 |
+| C10 | 100 | 0.319 | 13/60 |
+- Honest future: 6 -> 12; doubling video after that: 12 -> 13 (predictor better, lifts flat).

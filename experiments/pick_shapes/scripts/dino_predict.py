@@ -10,6 +10,9 @@ equals the copy baseline ("the future looks like now") and any gain over it is v
 
 Which clips it learns from is the whole point: --video 0 trains on the 10 labelled clips only
 (arm B); --video 15 adds the 15 video-only clips (arm B+video). Same split as uwm_cam / uwm_dino.
+--more-video adds clips from other recordings (raw only, cached by dino_cache.py), all video-only;
+--more-n uses its first n (the video-amount curve: 15, 15 + 25, 15 + 50, ...). Validation stays the
+same 5 held-out episodes of --data.
 
     .venv/bin/python experiments/pick_shapes/scripts/dino_predict.py --labelled 10 --video 0 \
         --out experiments/pick_shapes/uwm_dino/pred_l10_v0
@@ -92,6 +95,8 @@ def main() -> None:
     ap.add_argument('--data', default='pick_apple_rung0_n30')
     ap.add_argument('--labelled', type=int, default=10)
     ap.add_argument('--video', type=int, default=0, help='video-only clips, after the labelled ones')
+    ap.add_argument('--more-video', nargs='*', default=[], help='other dino-cached recordings, every clip video-only')
+    ap.add_argument('--more-n', type=int, help='use only the first n clips of each (default all)')
     ap.add_argument('--val', type=int, default=5)
     ap.add_argument('--steps', type=int, default=20000)
     ap.add_argument('--save-every', type=int, default=2500)
@@ -113,8 +118,17 @@ def main() -> None:
     vid_eps = order[args.val + args.labelled:args.val + args.labelled + args.video]
     assert len(lab_eps) == args.labelled and len(vid_eps) == args.video, 'not enough episodes'
     train = np.isin(d['episode'], np.concatenate([lab_eps, vid_eps]))
-
     grid = d['grid'].reshape(len(d['grid']), GRID * GRID, C).astype(np.float32)
+    n_more = 0
+    for name in args.more_video:       # appended after --data, episode ids shifted past the last
+        m = load(name)
+        keep = m['episode'] < (args.more_n if args.more_n is not None else m['episode'].max() + 1)
+        n = len(np.unique(m['episode'][keep]))
+        assert args.more_n is None or n == args.more_n, f'only {n} clips in {name}'
+        n_more += n
+        d['episode'] = np.concatenate([d['episode'], m['episode'][keep] + d['episode'].max() + 1])
+        grid = np.concatenate([grid, m['grid'][keep].reshape(-1, GRID * GRID, C).astype(np.float32)])
+        train = np.concatenate([train, np.ones(keep.sum(), bool)])
     f_mean = grid[train].mean((0, 1))
     f_std = grid[train].std((0, 1)) + 1e-4
     g = lambda x: torch.as_tensor(x, device=dev)
@@ -128,7 +142,8 @@ def main() -> None:
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.steps, eta_min=args.lr / 100)
     ema = AveragedModel(net, multi_avg_fn=get_ema_multi_avg_fn(args.ema)) if args.ema else None
     model = lambda: ema.module if ema is not None else net
-    print(f'{args.data}: predictor on labelled {len(lab_eps)} + video-only {len(vid_eps)} eps, val {len(val_eps)}; '
+    print(f'{args.data}: predictor on labelled {len(lab_eps)} + video-only {len(vid_eps)} + {n_more} more eps, '
+          f'val {len(val_eps)}; '
           f'{len(train_rows)} train rows; {sum(p.numel() for p in net.parameters()) / 1e6:.2f}M params', flush=True)
 
     def loss(rows: Tensor, m: nn.Module | None = None) -> Tensor:
@@ -161,7 +176,8 @@ def main() -> None:
         if step % args.save_every == 0 or step == args.steps:
             torch.save({'state_dict': model().state_dict(), 'step': step, 'kind': 'dino_pred',
                         'args': vars(args) | {'out': str(args.out)},
-                        'split': {'val': val_eps.tolist(), 'labelled': lab_eps.tolist(), 'video': vid_eps.tolist()}},
+                        'split': {'val': val_eps.tolist(), 'labelled': lab_eps.tolist(), 'video': vid_eps.tolist(),
+                                  'more_video': n_more}},
                        args.out / f'step{step}.pt')
     (args.out / 'history.json').write_text(json.dumps(history, indent=1))
 

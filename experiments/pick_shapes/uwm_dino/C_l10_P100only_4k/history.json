@@ -1,0 +1,65 @@
+[
+ {
+  "step": 1,
+  "action": 0.7096956968307495,
+  "val_action": 1.0166089534759521,
+  "first_action_mrad": 26.922360062599182,
+  "val_action_nofuture": 1.016852617263794
+ },
+ {
+  "step": 500,
+  "action": 0.020381448790431023,
+  "val_action": 0.7750241160392761,
+  "first_action_mrad": 26.32346749305725,
+  "val_action_nofuture": 0.7722638249397278
+ },
+ {
+  "step": 1000,
+  "action": 0.00752537464722991,
+  "val_action": 0.5046305656433105,
+  "first_action_mrad": 18.155522644519806,
+  "val_action_nofuture": 0.5099539160728455
+ },
+ {
+  "step": 1500,
+  "action": 0.004975463263690472,
+  "val_action": 0.31556713581085205,
+  "first_action_mrad": 12.428894639015198,
+  "val_action_nofuture": 0.3339136838912964
+ },
+ {
+  "step": 2000,
+  "action": 0.003216402605175972,
+  "val_action": 0.22087740898132324,
+  "first_action_mrad": 9.360088966786861,
+  "val_action_nofuture": 0.24889352917671204
+ },
+ {
+  "step": 2500,
+  "action": 0.0021810773760080338,
+  "val_action": 0.18156148493289948,
+  "first_action_mrad": 7.846193388104439,
+  "val_action_nofuture": 0.21284624934196472
+ },
+ {
+  "step": 3000,
+  "action": 0.001646421616896987,
+  "val_action": 0.16664598882198334,
+  "first_action_mrad": 7.01485900208354,
+  "val_action_nofuture": 0.19912128150463104
+ },
+ {
+  "step": 3500,
+  "action": 0.0017110345652326941,
+  "val_action": 0.16091309487819672,
+  "first_action_mrad": 6.508891005069017,
+  "val_action_nofuture": 0.19421234726905823
+ },
+ {
+  "step": 4000,
+  "action": 0.0015351750189438462,
+  "val_action": 0.15879860520362854,
+  "first_action_mrad": 6.237119436264038,
+  "val_action_nofuture": 0.19260841608047485
+ }
+]

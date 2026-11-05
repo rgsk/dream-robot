@@ -6,14 +6,16 @@
 Reads the raw npz recording (lossless frames, the same pixels the kitchen gives at run time),
 not the LeRobot copy (video-compressed). Writes data/robocasa/<name>_dino.npz:
 grid [N, 8, 8, 384] f16, cls [N, 384] f16, state, action, episode -- rows in the same order
-as uwm_cam.load(name) (checked), so its episode split carries over.
+as uwm_cam.load(name) (checked), so its episode split carries over. A recording with no LeRobot
+copy (extra video-only clips, e.g. pick_apple_rung0_video_n50) is read from its raw files alone.
 
 Also draws experiments/pick_shapes/dino/features.png: frames along one episode, each with
 (a) the first 3 PCA directions of its 16x16 features as RGB, (b) the same at 8x8, (c) cosine
 similarity of every 8x8 cell to the apple (reference =
 the 2x2 cells at rows 5-6, cols 3-4 just before the gripper closes: the apple, between the fingers).
 
-    .venv/bin/python experiments/pick_shapes/scripts/dino_cache.py --data pick_apple_rung0_n30
+    .venv/bin/python experiments/pick_shapes/scripts/dino_cache.py --data pick_apple_rung0_n30 --picture
+    .venv/bin/python experiments/pick_shapes/scripts/dino_cache.py --data pick_apple_rung0_video_n50
 """
 
 from __future__ import annotations
@@ -103,13 +105,19 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', default='pick_apple_rung0_n30')
     ap.add_argument('--device', default='cuda')
+    ap.add_argument('--picture', action='store_true', help='redraw dino/features.png from episode 0')
     args = ap.parse_args()
     raw = sorted((REPO / 'data/robocasa' / f'{args.data}_raw').glob('ep*.npz'))
     eps = [dict(np.load(f)) for f in raw]
-    ref = load(args.data)                                    # the order uwm_cam trains in
     state = np.concatenate([e['state'] for e in eps])
-    assert np.allclose(state, ref['state'], atol=1e-5), 'raw episodes not in LeRobot order'
-    print(f'{len(eps)} episodes, {len(state)} frames; order matches uwm_cam.load', flush=True)
+    if (REPO / 'data/robocasa' / args.data).exists():        # has a LeRobot copy: train in its order
+        ref = load(args.data)
+        assert np.allclose(state, ref['state'], atol=1e-5), 'raw episodes not in LeRobot order'
+        print(f'{len(eps)} episodes, {len(state)} frames; order matches uwm_cam.load', flush=True)
+    else:                                                    # raw only: file order
+        ref = {'state': state, 'action': np.concatenate([e['action'] for e in eps]),
+               'episode': np.concatenate([np.full(len(e['state']), i) for i, e in enumerate(eps)])}
+        print(f'{len(eps)} episodes, {len(state)} frames; raw only', flush=True)
 
     t0 = time.time()
     dino = Dino(args.device)
@@ -127,9 +135,10 @@ def main() -> None:
              cls=np.concatenate(cls).astype(np.float16),
              state=ref['state'], action=ref['action'], episode=ref['episode'])
     print('wrote', out.relative_to(REPO), flush=True)
-    fig = REPO / 'experiments/pick_shapes/dino/features.png'
-    picture(eps[0]['wrist'], patches[0], eps[0]['action'], fig)
-    print('wrote', fig.relative_to(REPO), flush=True)
+    if args.picture:
+        fig = REPO / 'experiments/pick_shapes/dino/features.png'
+        picture(eps[0]['wrist'], patches[0], eps[0]['action'], fig)
+        print('wrote', fig.relative_to(REPO), flush=True)
 
 
 if __name__ == '__main__':
