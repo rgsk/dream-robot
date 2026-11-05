@@ -1,0 +1,226 @@
+{
+ "wins": 12,
+ "n": 20,
+ "episodes": [
+  {
+   "seed": 2000,
+   "mesh": "apple_1",
+   "size_m": [
+    0.064,
+    0.061,
+    0.062
+   ],
+   "ok": true,
+   "lifted_m": 0.147
+  },
+  {
+   "seed": 2001,
+   "mesh": "apple_2",
+   "size_m": [
+    0.063,
+    0.068,
+    0.065
+   ],
+   "ok": true,
+   "lifted_m": 0.139
+  },
+  {
+   "seed": 2002,
+   "mesh": "apple_3",
+   "size_m": [
+    0.055,
+    0.057,
+    0.072
+   ],
+   "ok": true,
+   "lifted_m": 0.136
+  },
+  {
+   "seed": 2003,
+   "mesh": "apple_4",
+   "size_m": [
+    0.059,
+    0.063,
+    0.061
+   ],
+   "ok": true,
+   "lifted_m": 0.153
+  },
+  {
+   "seed": 2004,
+   "mesh": "apple_5",
+   "size_m": [
+    0.067,
+    0.068,
+    0.062
+   ],
+   "ok": true,
+   "lifted_m": 0.134
+  },
+  {
+   "seed": 2005,
+   "mesh": "apple_6",
+   "size_m": [
+    0.059,
+    0.063,
+    0.061
+   ],
+   "ok": false,
+   "lifted_m": -0.0
+  },
+  {
+   "seed": 2006,
+   "mesh": "apple_7",
+   "size_m": [
+    0.068,
+    0.068,
+    0.064
+   ],
+   "ok": false,
+   "lifted_m": 0.0
+  },
+  {
+   "seed": 2007,
+   "mesh": "apple_8",
+   "size_m": [
+    0.061,
+    0.064,
+    0.077
+   ],
+   "ok": true,
+   "lifted_m": 0.142
+  },
+  {
+   "seed": 2008,
+   "mesh": "apple_9",
+   "size_m": [
+    0.06,
+    0.063,
+    0.061
+   ],
+   "ok": false,
+   "lifted_m": 0.0
+  },
+  {
+   "seed": 2009,
+   "mesh": "apple_10",
+   "size_m": [
+    0.058,
+    0.057,
+    0.063
+   ],
+   "ok": false,
+   "lifted_m": 0.0
+  },
+  {
+   "seed": 2010,
+   "mesh": "apple_1",
+   "size_m": [
+    0.064,
+    0.061,
+    0.062
+   ],
+   "ok": true,
+   "lifted_m": 0.141
+  },
+  {
+   "seed": 2011,
+   "mesh": "apple_2",
+   "size_m": [
+    0.063,
+    0.068,
+    0.065
+   ],
+   "ok": false,
+   "lifted_m": 0.0
+  },
+  {
+   "seed": 2012,
+   "mesh": "apple_3",
+   "size_m": [
+    0.055,
+    0.057,
+    0.072
+   ],
+   "ok": false,
+   "lifted_m": -0.003
+  },
+  {
+   "seed": 2013,
+   "mesh": "apple_4",
+   "size_m": [
+    0.059,
+    0.063,
+    0.061
+   ],
+   "ok": true,
+   "lifted_m": 0.148
+  },
+  {
+   "seed": 2014,
+   "mesh": "apple_5",
+   "size_m": [
+    0.067,
+    0.068,
+    0.062
+   ],
+   "ok": true,
+   "lifted_m": 0.144
+  },
+  {
+   "seed": 2015,
+   "mesh": "apple_6",
+   "size_m": [
+    0.059,
+    0.063,
+    0.061
+   ],
+   "ok": false,
+   "lifted_m": 0.0
+  },
+  {
+   "seed": 2016,
+   "mesh": "apple_7",
+   "size_m": [
+    0.068,
+    0.068,
+    0.064
+   ],
+   "ok": true,
+   "lifted_m": 0.146
+  },
+  {
+   "seed": 2017,
+   "mesh": "apple_8",
+   "size_m": [
+    0.061,
+    0.064,
+    0.077
+   ],
+   "ok": true,
+   "lifted_m": 0.146
+  },
+  {
+   "seed": 2018,
+   "mesh": "apple_9",
+   "size_m": [
+    0.06,
+    0.063,
+    0.061
+   ],
+   "ok": true,
+   "lifted_m": 0.137
+  },
+  {
+   "seed": 2019,
+   "mesh": "apple_10",
+   "size_m": [
+    0.058,
+    0.057,
+    0.063
+   ],
+   "ok": false,
+   "lifted_m": -0.0
+  }
+ ]
+}

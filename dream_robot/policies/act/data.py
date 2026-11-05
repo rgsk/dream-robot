@@ -38,7 +38,9 @@ class ChunkDataset(Dataset):
         cameras: tuple[str, ...],
         episodes: list[int],
         chunk: int,
+        extra_state: tuple[str, ...] = (),
     ):
+        # extra_state: more per-frame columns (e.g. observation.touch) appended to the state
         if chunk < 1:
             raise ValueError(f"chunk must be >= 1, got {chunk}")
         self._dataset = open_dataset(repo_id, root)
@@ -46,7 +48,9 @@ class ChunkDataset(Dataset):
         self._chunk = chunk
         table = self._dataset.hf_dataset
         episode_index = np.asarray(table["episode_index"])
-        self.states = np.asarray(table[STATE_FEATURE], dtype=np.float32)
+        self.states = np.concatenate(
+            [np.asarray(table[k], dtype=np.float32) for k in (STATE_FEATURE, *extra_state)], axis=1
+        )
         self.actions = np.asarray(table[ACTION_FEATURE], dtype=np.float32)
 
         self._last = np.empty(len(episode_index), dtype=np.int64)

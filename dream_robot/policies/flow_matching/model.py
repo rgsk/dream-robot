@@ -89,6 +89,7 @@ class FlowConfig:
     sample_steps: int = 10
     condition_words: tuple[str, ...] = ()
     film: bool = False
+    extra_state: tuple[str, ...] = ()   # columns appended to the state, in order (touch)
 
     def to_dict(self) -> dict:
         return {
@@ -109,6 +110,7 @@ class FlowConfig:
             "sample_steps": self.sample_steps,
             "condition_words": list(self.condition_words),
             "film": self.film,
+            "extra_state": list(self.extra_state),
         }
 
     @classmethod
@@ -134,6 +136,7 @@ class FlowConfig:
             conv_channels=tuple(raw["conv_channels"]),
             condition_words=tuple(raw.get("condition_words", ())),
             film=bool(raw.get("film", False)),
+            extra_state=tuple(raw.get("extra_state", ())),
         )
 
     @property

@@ -35,7 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -96,6 +96,8 @@ class TrainConfig:
     workers: int = 4
     condition_words: tuple[str, ...] = ()
     film: bool = False
+    extra_state: tuple[str, ...] = ()
+    cameras: tuple[str, ...] = ()       # empty: every camera in the dataset
 
 
 def evaluate(net: FlowPolicyNet, loader, device: torch.device) -> tuple[float, float]:
@@ -150,15 +152,21 @@ def train(
     np.random.seed(config.seed)
 
     spec = read_spec(repo_id, root)
+    if config.cameras:
+        missing = set(config.cameras) - set(spec.cameras)
+        if missing:
+            raise ValueError(f"cameras {sorted(missing)} not in the dataset's {list(spec.cameras)}")
+        spec = replace(spec, cameras=tuple(config.cameras))
     train_episodes, val_episodes = split_episodes(
         spec.episodes, validation=config.validation_episodes, seed=config.seed
     )
     words = tuple(config.condition_words)
+    extra = tuple(config.extra_state)
     train_set = ConditionedChunks(
-        repo_id, root, spec.cameras, train_episodes, config.chunk, words=words
+        repo_id, root, spec.cameras, train_episodes, config.chunk, words=words, extra_state=extra
     )
     val_set = ConditionedChunks(
-        repo_id, root, spec.cameras, val_episodes, config.chunk, words=words
+        repo_id, root, spec.cameras, val_episodes, config.chunk, words=words, extra_state=extra
     )
     print(
         f"{spec.repo_id}: {spec.episodes} episodes, {spec.frames} frames, "
@@ -169,7 +177,7 @@ def train(
 
     stats = compute_stats(train_set, spec.cameras)
     model_config = FlowConfig(
-        state_dim=spec.state_dim,
+        state_dim=train_set.states.shape[1],
         action_dim=spec.action_dim,
         arm_joints=spec.embodiment.arm_joints,
         grippers=spec.embodiment.grippers,
@@ -178,6 +186,7 @@ def train(
         chunk=config.chunk,
         condition_words=words,
         film=config.film,
+        extra_state=extra,
     )
     if words:
         seen = np.unique(train_set.conditions[train_set.indices], axis=0)
@@ -315,6 +324,14 @@ def main(argv: list[str] | None = None) -> int:
         "--film", action="store_true",
         help="also feed the condition into every conv block of the camera encoders",
     )
+    p.add_argument(
+        "--cameras", nargs="*", default=[],
+        help="train on these cameras only, e.g. wrist (default: all in the dataset)",
+    )
+    p.add_argument(
+        "--extra-state", nargs="*", default=[],
+        help="dataset columns appended to the state, e.g. observation.touch",
+    )
     args = p.parse_args(argv)
 
     train(
@@ -334,6 +351,8 @@ def main(argv: list[str] | None = None) -> int:
             workers=args.workers,
             condition_words=tuple(args.condition_words),
             film=args.film,
+            extra_state=tuple(args.extra_state),
+            cameras=tuple(args.cameras),
         ),
         device=pick_device(args.device),
     )
