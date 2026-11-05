@@ -1,4 +1,4 @@
-"""Roll out a camera-only UWM checkpoint (uwm_cam.py) on rung 0's kitchen, unseen seeds.
+"""Roll out a camera-only checkpoint (uwm_cam.py, or uwm_dino.py) on rung 0's kitchen, unseen seeds.
 
 Runs in envs/robocasa/.venv. Every n_exec steps: the last wrist frames (t-12, -8, -4, t) ->
 a 16-step plan of arm changes + gripper; targets = q[t] + change, the first n_exec played.
@@ -38,7 +38,26 @@ def run_seeds(checkpoint: str, seeds: list[int], video_seeds: set[int], n_exec: 
 
     torch.set_num_threads(2)                           # workers share the cores
     blob = torch.load(checkpoint, map_location=device, weights_only=False)
-    net = UWMCam(torch.zeros(8), torch.ones(8)).to(device).eval()
+    if blob.get('kind') == 'dino':                     # uwm_dino.py: frozen DINOv2 features in
+        from dino_cache import Dino, pool8
+        from uwm_dino import DinoAct
+        net = DinoAct(torch.zeros(8), torch.ones(8)).to(device).eval()
+        dino = Dino(device)
+        # what one frame is remembered as: its 8x8 x 384 features [64, 384]
+        see = lambda im: torch.from_numpy(pool8(dino(im[None])[0]).reshape(64, -1))
+        to_input = lambda past: torch.stack(past)[None].to(device)                 # [1, 4, 64, 384]
+        future = lambda x: None
+        if blob['args'].get('predictor'):              # arm B: frozen predictor's t+16 guess, fp32 as trained
+            from dino_predict import Predictor
+            pred = Predictor(torch.zeros(384), torch.ones(384)).to(device).eval()
+            pred.load_state_dict(torch.load(blob['args']['predictor'], map_location=device,
+                                            weights_only=False)['state_dict'])
+            future = pred.predict
+    else:
+        future = lambda x: None
+        net = UWMCam(torch.zeros(8), torch.ones(8)).to(device).eval()
+        see = lambda im: to_128(im[None])[0]
+        to_input = lambda past: torch.from_numpy(np.stack(past))[None].to(device).float() / 255
     net.load_state_dict(blob['state_dict'])
     env = PickKitchen()
     results = []
@@ -48,20 +67,20 @@ def run_seeds(checkpoint: str, seeds: list[int], video_seeds: set[int], n_exec: 
         obs = env.reset(seed=seed)
         t1 = time.time()
         start = env.obj_pos()
-        seen = [to_128(obs.images['wrist'][None])[0]]  # every wrist frame since reset, newest last
+        seen = [see(obs.images['wrist'])]            # every wrist frame since reset, newest last
         plan, frames = [], []
         for _ in range(HORIZON):
             if not plan:
                 now = len(seen) - 1
-                ims = np.stack([seen[max(0, now + o)] for o in PAST])           # [4, 3, 128, 128]
-                x = torch.from_numpy(ims)[None].to(device).float() / 255
+                x = to_input([seen[max(0, now + o)] for o in PAST])
+                fut = future(x)
                 with torch.autocast(device, dtype=torch.bfloat16):
-                    chunk = net.plan(x)[0].float().cpu().numpy()                 # [16, 8]
+                    chunk = (net.plan(x, fut) if fut is not None else net.plan(x))[0].float().cpu().numpy()                 # [16, 8]
                 q = obs.state[:7]
                 targets = np.concatenate([q + chunk[:, :7], np.clip(chunk[:, 7:], 0, 1)], 1)
                 plan = list(targets[:n_exec].astype(np.float32))
             obs = env.step(plan.pop(0)).observation
-            seen.append(to_128(obs.images['wrist'][None])[0])
+            seen.append(see(obs.images['wrist']))
             if seed in video_seeds:
                 frames.append(np.concatenate([env.frame('scene', (256, 256)), env.frame('wrist', (256, 256))], 1))
         lifted = float(env.obj_pos()[2] - start[2])

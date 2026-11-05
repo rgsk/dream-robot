@@ -187,3 +187,49 @@ Demos: scripted top-down picker using sim state (data only, never drives at test
   balanced is *below* no-video (4 vs 9 of 60; ~1.7 binomial sd, suggestive not certain).
 - Pixel video target: no help, maybe mild harm. Next: frozen DINOv2 feature target (plan in chat),
   then frozen-feature inputs (the full video-features thesis) if the target alone doesn't move it.
+
+## Step 10 · variant B, step 1: frozen DINOv2 features cached (2026-11-05)
+Plan (B): wrist frames -> frozen DINOv2-S -> features NOW -> predictor -> features at t+16;
+action head reads NOW + predicted FUTURE -> 16-step chunk. Trained in sequence: predictor on all
+clips (labelled + video-only), then the head on labelled only with the predictor frozen. Arms at
+10 labelled: A (NOW only) / B (predictor on 10) / B+video (predictor on 10 + 15).
+- [dino_cache.py](scripts/dino_cache.py): raw lossless 256 px -> 224 -> 16x16x384 + CLS,
+  averaged 2x2 -> 8x8x384. 2715 frames in 7 s on the 4060 (model load 17 s first time).
+  Output data/robocasa/pick_apple_rung0_n30_dino.npz (136 MB, f16), same row order as uwm_cam.load.
+- Apple check ([features.png](dino/features.png)): the apple is its own PCA colour at 16x16 and
+  still at 8x8; similarity to the apple cell lights the apple and nothing else from step 18 on.
+  At step 0 (apple ~1 patch, far away) it is faint at 8x8. Acceptable to start; 16x16 is the fallback.
+- Arm A ([uwm_dino.py](scripts/uwm_dino.py), 10 labelled, 0.87M params, 6.4 min): train loss -> ~0,
+  val action min 0.114 at 5k, 0.138 at 20k; first-action 5.1 mrad (pixel l10: ~8).
+  Kitchen: step 10000 **5/20**; step 20000 **4/60** (pixel l10_v0: 9/60). 56/60 never move the apple.
+  Better first-action, worse kitchen -> memorising the 10 demos; fix A before building B on it.
+- Arm A by checkpoint, 60 seeds: step 5000 **9/60**, 10000 **7/60**, 20000 **4/60**. Never-touched
+  failures 42 -> 50 -> 56. Longer training = worse (trend, each step inside noise). At its best
+  checkpoint A ties pixel l10_v0 (9/60): frozen DINOv2 input neither helps nor hurts at 10 demos.
+- Predictor ([dino_predict.py](scripts/dino_predict.py), 10 labelled clips, 3.4M params): val/copy
+  best 0.454 at 3k (saved best: step 5000, 0.458); train 0.04 vs val 0.39 -> overfits. Picture
+  ([ep2](uwm_dino/pred_l10_v0/predicted_step5000_ep2.png)): apple's future position right, counter
+  blurred to an average. Stopped at 17.5k; second (B+video) predictor skipped for now.
+- Arm B (head reads now + predicted t+16, predictor frozen): val best at 5k (0.160; A 0.114).
+  Future replaced by "now" -> val ~12% worse at every step -> **the head uses the future**.
+  Kitchen step 5000: **5/20** (A step 5000 on the same seeds: 5/20; only 2 seeds shared).
+  Caveat: predictor near-perfect on its own train clips (0.04) vs 0.39 at test -> head may over-trust it.
+- Arm B step 5000, 60 seeds: **10/60** vs A step 5000 **9/60** (pixel l10_v0 9/60). Tie, inside noise.
+  Different policies: 4 seeds won by both, 6 only B, 5 only A. Never-touched 40 (A 42).
+  -> with a predictor trained on the same 10 clips, a predicted future doesn't add kitchen wins.
+- **B+video predictor** (10 labelled + 15 video-only clips): val/copy best **0.403** at 3k, **0.410**
+  at 5k (B's predictor: 0.454 / 0.458); lower at every step, train 0.061 vs 0.037 at 5k -> overfits
+  later. **Video without actions makes the imagined future ~11% better.** Stopped at ~6k.
+- B+video head (same as B, reads the 10+15 predictor's step 5000): val best 0.161 at 4-5k, then
+  rises (stopped ~11k); no-future still ~13% worse. Kitchen step 5000: **7/20** (A 5/20, B 5/20,
+  same seeds). Wins all 5 of B's seeds + 2011, 2013 (A's). Inside noise -> needs 60 seeds.
+- **B+video step 5000, 60 seeds: 13/60** (B 10/60, A 9/60, pixel l10_v0 9/60). Never-touched 32
+  (B 40, A 42). vs B: 7 seeds both, 6 only B+video, 3 only B (sign test on 6 vs 3: p~0.5).
+  Direction matches the predictor (video -> 11% better future -> more lifts, fewer whiffs), but
+  one training seed and +3/60 is not proof. Next: training-seed repeats and/or more video clips.
+
+| arm (10 labelled, step 5000) | predictor val/copy | 60 seeds | never touched |
+|---|---|---|---|
+| A: now only | - | 9/60 | 42 |
+| B: now + future, predictor on 10 clips | 0.458 | 10/60 | 40 |
+| B+video: now + future, predictor on 10 + 15 video | 0.410 | **13/60** | **32** |

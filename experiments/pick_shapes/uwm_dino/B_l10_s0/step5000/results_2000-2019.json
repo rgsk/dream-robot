@@ -1,0 +1,146 @@
+{
+ "wins": 5,
+ "n": 20,
+ "episodes": [
+  {
+   "seed": 2000,
+   "ok": true,
+   "lifted_m": 0.244,
+   "build_s": 6.0,
+   "run_s": 5.2
+  },
+  {
+   "seed": 2001,
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 6.0,
+   "run_s": 5.1
+  },
+  {
+   "seed": 2002,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 5.9,
+   "run_s": 5.1
+  },
+  {
+   "seed": 2003,
+   "ok": true,
+   "lifted_m": 0.285,
+   "build_s": 4.1,
+   "run_s": 5.0
+  },
+  {
+   "seed": 2004,
+   "ok": true,
+   "lifted_m": 0.191,
+   "build_s": 4.1,
+   "run_s": 5.2
+  },
+  {
+   "seed": 2005,
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.9,
+   "run_s": 4.8
+  },
+  {
+   "seed": 2006,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.9,
+   "run_s": 4.8
+  },
+  {
+   "seed": 2007,
+   "ok": false,
+   "lifted_m": 0.001,
+   "build_s": 3.8,
+   "run_s": 4.8
+  },
+  {
+   "seed": 2008,
+   "ok": false,
+   "lifted_m": -0.003,
+   "build_s": 3.5,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2009,
+   "ok": true,
+   "lifted_m": 0.206,
+   "build_s": 3.6,
+   "run_s": 5.0
+  },
+  {
+   "seed": 2010,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.6,
+   "run_s": 4.8
+  },
+  {
+   "seed": 2011,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2012,
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.7,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2013,
+   "ok": false,
+   "lifted_m": -0.001,
+   "build_s": 3.8,
+   "run_s": 4.7
+  },
+  {
+   "seed": 2014,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.6,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2015,
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.6,
+   "run_s": 4.7
+  },
+  {
+   "seed": 2016,
+   "ok": false,
+   "lifted_m": 0.087,
+   "build_s": 3.7,
+   "run_s": 4.8
+  },
+  {
+   "seed": 2017,
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.6,
+   "run_s": 4.7
+  },
+  {
+   "seed": 2018,
+   "ok": true,
+   "lifted_m": 0.108,
+   "build_s": 3.3,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2019,
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 4.5
+  }
+ ]
+}
