@@ -1,0 +1,486 @@
+{
+ "wins": 4,
+ "n": 60,
+ "episodes": [
+  {
+   "seed": 2000,
+   "mesh": "tomato_5",
+   "ok": false,
+   "lifted_m": 0.001,
+   "build_s": 5.0,
+   "run_s": 5.0
+  },
+  {
+   "seed": 2001,
+   "mesh": "tomato_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 5.3,
+   "run_s": 5.0
+  },
+  {
+   "seed": 2002,
+   "mesh": "onion_7",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 6.0,
+   "run_s": 5.1
+  },
+  {
+   "seed": 2003,
+   "mesh": "onion_6",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.5,
+   "run_s": 5.0
+  },
+  {
+   "seed": 2004,
+   "mesh": "onion_3",
+   "ok": false,
+   "lifted_m": 0.083,
+   "build_s": 3.5,
+   "run_s": 5.0
+  },
+  {
+   "seed": 2005,
+   "mesh": "tomato_6",
+   "ok": true,
+   "lifted_m": 0.165,
+   "build_s": 6.5,
+   "run_s": 8.0
+  },
+  {
+   "seed": 2006,
+   "mesh": "tomato_2",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.6,
+   "run_s": 4.9
+  },
+  {
+   "seed": 2007,
+   "mesh": "tomato_7",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 4.6,
+   "run_s": 4.8
+  },
+  {
+   "seed": 2008,
+   "mesh": "onion_2",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2009,
+   "mesh": "onion_8",
+   "ok": false,
+   "lifted_m": 0.06,
+   "build_s": 4.1,
+   "run_s": 4.7
+  },
+  {
+   "seed": 2010,
+   "mesh": "onion_6",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2011,
+   "mesh": "onion_3",
+   "ok": false,
+   "lifted_m": 0.003,
+   "build_s": 3.3,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2012,
+   "mesh": "onion_7",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 4.4,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2013,
+   "mesh": "onion_0",
+   "ok": false,
+   "lifted_m": -0.001,
+   "build_s": 3.3,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2014,
+   "mesh": "tomato_7",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 4.0,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2015,
+   "mesh": "onion_6",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2016,
+   "mesh": "tomato_3",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.7,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2017,
+   "mesh": "tomato_8",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 5.0
+  },
+  {
+   "seed": 2018,
+   "mesh": "tomato_6",
+   "ok": false,
+   "lifted_m": -0.002,
+   "build_s": 7.4,
+   "run_s": 9.4
+  },
+  {
+   "seed": 2019,
+   "mesh": "tomato_6",
+   "ok": false,
+   "lifted_m": -0.002,
+   "build_s": 7.1,
+   "run_s": 9.5
+  },
+  {
+   "seed": 2020,
+   "mesh": "tomato_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 4.1,
+   "run_s": 5.8
+  },
+  {
+   "seed": 2021,
+   "mesh": "onion_3",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2022,
+   "mesh": "onion_3",
+   "ok": false,
+   "lifted_m": 0.003,
+   "build_s": 3.3,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2023,
+   "mesh": "onion_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 4.3
+  },
+  {
+   "seed": 2024,
+   "mesh": "tomato_5",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.3,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2025,
+   "mesh": "tomato_8",
+   "ok": true,
+   "lifted_m": 0.117,
+   "build_s": 3.2,
+   "run_s": 4.8
+  },
+  {
+   "seed": 2026,
+   "mesh": "onion_7",
+   "ok": false,
+   "lifted_m": -0.017,
+   "build_s": 3.4,
+   "run_s": 4.7
+  },
+  {
+   "seed": 2027,
+   "mesh": "onion_10",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.8,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2028,
+   "mesh": "onion_1",
+   "ok": false,
+   "lifted_m": -0.002,
+   "build_s": 3.4,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2029,
+   "mesh": "tomato_5",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.2,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2030,
+   "mesh": "tomato_1",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2031,
+   "mesh": "onion_10",
+   "ok": false,
+   "lifted_m": 0.011,
+   "build_s": 3.7,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2032,
+   "mesh": "tomato_7",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 4.1,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2033,
+   "mesh": "onion_8",
+   "ok": true,
+   "lifted_m": 0.159,
+   "build_s": 3.7,
+   "run_s": 5.4
+  },
+  {
+   "seed": 2034,
+   "mesh": "tomato_8",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 5.1
+  },
+  {
+   "seed": 2035,
+   "mesh": "tomato_6",
+   "ok": false,
+   "lifted_m": 0.001,
+   "build_s": 6.4,
+   "run_s": 8.0
+  },
+  {
+   "seed": 2036,
+   "mesh": "tomato_3",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.9,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2037,
+   "mesh": "onion_7",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 4.7,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2038,
+   "mesh": "onion_9",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.6,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2039,
+   "mesh": "onion_7",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 4.0,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2040,
+   "mesh": "onion_10",
+   "ok": false,
+   "lifted_m": 0.015,
+   "build_s": 3.9,
+   "run_s": 4.7
+  },
+  {
+   "seed": 2041,
+   "mesh": "onion_0",
+   "ok": true,
+   "lifted_m": 0.136,
+   "build_s": 3.3,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2042,
+   "mesh": "onion_3",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2043,
+   "mesh": "tomato_8",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2044,
+   "mesh": "tomato_8",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2045,
+   "mesh": "tomato_0",
+   "ok": false,
+   "lifted_m": -0.002,
+   "build_s": 3.5,
+   "run_s": 4.9
+  },
+  {
+   "seed": 2046,
+   "mesh": "tomato_5",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2047,
+   "mesh": "tomato_6",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 6.4,
+   "run_s": 7.9
+  },
+  {
+   "seed": 2048,
+   "mesh": "onion_8",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.9,
+   "run_s": 5.4
+  },
+  {
+   "seed": 2049,
+   "mesh": "tomato_1",
+   "ok": false,
+   "lifted_m": 0.002,
+   "build_s": 3.7,
+   "run_s": 5.5
+  },
+  {
+   "seed": 2050,
+   "mesh": "tomato_7",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 4.2,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2051,
+   "mesh": "onion_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.6,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2052,
+   "mesh": "tomato_3",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.5,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2053,
+   "mesh": "tomato_0",
+   "ok": false,
+   "lifted_m": -0.002,
+   "build_s": 3.6,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2054,
+   "mesh": "onion_2",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.7,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2055,
+   "mesh": "tomato_2",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2056,
+   "mesh": "onion_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 4.3
+  },
+  {
+   "seed": 2057,
+   "mesh": "onion_2",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.6,
+   "run_s": 4.3
+  },
+  {
+   "seed": 2058,
+   "mesh": "onion_1",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2059,
+   "mesh": "tomato_7",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.7,
+   "run_s": 4.1
+  }
+ ]
+}

@@ -28,7 +28,7 @@ import mujoco
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
-from rung0_scripted_pick import PickKitchen, episode, make_skills  # noqa: E402
+from rung0_scripted_pick import PickKitchen, episode, make_skills, mesh_for, pool  # noqa: E402
 
 
 TOUCH_NAMES = ['finger_left', 'finger_right', 'fx', 'fy', 'fz', 'tx', 'ty', 'tz']
@@ -80,6 +80,7 @@ def main() -> None:
     ap.add_argument('--episodes', type=int, default=3)
     ap.add_argument('--seed-start', type=int, default=1000)  # clear of the 0-19 picker check
     ap.add_argument('--name', default='pick_apple_rung0')
+    ap.add_argument('--pool', default='apple0', help='objects (rung0_scripted_pick.pool): apple0, fruit, ...')
     args = ap.parse_args()
     raw = Path('data/robocasa') / f'{args.name}_n{args.episodes}_raw'
     if raw.exists():
@@ -87,6 +88,7 @@ def main() -> None:
     raw.mkdir(parents=True)
 
     env = PickKitchen()
+    meshes = pool(args.pool)
     skills = make_skills(env)
     touch = Touch(env)
     kept, log = 0, []
@@ -99,7 +101,9 @@ def main() -> None:
                 touch.reset()
             buf.append((obs, np.asarray(action, np.float32), touch.read()))
 
+        env.obj_xml = mesh_for(meshes, seed)
         ok, _, info = episode(env, skills, seed, on_step=on_step)
+        info['mesh'] = Path(env.obj_xml).parent.name
         info['steps'] = len(buf)
         # bump: largest finger force while the gripper is still commanded open (should be 0)
         info['bump_N'] = round(float(max((t[:2].max() for _, a, t in buf if a[7] > 0.5), default=0.0)), 2)

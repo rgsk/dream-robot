@@ -1,0 +1,486 @@
+{
+ "wins": 7,
+ "n": 60,
+ "episodes": [
+  {
+   "seed": 2000,
+   "mesh": "orange_5",
+   "ok": true,
+   "lifted_m": 0.17,
+   "build_s": 5.4,
+   "run_s": 5.0
+  },
+  {
+   "seed": 2001,
+   "mesh": "orange_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 5.5,
+   "run_s": 4.9
+  },
+  {
+   "seed": 2002,
+   "mesh": "lemon_4",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 5.4,
+   "run_s": 4.9
+  },
+  {
+   "seed": 2003,
+   "mesh": "lemon_2",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 4.1,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2004,
+   "mesh": "lemon_15",
+   "ok": false,
+   "lifted_m": 0.009,
+   "build_s": 3.6,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2005,
+   "mesh": "peach_0",
+   "ok": false,
+   "lifted_m": -0.002,
+   "build_s": 4.0,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2006,
+   "mesh": "orange_2",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.6,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2007,
+   "mesh": "peach_3",
+   "ok": false,
+   "lifted_m": 0.079,
+   "build_s": 3.4,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2008,
+   "mesh": "lemon_14",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.7,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2009,
+   "mesh": "lemon_6",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 4.0,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2010,
+   "mesh": "lemon_17",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 4.0,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2011,
+   "mesh": "lemon_15",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2012,
+   "mesh": "lemon_5",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 4.3
+  },
+  {
+   "seed": 2013,
+   "mesh": "peach_6",
+   "ok": false,
+   "lifted_m": 0.022,
+   "build_s": 3.3,
+   "run_s": 4.3
+  },
+  {
+   "seed": 2014,
+   "mesh": "peach_3",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.5,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2015,
+   "mesh": "lemon_2",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2016,
+   "mesh": "orange_4",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2017,
+   "mesh": "peach_4",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.6,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2018,
+   "mesh": "peach_0",
+   "ok": false,
+   "lifted_m": 0.075,
+   "build_s": 3.7,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2019,
+   "mesh": "peach_0",
+   "ok": false,
+   "lifted_m": 0.085,
+   "build_s": 3.5,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2020,
+   "mesh": "orange_10",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.7,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2021,
+   "mesh": "lemon_17",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 4.0,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2022,
+   "mesh": "lemon_15",
+   "ok": false,
+   "lifted_m": -0.002,
+   "build_s": 3.2,
+   "run_s": 4.3
+  },
+  {
+   "seed": 2023,
+   "mesh": "peach_6",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 4.3
+  },
+  {
+   "seed": 2024,
+   "mesh": "orange_5",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.2,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2025,
+   "mesh": "peach_5",
+   "ok": false,
+   "lifted_m": -0.001,
+   "build_s": 4.1,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2026,
+   "mesh": "lemon_4",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.3,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2027,
+   "mesh": "lemon_13",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.7,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2028,
+   "mesh": "lemon_10",
+   "ok": true,
+   "lifted_m": 0.209,
+   "build_s": 3.3,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2029,
+   "mesh": "orange_8",
+   "ok": false,
+   "lifted_m": -0.005,
+   "build_s": 3.7,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2030,
+   "mesh": "orange_11",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2031,
+   "mesh": "lemon_12",
+   "ok": true,
+   "lifted_m": 0.125,
+   "build_s": 3.2,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2032,
+   "mesh": "peach_3",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.3,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2033,
+   "mesh": "lemon_6",
+   "ok": true,
+   "lifted_m": 0.162,
+   "build_s": 3.4,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2034,
+   "mesh": "peach_6",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2035,
+   "mesh": "peach_0",
+   "ok": true,
+   "lifted_m": 0.155,
+   "build_s": 3.4,
+   "run_s": 4.8
+  },
+  {
+   "seed": 2036,
+   "mesh": "orange_3",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2037,
+   "mesh": "lemon_4",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 4.3
+  },
+  {
+   "seed": 2038,
+   "mesh": "lemon_8",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2039,
+   "mesh": "lemon_5",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2040,
+   "mesh": "lemon_12",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2041,
+   "mesh": "lemon_1",
+   "ok": false,
+   "lifted_m": -0.009,
+   "build_s": 4.0,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2042,
+   "mesh": "lemon_15",
+   "ok": false,
+   "lifted_m": 0.091,
+   "build_s": 3.5,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2043,
+   "mesh": "peach_4",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.5,
+   "run_s": 4.7
+  },
+  {
+   "seed": 2044,
+   "mesh": "peach_5",
+   "ok": false,
+   "lifted_m": 0.099,
+   "build_s": 4.3,
+   "run_s": 4.9
+  },
+  {
+   "seed": 2045,
+   "mesh": "orange_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2046,
+   "mesh": "orange_5",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2047,
+   "mesh": "peach_1",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.6,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2048,
+   "mesh": "lemon_7",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2049,
+   "mesh": "orange_12",
+   "ok": false,
+   "lifted_m": -0.006,
+   "build_s": 3.4,
+   "run_s": 4.7
+  },
+  {
+   "seed": 2050,
+   "mesh": "peach_2",
+   "ok": true,
+   "lifted_m": 0.285,
+   "build_s": 3.4,
+   "run_s": 4.7
+  },
+  {
+   "seed": 2051,
+   "mesh": "lemon_1",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.9,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2052,
+   "mesh": "orange_4",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 4.3
+  },
+  {
+   "seed": 2053,
+   "mesh": "orange_10",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.5,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2054,
+   "mesh": "lemon_14",
+   "ok": false,
+   "lifted_m": 0.001,
+   "build_s": 3.3,
+   "run_s": 4.5
+  },
+  {
+   "seed": 2055,
+   "mesh": "orange_13",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.5,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2056,
+   "mesh": "lemon_1",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.9,
+   "run_s": 4.6
+  },
+  {
+   "seed": 2057,
+   "mesh": "lemon_14",
+   "ok": false,
+   "lifted_m": -0.001,
+   "build_s": 3.5,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2058,
+   "mesh": "lemon_10",
+   "ok": false,
+   "lifted_m": 0.002,
+   "build_s": 3.3,
+   "run_s": 4.4
+  },
+  {
+   "seed": 2059,
+   "mesh": "peach_4",
+   "ok": true,
+   "lifted_m": 0.15,
+   "build_s": 3.4,
+   "run_s": 4.5
+  }
+ ]
+}

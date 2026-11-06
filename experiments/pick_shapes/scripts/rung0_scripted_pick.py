@@ -146,6 +146,12 @@ def pool(name: str) -> list[str]:
         apples = [obj / 'apple' / f'apple_{i}' for i in [0, *range(11, 23)]]
         others = [d for c in ('orange', 'peach', 'lemon') for d in sorted((obj / c).iterdir())]
         return [str(d / 'model.xml') for d in apples + others if (d / 'model.xml').exists()]
+    if name in ('fruit', 'unseen'):    # video-transfer test: fruit = video-only objects, unseen = neither
+        cats = ('orange', 'peach', 'lemon') if name == 'fruit' else ('tomato', 'onion')
+        # orange_1: trouble in the rung 2 check; orange_9, onion_4: RoboCasa can't place them (ValueError)
+        dirs = [d for c in cats for d in sorted((ASSETS / 'objaverse' / c).iterdir())
+                if d.name not in ('orange_1', 'orange_9', 'onion_4')]
+        return [str(d / 'model.xml') for d in dirs if (d / 'model.xml').exists()]
     raise ValueError(name)
 
 
@@ -157,7 +163,7 @@ def mesh_for(meshes: list[str], seed: int) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('--seeds', type=int, nargs='+', default=[0, 1, 2, 3, 4])
-    ap.add_argument('--pool', default='apple0', help='apple0 (rung 0) or rung2')
+    ap.add_argument('--pool', default='apple0', help='apple0 (rung 0), rung2, fruit, unseen')
     ap.add_argument('--out', type=Path, default=OUT)
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)

@@ -28,12 +28,12 @@ HORIZON, VIDEOS = 200, 5
 
 
 def run_seeds(checkpoint: str, seeds: list[int], video_seeds: set[int], n_exec: int, out: str,
-              device: str) -> list[dict]:
+              device: str, pool_name: str = 'apple0') -> list[dict]:
     # one worker: its own kitchen and net; out: one result dict per seed
     import imageio
     import torch
 
-    from rung0_scripted_pick import SUCCESS_LIFT, PickKitchen
+    from rung0_scripted_pick import SUCCESS_LIFT, PickKitchen, mesh_for, pool
     from uwm_cam import PAST, UWMCam, to_128
 
     torch.set_num_threads(2)                           # workers share the cores
@@ -64,11 +64,18 @@ def run_seeds(checkpoint: str, seeds: list[int], video_seeds: set[int], n_exec: 
         to_input = lambda past: torch.from_numpy(np.stack(past))[None].to(device).float() / 255
     net.load_state_dict(blob['state_dict'])
     env = PickKitchen()
+    meshes = pool(pool_name)
     results = []
     for seed in seeds:
         torch.manual_seed(seed)                        # plan noise tied to the episode
         t0 = time.time()
-        obs = env.reset(seed=seed)
+        env.obj_xml = mesh_for(meshes, seed)           # apple0: always the rung 0 apple
+        try:
+            obs = env.reset(seed=seed)
+        except ValueError as e:                        # RoboCasa couldn't place this mesh: log, don't lose the worker
+            results.append({'seed': seed, 'mesh': Path(env.obj_xml).parent.name, 'ok': None, 'error': repr(e)})
+            print(f'live SKIP {results[-1]}', flush=True)
+            continue
         t1 = time.time()
         start = env.obj_pos()
         seen = [see(obs.images['wrist'])]            # every wrist frame since reset, newest last
@@ -88,7 +95,8 @@ def run_seeds(checkpoint: str, seeds: list[int], video_seeds: set[int], n_exec: 
             if seed in video_seeds:
                 frames.append(np.concatenate([env.frame('scene', (256, 256)), env.frame('wrist', (256, 256))], 1))
         lifted = float(env.obj_pos()[2] - start[2])
-        results.append({'seed': seed, 'ok': lifted > SUCCESS_LIFT, 'lifted_m': round(lifted, 3),
+        results.append({'seed': seed, 'mesh': Path(env.obj_xml).parent.name, 'ok': lifted > SUCCESS_LIFT,
+                        'lifted_m': round(lifted, 3),
                         'build_s': round(t1 - t0, 1), 'run_s': round(time.time() - t1, 1)})
         # progress as it happens (workers finish out of order); the sorted summary prints at the end
         print(f"live {'OK  ' if results[-1]['ok'] else 'FAIL'} {results[-1]}", flush=True)
@@ -102,6 +110,7 @@ def main() -> None:
     ap.add_argument('checkpoint', type=Path)
     ap.add_argument('--seeds', default='2000-2019')
     ap.add_argument('--n-exec', type=int, default=8)
+    ap.add_argument('--pool', default='apple0', help='objects: apple0 (rung 0 apple), fruit, unseen, rung2')
     ap.add_argument('--videos', type=int, default=VIDEOS, help='first N seeds get a video')
     # Measured 2026-11-05 (20 seeds): net on CPU 43 s per rollout (25 plans x 10 denoising passes);
     # on GPU 3.5 s. Each GPU worker holds ~1.34 GB (CUDA context + EGL), so the 8 GB 4060 fits 3
@@ -111,18 +120,22 @@ def main() -> None:
     args = ap.parse_args()
     lo, hi = map(int, args.seeds.split('-'))
     seeds = list(range(lo, hi + 1))
-    out = args.checkpoint.with_suffix('')            # step10000.pt -> step10000/
+    out = args.checkpoint.with_suffix('')            # step10000.pt -> step10000/ (step10000_fruit/ ...)
+    if args.pool != 'apple0':
+        out = out.with_name(f'{out.name}_{args.pool}')
     out.mkdir(exist_ok=True)
     video_seeds = set(seeds[:args.videos])
     n = max(1, min(args.workers, len(seeds)))
     shares = [seeds[i::n] for i in range(n)]         # interleaved: each worker gets a similar mix
-    job = [(str(args.checkpoint), s, video_seeds, args.n_exec, str(out), args.device) for s in shares]
+    job = [(str(args.checkpoint), s, video_seeds, args.n_exec, str(out), args.device, args.pool) for s in shares]
     with mp.get_context('spawn').Pool(n) as pool:    # spawn: CUDA and MuJoCo don't survive fork
         results = sorted((r for part in pool.starmap(run_seeds, job) for r in part), key=lambda r: r['seed'])
     for r in results:
-        print('OK ' if r['ok'] else 'FAIL', r, flush=True)
+        print('SKIP' if r['ok'] is None else 'OK ' if r['ok'] else 'FAIL', r, flush=True)
+    skipped = [r for r in results if r['ok'] is None]
+    results = [r for r in results if r['ok'] is not None]
     wins = sum(r['ok'] for r in results)
-    print(f'{wins}/{len(results)} lifted')
+    print(f'{wins}/{len(results)} lifted' + (f' ({len(skipped)} seeds skipped: mesh not placeable)' if skipped else ''))
     # per seed range, so a 60-seed re-score doesn't overwrite the 20-seed one
     (out / f'results_{args.seeds}.json').write_text(json.dumps({'wins': wins, 'n': len(results), 'episodes': results}, indent=1))
 

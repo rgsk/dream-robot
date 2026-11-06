@@ -1,0 +1,14 @@
+{
+ "wins": 0,
+ "n": 1,
+ "episodes": [
+  {
+   "seed": 2000,
+   "mesh": "orange_5",
+   "ok": false,
+   "lifted_m": -0.007,
+   "build_s": 6.6,
+   "run_s": 5.4
+  }
+ ]
+}

@@ -1,0 +1,9 @@
+overnight fruit test, started Fri Nov  6 01:59:41 AM IST 2026
+experiments/pick_shapes/uwm_dino/T_l10_vfruit_s1/step8000.pt on fruit: 8/60 lifted   [lifted by type: lemon=4 peach=4 ]
+experiments/pick_shapes/uwm_dino/T_l10_v0_s1/step8000.pt on fruit: 8/60 lifted   [lifted by type: lemon=3 orange=1 peach=4 ]
+experiments/pick_shapes/uwm_dino/T_l10_vfruit_s2/step8000.pt on fruit: 9/60 lifted   [lifted by type: lemon=4 orange=2 peach=3 ]
+experiments/pick_shapes/uwm_dino/T_l10_v0_s2/step8000.pt on fruit: 7/60 lifted   [lifted by type: lemon=3 orange=1 peach=3 ]
+experiments/pick_shapes/uwm_dino/T_l10_vfruit/step8000.pt on apple0: 11/60 lifted   [lifted by type: apple=11 ]
+experiments/pick_shapes/uwm_dino/T_l10_v0/step8000.pt on unseen: 0/60 lifted   [lifted by type: ]
+experiments/pick_shapes/uwm_dino/T_l10_vfruit/step8000.pt on unseen: 4/60 lifted   [lifted by type: onion=2 tomato=2 ]
+finished Fri Nov  6 02:33:11 AM IST 2026; powering off

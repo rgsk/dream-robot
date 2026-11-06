@@ -347,3 +347,28 @@ best.pt is now automatic (lowest val action, every 500 steps) in all head/predic
   one-seed "video adds +3" readings were noise.
 - Here the video clips are the same task, same apple, same kitchen as the labels -> they show
   nothing the 10 labelled clips don't. Video should matter when it covers what labels don't.
+
+## Step 17 · video of new objects: apple labels, fruit video, fruit test (seed 0)
+- Pools: fruit = orange/peach/lemon (35 meshes; dropped orange_1, orange_9), unseen = tomato/onion
+  (17; dropped onion_4). orange_9, onion_4: RoboCasa can't place them (ValueError) -- mesh_check.
+  uwm_cam_eval now logs such seeds as SKIP instead of losing the worker.
+- Recorded 100 fruit picks (seeds 1300+, 100 of 107 kept), video only: pick_fruit_video_n100.
+
+| T10 (10 apple labels, 8k, last step), seed 0 | video-only clips | apple test | **fruit test** |
+|---|---|---|---|
+| T10 | none | 12/60 | **1/60** (peach 1) |
+| T10 + apple video | 100 apple | 13/60 | **3/60** (peach 3) |
+| T10 + fruit video | 100 fruit | - | **9/60** (lemon 3, orange 1, peach 5) |
+- Apple-only policies collapse on fruit (12 -> 1/60): a hard transfer, room for video to matter.
+- **Fruit video lifts fruit 1 -> 9/60** (apple video: 3). First case of video-without-actions
+  teaching the robot an object its labels never showed. One training seed.
+- Overnight (overnight_fruit.sh, results in uwm_dino/overnight_results.txt), fruit test, 60 seeds:
+
+| arm | seed 0 | seed 1 | seed 2 | total /180 |
+|---|---|---|---|---|
+| T10 (apple labels only) | 1 | 8 | 7 | **16 (9%)** |
+| T10 + fruit video | 9 | 8 | 9 | **26 (14%)** |
+- Seed 0's 1/60 was the outlier; seeds 1-2 tie or +2. Pooled 16 -> 26 (z ~1.6, p ~0.1): suggestive,
+  not established. Fruit video is steadier across seeds (8-9 vs 1-8).
+- Apple check (seed 0): T10 + fruit video 11/60 vs T10 12/60 -> no harm to the labelled task.
+- Unseen tomato/onion (seed 0): T10 0/60, T10 + fruit video 4/60 (2 onion, 2 tomato).
