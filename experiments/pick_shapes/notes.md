@@ -372,3 +372,17 @@ best.pt is now automatic (lowest val action, every 500 steps) in all head/predic
   not established. Fruit video is steadier across seeds (8-9 vs 1-8).
 - Apple check (seed 0): T10 + fruit video 11/60 vs T10 12/60 -> no harm to the labelled task.
 - Unseen tomato/onion (seed 0): T10 0/60, T10 + fruit video 4/60 (2 onion, 2 tomato).
+
+## Step 18 · fruit video amount: 300 clips (2026-11-06)
+- Recorded 200 more fruit picks (seeds 1500+, 200 of 217 kept): pick_fruit_video2_n200.
+  fruit300.sh: T10 + 300 fruit clips x 3 seeds, fruit test (results in uwm_dino/fruit300_results.txt).
+
+| fruit test, 10 apple labels | seed 0 | seed 1 | seed 2 | total /180 | lemon / orange / peach |
+|---|---|---|---|---|---|
+| T10, no fruit video | 1 | 8 | 7 | 16 (9%) | 6 / 2 / 8 |
+| + 100 fruit clips | 9 | 8 | 9 | 26 (14%) | 11 / 3 / 12 |
+| **+ 300 fruit clips** | **12** | **11** | **16** | **39 (22%)** | 13 / **11** / 15 |
+- **Monotone on every seed** (s0 1->9->12, s1 8->8->11, s2 7->9->16). 300 vs none: z ~3.4
+  (p < 0.001); 300 vs 100: z ~1.8. **More action-free video of the new objects -> better robot on them.**
+- Oranges (least apple-like) gain most: 2 -> 3 -> 11. Fruit at 22% nears the apple score with
+  the same 10 apple labels (T10 on apple: 27%).

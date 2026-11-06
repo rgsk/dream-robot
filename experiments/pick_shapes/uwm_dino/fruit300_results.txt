@@ -1,0 +1,7 @@
+fruit300, started Fri Nov  6 11:05:56 AM IST 2026
+record: kept 200 of 217 -> data/robocasa/pick_fruit_video2_n200_raw
+cache: wrote data/robocasa/pick_fruit_video2_n200_dino.npz
+experiments/pick_shapes/uwm_dino/T_l10_vfruit300_s0/step8000.pt on fruit: 12/60 lifted   [lifted by type: lemon=4 orange=3 peach=5 ]
+experiments/pick_shapes/uwm_dino/T_l10_vfruit300_s1/step8000.pt on fruit: 11/60 lifted   [lifted by type: lemon=5 orange=2 peach=4 ]
+experiments/pick_shapes/uwm_dino/T_l10_vfruit300_s2/step8000.pt on fruit: 16/60 lifted   [lifted by type: lemon=4 orange=6 peach=6 ]
+finished Fri Nov  6 11:58:14 AM IST 2026
