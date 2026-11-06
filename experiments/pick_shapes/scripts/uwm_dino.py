@@ -45,9 +45,11 @@ def load(name: str) -> dict[str, np.ndarray]:
 class DinoAct(nn.Module):
     """Features of the seen frames + noisy actions -> clean actions (std units)."""
 
-    def __init__(self, a_mean: Tensor, a_std: Tensor, layers: int = 4):
+    def __init__(self, a_mean: Tensor, a_std: Tensor, layers: int = 4, mixed: bool = False):
         super().__init__()
         self.register_buffer('a_mean', a_mean)
+        if mixed:                                       # dino+vjepa_last: tag for the V-JEPA slot
+            self.src = nn.Parameter(torch.zeros(D))
         self.register_buffer('a_std', a_std)
         self.feat_in = nn.Sequential(nn.LayerNorm(C), nn.Linear(C, D))
         self.act_in = nn.Linear(8, D)
@@ -65,7 +67,11 @@ class DinoAct(nn.Module):
         # feats [B, 4, 64, 384]; x_a [B, 16, 8]; tau_a [B]; future [B, 64, 384] (arm B) or None (A)
         # out: clean actions [B, 16, 8]
         when, where, role = self.when.weight, self.where.weight, self.role.weight
-        seen = self.feat_in(feats) + when[[o + 12 for o in PAST]][:, None] + where + role[0]
+        n = feats.shape[1]                              # 4 slots; 1 (vjepa_last); 5 (4 DINOv2 + V-JEPA newest)
+        offs = PAST + (0,) if n == len(PAST) + 1 else PAST[-n:]
+        seen = self.feat_in(feats) + when[[o + 12 for o in offs]][:, None] + where + role[0]
+        if n == len(PAST) + 1:                          # mark the V-JEPA tokens as a different source
+            seen = seen + torch.cat([torch.zeros_like(self.src).expand(n - 1, 1, -1), self.src[None, None]])
         act = self.act_in(x_a) + self.tau_in(tau_a[:, None])[:, None] + when[12:12 + CHUNK] + role[2]
         parts = [seen.flatten(1, 2), act]
         if future is not None:          # same feature path as the seen frames, at step t+16
@@ -87,6 +93,9 @@ class DinoAct(nn.Module):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', default='pick_apple_rung0_n30')
+    ap.add_argument('--features', default='dino', choices=('dino', 'vjepa', 'vjepa_last', 'dino+vjepa_last'),
+                    help='dino: 4 frames t-12..t (dino_cache); vjepa: 4 moments of one clip t-14..t '
+                         '(vjepa_cache); vjepa_last: only its newest moment')
     ap.add_argument('--labelled', type=int, default=10)
     ap.add_argument('--val', type=int, default=5)
     ap.add_argument('--steps', type=int, default=20000)
@@ -98,11 +107,12 @@ def main() -> None:
     ap.add_argument('--predictor', type=Path, help='dino_predict.py checkpoint -> arm B (reads its t+16 guess)')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
+    assert not (args.predictor and args.features != 'dino'), '--predictor is DINOv2-only'
     torch.manual_seed(args.seed)
     dev = 'cuda'
     args.out.mkdir(parents=True, exist_ok=True)
 
-    d = load(args.data)
+    d = load(args.data) if args.features.startswith('dino') else dict(np.load(REPO / 'data/robocasa' / f'{args.data}_vjepa.npz'))
     eps = np.unique(d['episode'])
     order = np.random.default_rng(0).permutation(eps)       # the split uwm_cam.py uses
     val_eps, lab_eps = order[:args.val], order[args.val:args.val + args.labelled]
@@ -113,7 +123,17 @@ def main() -> None:
     a_mean = chunk[lab][real[lab]].mean(0)
     a_std = chunk[lab][real[lab]].std(0) + 1e-4
     g = lambda x: torch.as_tensor(x, device=dev)
-    FE = g(d['grid'].reshape(len(d['grid']), GRID * GRID, C))                 # f16 [N, 64, 384]
+    if args.features == 'dino':
+        FE = g(d['grid'].reshape(len(d['grid']), GRID * GRID, C))             # f16 [N, 64, 384] per frame
+        seen_of = lambda rows: FE[PASTR[rows]].float()                        # 4 past frames -> [B, 4, 64, 384]
+    elif args.features == 'dino+vjepa_last':
+        FE = g(d['grid'].reshape(len(d['grid']), GRID * GRID, C))
+        VJ = g(np.load(REPO / 'data/robocasa' / f'{args.data}_vjepa.npz')['grid'][:, -1])  # [N, 64, 384]
+        seen_of = lambda rows: torch.cat([FE[PASTR[rows]], VJ[rows][:, None]], 1).float()  # [B, 5, 64, 384]
+    else:
+        FE = g(d['grid'])                                                     # f16 [N, 4, 64, 384] per row's clip
+        last = args.features == 'vjepa_last'
+        seen_of = lambda rows: FE[rows][:, -1:].float() if last else FE[rows].float()
     CH, RE = g((chunk - a_mean) / a_std), g(real)
     PASTR = g(rows_at(d['episode'], PAST))
     FUT = None
@@ -126,7 +146,7 @@ def main() -> None:
     lab_rows = g(np.flatnonzero(lab))
     val_rows = g(np.flatnonzero(np.isin(d['episode'], val_eps)))
 
-    net = DinoAct(g(a_mean), g(a_std)).to(dev)
+    net = DinoAct(g(a_mean), g(a_std), mixed=args.features == 'dino+vjepa_last').to(dev)
     opt = torch.optim.AdamW(net.parameters(), lr=args.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.steps, eta_min=args.lr / 100)
     ema = AveragedModel(net, multi_avg_fn=get_ema_multi_avg_fn(args.ema)) if args.ema else None
@@ -141,7 +161,7 @@ def main() -> None:
         return FE[PASTR[rows][:, -1]].float() if blank else FUT[rows].float()
 
     def loss(rows: Tensor, m: nn.Module | None = None, blank: bool = False) -> Tensor:
-        feats = FE[PASTR[rows]].float()
+        feats = seen_of(rows)
         clean = CH[rows]
         tau = torch.rand(len(rows), device=dev)
         x_a = (1 - tau[:, None, None]) * torch.randn_like(clean) + tau[:, None, None] * clean
@@ -156,7 +176,7 @@ def main() -> None:
             with torch.autocast('cuda', dtype=torch.bfloat16):
                 la = loss(val_rows[:1024], m=model())
                 r = val_rows[::4][:256]
-                plan = model().plan(FE[PASTR[r]].float(), future(r))
+                plan = model().plan(seen_of(r), future(r))
             truth = CH[r] * net.a_std + net.a_mean
             err = (plan[:, 0, :7] - truth[:, 0, :7]).abs().mean().item() * 1000
             out = {'val_action': la.item(), 'first_action_mrad': err}

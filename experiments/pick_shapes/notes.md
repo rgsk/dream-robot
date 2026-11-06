@@ -386,3 +386,36 @@ best.pt is now automatic (lowest val action, every 500 steps) in all head/predic
   (p < 0.001); 300 vs 100: z ~1.8. **More action-free video of the new objects -> better robot on them.**
 - Oranges (least apple-like) gain most: 2 -> 3 -> 11. Fruit at 22% nears the apple score with
   the same 10 apple labels (T10 on apple: 27%).
+- What fruit video fixes (sizes in uwm_dino/mesh_sizes.json; apple_0 = 6.8 cm round), 3 seeds pooled:
+
+| | apple-sized 6-7 cm | 7-8 cm | 8+ cm (long lemons) | peach | orange | lemon |
+|---|---|---|---|---|---|---|
+| T10 | 12% | 3% | 8% | 16% | 4% | 7% |
+| T10 + 300 fruit | 24% | 28% | 15% | 29% | 24% | 15% |
+- Gains at every size, incl. apple-sized fruit (12 -> 24%) -> not only size: appearance (colour /
+  texture) matters most -- oranges, apple-sized but orange, gain most (4 -> 24%; orange_0 0/6 -> 5/6).
+- Long lemons (8-9.4 cm, ~ the Panda's 8 cm max opening) stay lowest: likely partly physical
+  (grasp across the long axis can't close), not only perception.
+
+## Step 19 · encoder swap: V-JEPA 2 ViT-L instead of DINOv2 (A25, apple, seed 0, 8k, last step)
+- vjepa_cache.py: one clip per row, 8 frames t-14..t (step 2) -> 4 moments x 16x16 x 1024 ->
+  8x8, PCA -> 384 (keeps 97.3%). Same cell next moment cos 0.50 vs other cell 0.11 (layout OK).
+  26 clips/s cached; ~37 ms per clip live. Live vs cache: mean diff 1.7% (fp16, torch 2.7 vs 2.10).
+
+| A25 (now only) | input tokens | val action @8k (best) | 60 seeds |
+|---|---|---|---|
+| DINOv2, 4 frames | 256 | 0.032 | **30/60** |
+| V-JEPA, 4 moments of one clip | 256 | 0.051 (0.048) | 18/60 |
+| V-JEPA, newest moment only | 64 | 0.038 (0.036) | 15/60 |
+- **V-JEPA is worse here**, and on cached validation too -> not just the live-feature mismatch.
+  Newest-moment-only has better val than all 4 (fewer tokens, less memorising), similar kitchen.
+- Likely: V-JEPA patch features are coarser in space (2-frame tubelets, trained for video
+  understanding) and grasping needs precise "where"; DINOv2 is strong exactly there.
+- **DINOv2 4 frames + V-JEPA newest moment** (320 tokens, V-JEPA slot tagged): val action
+  **0.0285** (best 0.0275) -- lowest of any A25 -- but kitchen **24/60** (DINOv2 alone 30/60).
+  Better on cached validation, worse live: inside single-seed noise, or the V-JEPA live-vs-cache
+  mismatch (1.7%, fp16 across torch versions) bites at run time. Unresolved; one seed.
+- **fp32 V-JEPA** (cache + live): parity mean diff 0.0006 (fp16: 0.026); caching 8 clips/s.
+  DINOv2 + V-JEPA newest retrained: val 0.033 (best 0.032, = DINOv2 alone), kitchen **19/60**.
+  -> the mismatch was not hiding a gain. V-JEPA adds nothing over DINOv2 here (30 / 24 / 19 are
+  single seeds, but none beats DINOv2 alone). DINOv2 stays the encoder. fp32 worker ~3 GB: 2 fit.

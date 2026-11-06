@@ -45,11 +45,36 @@ def run_seeds(checkpoint: str, seeds: list[int], video_seeds: set[int], n_exec: 
             from uwm_dino_target import DinoTarget
             net = DinoTarget(torch.zeros(8), torch.ones(8), torch.zeros(384), torch.ones(384)).to(device).eval()
         else:
-            net = DinoAct(torch.zeros(8), torch.ones(8)).to(device).eval()
+            net = DinoAct(torch.zeros(8), torch.ones(8),
+                          mixed=blob['args'].get('features') == 'dino+vjepa_last').to(device).eval()
         dino = Dino(device)
-        # what one frame is remembered as: its 8x8 x 384 features [64, 384]
-        see = lambda im: torch.from_numpy(pool8(dino(im[None])[0]).reshape(64, -1))
-        to_input = lambda past: torch.stack(past)[None].to(device)                 # [1, 4, 64, 384]
+        feats_kind = blob['args'].get('features', 'dino')
+        if feats_kind == 'dino':
+            # what one frame is remembered as: its 8x8 x 384 features [64, 384]
+            see = lambda im: torch.from_numpy(pool8(dino(im[None])[0]).reshape(64, -1))
+            to_input = lambda seen, now: torch.stack([seen[max(0, now + o)] for o in PAST])[None].to(device)
+        elif feats_kind == 'dino+vjepa_last':          # DINOv2 per frame + V-JEPA newest moment per plan
+            from vjepa_cache import CLIP, VJepa, project
+            vj = VJepa(device)
+            pca = np.load(Path(__file__).resolve().parents[3] / 'data/robocasa' / f"{blob['args']['data']}_vjepa.npz")
+            mean, comp = pca['pca_mean'], pca['pca_comp']
+            see = lambda im: (im, torch.from_numpy(pool8(dino(im[None])[0]).reshape(64, -1)))
+            def to_input(seen, now):
+                d4 = torch.stack([seen[max(0, now + o)][1] for o in PAST])                # [4, 64, 384]
+                clip = np.stack([seen[max(0, now + o)][0] for o in CLIP])[None]
+                v = torch.from_numpy(project(vj(clip), mean, comp))[0, -1:].float()       # [1, 64, 384]
+                return torch.cat([d4, v])[None].to(device)
+        else:                                          # vjepa(_last): one clip t-14..t per plan
+            from vjepa_cache import CLIP, VJepa, project
+            del dino
+            vj = VJepa(device)
+            pca = np.load(Path(__file__).resolve().parents[3] / 'data/robocasa' / f"{blob['args']['data']}_vjepa.npz")
+            mean, comp = pca['pca_mean'], pca['pca_comp']
+            see = lambda im: im                        # keep raw frames
+            def to_input(seen, now):
+                clip = np.stack([seen[max(0, now + o)] for o in CLIP])[None]           # [1, 8, 256, 256, 3]
+                f = torch.from_numpy(project(vj(clip), mean, comp)).float().to(device)  # [1, 4, 64, 384]
+                return f[:, -1:] if feats_kind == 'vjepa_last' else f
         future = lambda x: None
         if blob['args'].get('predictor'):              # arm B: frozen predictor's t+16 guess, fp32 as trained
             from dino_predict import Predictor
@@ -61,7 +86,7 @@ def run_seeds(checkpoint: str, seeds: list[int], video_seeds: set[int], n_exec: 
         future = lambda x: None
         net = UWMCam(torch.zeros(8), torch.ones(8)).to(device).eval()
         see = lambda im: to_128(im[None])[0]
-        to_input = lambda past: torch.from_numpy(np.stack(past))[None].to(device).float() / 255
+        to_input = lambda seen, now: torch.from_numpy(np.stack([seen[max(0, now + o)] for o in PAST]))[None].to(device).float() / 255
     net.load_state_dict(blob['state_dict'])
     env = PickKitchen()
     meshes = pool(pool_name)
@@ -83,7 +108,7 @@ def run_seeds(checkpoint: str, seeds: list[int], video_seeds: set[int], n_exec: 
         for _ in range(HORIZON):
             if not plan:
                 now = len(seen) - 1
-                x = to_input([seen[max(0, now + o)] for o in PAST])
+                x = to_input(seen, now)
                 fut = future(x)
                 with torch.autocast(device, dtype=torch.bfloat16):
                     chunk = (net.plan(x, fut) if fut is not None else net.plan(x))[0].float().cpu().numpy()                 # [16, 8]

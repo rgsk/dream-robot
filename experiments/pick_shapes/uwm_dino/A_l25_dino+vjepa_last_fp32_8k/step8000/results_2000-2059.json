@@ -1,0 +1,486 @@
+{
+ "wins": 19,
+ "n": 60,
+ "episodes": [
+  {
+   "seed": 2000,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.415,
+   "build_s": 5.5,
+   "run_s": 13.2
+  },
+  {
+   "seed": 2001,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 5.5,
+   "run_s": 13.3
+  },
+  {
+   "seed": 2002,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 12.9
+  },
+  {
+   "seed": 2003,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.373,
+   "build_s": 3.6,
+   "run_s": 12.8
+  },
+  {
+   "seed": 2004,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.398,
+   "build_s": 3.5,
+   "run_s": 12.6
+  },
+  {
+   "seed": 2005,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.3,
+   "run_s": 12.5
+  },
+  {
+   "seed": 2006,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 12.9
+  },
+  {
+   "seed": 2007,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 12.6
+  },
+  {
+   "seed": 2008,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 12.6
+  },
+  {
+   "seed": 2009,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.002,
+   "build_s": 3.5,
+   "run_s": 12.7
+  },
+  {
+   "seed": 2010,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.232,
+   "build_s": 3.4,
+   "run_s": 11.5
+  },
+  {
+   "seed": 2011,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.235,
+   "build_s": 3.4,
+   "run_s": 11.5
+  },
+  {
+   "seed": 2012,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.176,
+   "build_s": 3.3,
+   "run_s": 14.1
+  },
+  {
+   "seed": 2013,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 14.0
+  },
+  {
+   "seed": 2014,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 11.8
+  },
+  {
+   "seed": 2015,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 11.7
+  },
+  {
+   "seed": 2016,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 12.3
+  },
+  {
+   "seed": 2017,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 12.4
+  },
+  {
+   "seed": 2018,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 11.4
+  },
+  {
+   "seed": 2019,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.251,
+   "build_s": 3.4,
+   "run_s": 11.6
+  },
+  {
+   "seed": 2020,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.002,
+   "build_s": 3.3,
+   "run_s": 13.2
+  },
+  {
+   "seed": 2021,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.327,
+   "build_s": 3.3,
+   "run_s": 13.6
+  },
+  {
+   "seed": 2022,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.188,
+   "build_s": 3.4,
+   "run_s": 12.4
+  },
+  {
+   "seed": 2023,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.36,
+   "build_s": 3.6,
+   "run_s": 12.4
+  },
+  {
+   "seed": 2024,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 12.7
+  },
+  {
+   "seed": 2025,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 12.6
+  },
+  {
+   "seed": 2026,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.3,
+   "run_s": 13.5
+  },
+  {
+   "seed": 2027,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.5,
+   "run_s": 13.8
+  },
+  {
+   "seed": 2028,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.3,
+   "run_s": 12.0
+  },
+  {
+   "seed": 2029,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 12.2
+  },
+  {
+   "seed": 2030,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.3,
+   "run_s": 11.4
+  },
+  {
+   "seed": 2031,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.5,
+   "run_s": 11.4
+  },
+  {
+   "seed": 2032,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.001,
+   "build_s": 3.4,
+   "run_s": 12.6
+  },
+  {
+   "seed": 2033,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.276,
+   "build_s": 3.6,
+   "run_s": 12.4
+  },
+  {
+   "seed": 2034,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.436,
+   "build_s": 3.3,
+   "run_s": 11.9
+  },
+  {
+   "seed": 2035,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.6,
+   "run_s": 11.8
+  },
+  {
+   "seed": 2036,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.4,
+   "run_s": 11.9
+  },
+  {
+   "seed": 2037,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.31,
+   "build_s": 3.6,
+   "run_s": 12.1
+  },
+  {
+   "seed": 2038,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.5,
+   "run_s": 11.7
+  },
+  {
+   "seed": 2039,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 11.7
+  },
+  {
+   "seed": 2040,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 3.4,
+   "run_s": 11.6
+  },
+  {
+   "seed": 2041,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.282,
+   "build_s": 3.5,
+   "run_s": 12.0
+  },
+  {
+   "seed": 2042,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.6,
+   "run_s": 12.1
+  },
+  {
+   "seed": 2043,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.8,
+   "run_s": 12.0
+  },
+  {
+   "seed": 2044,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.6,
+   "run_s": 12.0
+  },
+  {
+   "seed": 2045,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.391,
+   "build_s": 3.8,
+   "run_s": 12.1
+  },
+  {
+   "seed": 2046,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.6,
+   "run_s": 11.2
+  },
+  {
+   "seed": 2047,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.001,
+   "build_s": 3.8,
+   "run_s": 11.3
+  },
+  {
+   "seed": 2048,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.7,
+   "run_s": 11.9
+  },
+  {
+   "seed": 2049,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.28,
+   "build_s": 3.9,
+   "run_s": 11.9
+  },
+  {
+   "seed": 2050,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.6,
+   "run_s": 11.0
+  },
+  {
+   "seed": 2051,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.9,
+   "run_s": 11.0
+  },
+  {
+   "seed": 2052,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.216,
+   "build_s": 3.8,
+   "run_s": 11.2
+  },
+  {
+   "seed": 2053,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.9,
+   "run_s": 11.1
+  },
+  {
+   "seed": 2054,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.268,
+   "build_s": 3.7,
+   "run_s": 11.0
+  },
+  {
+   "seed": 2055,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.002,
+   "build_s": 3.9,
+   "run_s": 11.0
+  },
+  {
+   "seed": 2056,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.7,
+   "run_s": 10.6
+  },
+  {
+   "seed": 2057,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": 0.0,
+   "build_s": 4.0,
+   "run_s": 10.6
+  },
+  {
+   "seed": 2058,
+   "mesh": "apple_0",
+   "ok": false,
+   "lifted_m": -0.0,
+   "build_s": 3.7,
+   "run_s": 11.0
+  },
+  {
+   "seed": 2059,
+   "mesh": "apple_0",
+   "ok": true,
+   "lifted_m": 0.268,
+   "build_s": 3.9,
+   "run_s": 10.4
+  }
+ ]
+}
