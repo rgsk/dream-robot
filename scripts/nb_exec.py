@@ -34,7 +34,8 @@ def find_kernel(nb_path: Path) -> BlockingKernelClient:
     # out: a client for the kernel whose __vsc_ipynb_file__ is nb_path
     # VS Code writes its connection files to /run/user/<uid>/jupyter/runtime, which may not be jupyter_runtime_dir()
     dirs = {Path(jupyter_runtime_dir()), Path(f"/run/user/{os.getuid()}/jupyter/runtime")}
-    for f in sorted(f for d in dirs for f in d.glob("kernel-*.json")):
+    # newest first: the kernel just started is the newest file; stale ones each cost a 3 s timeout
+    for f in sorted((f for d in dirs for f in d.glob("kernel-*.json")), key=lambda f: f.stat().st_mtime, reverse=True):
         kc = BlockingKernelClient(connection_file=str(f))
         kc.load_connection_file()
         kc.start_channels()
