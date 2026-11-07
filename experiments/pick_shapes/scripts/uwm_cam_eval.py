@@ -43,7 +43,8 @@ def run_seeds(checkpoint: str, seeds: list[int], video_seeds: set[int], n_exec: 
         from uwm_dino import DinoAct
         if blob['kind'] == 'dino_target':              # future is an internal target: plans like A
             from uwm_dino_target import DinoTarget
-            net = DinoTarget(torch.zeros(8), torch.ones(8), torch.zeros(384), torch.ones(384)).to(device).eval()
+            net = DinoTarget(torch.zeros(8), torch.ones(8), torch.zeros(384), torch.ones(384),
+                             z_dim=8 if blob['args'].get('lam') else 0).to(device).eval()
         else:
             net = DinoAct(torch.zeros(8), torch.ones(8),
                           mixed=blob['args'].get('features') == 'dino+vjepa_last').to(device).eval()

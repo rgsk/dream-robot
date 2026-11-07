@@ -1,0 +1,4 @@
+lam_fruit, started Sun Nov  8 12:59:32 AM IST 2026
+experiments/pick_shapes/lam/T_l10_vfruit300_lam_s0/step8000.pt on fruit: 5/60 lifted   [lifted by type: lemon=3 peach=2 ]
+experiments/pick_shapes/lam/T_l10_vfruit300_lam_s0/step8000.pt on apple0: 14/60 lifted   [lifted by type: apple=14 ]
+stopped by user after 2 evals Sun Nov  8 01:12:35 AM IST 2026

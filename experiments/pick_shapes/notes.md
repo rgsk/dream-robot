@@ -419,3 +419,29 @@ best.pt is now automatic (lowest val action, every 500 steps) in all head/predic
   DINOv2 + V-JEPA newest retrained: val 0.033 (best 0.032, = DINOv2 alone), kitchen **19/60**.
   -> the mismatch was not hiding a gain. V-JEPA adds nothing over DINOv2 here (30 / 24 / 19 are
   single seeds, but none beats DINOv2 alone). DINOv2 stays the encoder. fp32 worker ~3 GB: 2 fit.
+
+## Step 20 · LAM on wrist DINOv2 features (lam_dino.py; recipe from experiments/lam) (2026-11-08)
+- (features t, t+8) -> z (8, deterministic), redraw t+8 = t + change; half the pairs reversed.
+  Trained on apple n30 (minus 5 val) + apple video 50x2 + fruit video 100 + 200 (minus last 20
+  fruit demos, held out). Never onion/tomato. 2.76M params, 10k steps, 1.7 min.
+- Held-out drawing / copy: right z 0.358, average z 0.676, wrong z 0.932 -> z used (from 1k steps).
+- Probe z -> true 8-step motion, nearest neighbours (untrained -> trained):
+
+| held out | arm | gripper |
+|---|---|---|
+| apple val (5 demos) | 0.48 -> 0.62 | 0.55 -> **0.95** |
+| fruit (20 demos) | 0.33 -> 0.55 | 0.22 -> **0.84** |
+- Gripper read well, also on held-out fruit; arm weaker than T1 (0.90): wrist view, motion is
+  ego-motion of the whole picture. z for every row saved: lam/z8/z_<recording>.npy.
+
+## Step 21 · T10 + 300 fruit video + LAM z as a target (lam/lam_fruit.sh), seed 0
+- uwm_dino_target.py --lam lam/z8: 2 more output slots predict the LAM notes for t->t+8 and
+  t+8->t+16 (standardised); labelled and video rows both train them. Eval loader builds z_dim=8.
+- Chain (detached): train 8k -> fruit / apple0 / unseen x 60; baseline T_l10_vfruit300_s0 also gets
+  apple0 + unseen. Results -> lam/lam_fruit_results.txt.
+- Note: the LAM also saw the 100 apple video clips (T10 does not); only through z.
+- Result, seed 0: **fruit 5/60** (lemon 3, peach 2) vs no-z 12/60 (no-z seeds: 12/11/16);
+  apple 14/60 (T10 seed 0: 12, + fruit video 100: 11). Below every no-z seed on fruit -> stopped
+  after 2 evals (unseen + baseline apple/unseen not run). z adds nothing here, likely hurts fruit.
+- Likely why (vs T1 15 -> 32): T10 already has the future-features target, which carries the same
+  motion signal; on T1 the no-z arm had no such target. And z arm R^2 here is weak (0.55-0.62).

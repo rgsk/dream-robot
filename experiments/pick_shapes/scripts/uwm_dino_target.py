@@ -41,8 +41,13 @@ from uwm_dino import C, D, DinoAct, load
 class DinoTarget(DinoAct):
     """A's network + 64 future slots read out as t+16 features (standardised)."""
 
-    def __init__(self, a_mean: Tensor, a_std: Tensor, f_mean: Tensor, f_std: Tensor, layers: int = 4):
+    def __init__(self, a_mean: Tensor, a_std: Tensor, f_mean: Tensor, f_std: Tensor, layers: int = 4,
+                 z_dim: int = 0):
         super().__init__(a_mean, a_std, layers)
+        self.z_dim = z_dim
+        if z_dim:                                        # --lam: 2 slots read out as LAM notes z
+            self.zq = nn.Parameter(torch.zeros(2, D))    # (t -> t+8, t+8 -> t+16)
+            self.z_out = nn.Linear(D, z_dim)
         self.register_buffer('f_mean', f_mean)
         self.register_buffer('f_std', f_std)
         self.query = nn.Parameter(torch.zeros(D))
@@ -50,16 +55,18 @@ class DinoTarget(DinoAct):
         nn.init.zeros_(self.fut_out.weight)              # starts as "the future looks like now"
         nn.init.zeros_(self.fut_out.bias)
 
-    def both(self, feats: Tensor, x_a: Tensor, tau_a: Tensor) -> tuple[Tensor, Tensor]:
+    def both(self, feats: Tensor, x_a: Tensor, tau_a: Tensor):
         # feats [B, 4, 64, 384] raw -> clean actions [B, 16, 8], future [B, 64, 384] standardised
         when, where, role = self.when.weight, self.where.weight, self.role.weight
         seen = self.feat_in(feats) + when[[o + 12 for o in PAST]][:, None] + where + role[0]
         fut = (self.query + when[12 + CHUNK] + where + role[1]).expand(len(feats), -1, -1)
         act = self.act_in(x_a) + self.tau_in(tau_a[:, None])[:, None] + when[12:12 + CHUNK] + role[2]
         n = len(PAST) * GRID * GRID
-        out = self.body(torch.cat([seen.flatten(1, 2), fut, act], 1))
+        zs = [(self.zq + when[[12 + 8, 12 + 16]]).expand(len(feats), -1, -1)] if self.z_dim else []
+        out = self.body(torch.cat([seen.flatten(1, 2), fut, *zs, act], 1))
         now = (feats[:, -1] - self.f_mean) / self.f_std
-        return self.act_out(out[:, -CHUNK:]), now + self.fut_out(out[:, n:n + GRID * GRID])
+        z = self.z_out(out[:, n + GRID * GRID:n + GRID * GRID + 2]) if self.z_dim else None
+        return self.act_out(out[:, -CHUNK:]), now + self.fut_out(out[:, n:n + GRID * GRID]), z
 
     def forward(self, feats: Tensor, x_a: Tensor, tau_a: Tensor, future: Tensor | None = None) -> Tensor:
         assert future is None, 'the future is a target here, never an input'
@@ -71,6 +78,7 @@ def main() -> None:
     ap.add_argument('--data', default='pick_apple_rung0_n30')
     ap.add_argument('--labelled', type=int, default=10)
     ap.add_argument('--more-video', nargs='*', default=[], help='dino-cached recordings, every clip video-only')
+    ap.add_argument('--lam', type=Path, default=None, help='lam_dino.py out dir: also predict its z')
     ap.add_argument('--future-weight', type=float, default=1.0, help='future loss weight vs action loss')
     ap.add_argument('--val', type=int, default=5)
     ap.add_argument('--steps', type=int, default=8000)
@@ -103,6 +111,9 @@ def main() -> None:
         episode = np.concatenate([episode, m['episode'] + episode.max() + 1])
         grid.append(m['grid'])
     grid = np.concatenate(grid).reshape(-1, GRID * GRID, C)
+    zall = None
+    if args.lam:  # z per row, t -> min(t+8, demo end), standardised on the train rows
+        zall = np.concatenate([np.load(args.lam / f'z_{n}.npy') for n in [args.data, *args.more_video]])
     n_main = len(d['episode'])
     vid = np.zeros(len(episode), bool)
     vid[n_main:] = True
@@ -115,10 +126,13 @@ def main() -> None:
     pad = lambda x: np.concatenate([x, np.zeros((len(episode) - n_main,) + x.shape[1:], x.dtype)])
     CH, RE = g(pad((chunk - a_mean) / a_std)), g(pad(real))
     PASTR, AFTER = g(rows_at(episode, PAST)), g(rows_at(episode, [CHUNK])[:, 0])
+    if zall is not None:
+        zall = (zall - zall[train].mean(0)) / zall[train].std(0)
+        ZT, ZR = g(zall.astype(np.float32)), g(rows_at(episode, [0, 8]))  # notes for t->t+8, t+8->t+16
     lab_rows, vid_rows = g(np.flatnonzero(lab)), g(np.flatnonzero(vid))
     val_rows = g(np.flatnonzero(np.isin(d['episode'], val_eps)))
 
-    net = DinoTarget(g(a_mean), g(a_std), g(f_mean), g(f_std)).to(dev)
+    net = DinoTarget(g(a_mean), g(a_std), g(f_mean), g(f_std), z_dim=0 if zall is None else zall.shape[1]).to(dev)
     opt = torch.optim.AdamW(net.parameters(), lr=args.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.steps, eta_min=args.lr / 100)
     ema = AveragedModel(net, multi_avg_fn=get_ema_multi_avg_fn(args.ema)) if args.ema else None
@@ -127,16 +141,17 @@ def main() -> None:
           f'({len(vid_rows)} rows), val {len(val_eps)}; {sum(p.numel() for p in net.parameters()) / 1e6:.2f}M params',
           flush=True)
 
-    def losses(rows: Tensor, has_a: Tensor, m: nn.Module | None = None) -> tuple[Tensor, Tensor]:
+    def losses(rows: Tensor, has_a: Tensor, m: nn.Module | None = None):
         feats = FE[PASTR[rows]].float()
         clean = CH[rows]
         tau = torch.where(has_a, torch.rand(len(rows), device=dev), torch.zeros(len(rows), device=dev))
         x_a = (1 - tau[:, None, None]) * torch.randn_like(clean) + tau[:, None, None] * clean
-        a_hat, f_hat = (m or net).both(feats, x_a, tau)
+        a_hat, f_hat, z_hat = (m or net).both(feats, x_a, tau)
         keep = (RE[rows] & has_a[:, None])[..., None].float()
         loss_a = (((a_hat - clean) ** 2) * keep).sum() / (keep.sum() * 8).clamp(min=1)
         target = (FE[AFTER[rows]].float() - net.f_mean) / net.f_std
-        return loss_a, (f_hat.float() - target).pow(2).mean()
+        loss_z = (z_hat.float() - ZT[ZR[rows]]).pow(2).mean() if z_hat is not None else torch.zeros((), device=dev)
+        return loss_a, (f_hat.float() - target).pow(2).mean(), loss_z
 
     with torch.no_grad():
         z = lambda r: (FE[r].float() - net.f_mean) / net.f_std
@@ -148,12 +163,13 @@ def main() -> None:
             torch.manual_seed(1234)
             with torch.autocast('cuda', dtype=torch.bfloat16):
                 r = val_rows[:1024]
-                la, lf = losses(r, torch.ones(len(r), dtype=torch.bool, device=dev), m=model())
+                la, lf, lz = losses(r, torch.ones(len(r), dtype=torch.bool, device=dev), m=model())
                 r = val_rows[::4][:256]
                 plan = model().plan(FE[PASTR[r]].float())
             truth = CH[r] * net.a_std + net.a_mean
             err = (plan[:, 0, :7] - truth[:, 0, :7]).abs().mean().item() * 1000
-        return {'val_action': la.item(), 'val_future_over_copy': lf.item() / copy_val, 'first_action_mrad': err}
+        return {'val_action': la.item(), 'val_future_over_copy': lf.item() / copy_val, 'first_action_mrad': err,
+                'val_z': lz.item()}
 
     history, t0, best = [], time.time(), (0, float('inf'))
     pick = lambda r: r[torch.randint(0, len(r), (args.batch,), device=dev)]
@@ -161,9 +177,9 @@ def main() -> None:
         rows = torch.cat([pick(lab_rows)] + ([pick(vid_rows)] if len(vid_rows) else []))
         has_a = torch.arange(len(rows), device=dev) < args.batch
         with torch.autocast('cuda', dtype=torch.bfloat16):
-            la, lf = losses(rows, has_a)
+            la, lf, lz = losses(rows, has_a)
         opt.zero_grad(set_to_none=True)
-        (la + args.future_weight * lf).backward()
+        (la + args.future_weight * lf + lz).backward()
         torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
         opt.step()
         sched.step()
@@ -174,7 +190,7 @@ def main() -> None:
             history.append({'step': step, 'action': la.item(), 'future': lf.item(), **v})
             print(f"step {step:5d}  train action {la.item():.4f} future {lf.item():.4f}  "
                   f"val action {v['val_action']:.4f}  val future/copy {v['val_future_over_copy']:.3f}  "
-                  f"first-action {v['first_action_mrad']:6.2f} mrad  lr {opt.param_groups[0]['lr']:.1e}  "
+                  f"z {lz.item():.3f} val z {v['val_z']:.3f}  first-action {v['first_action_mrad']:6.2f} mrad  lr {opt.param_groups[0]['lr']:.1e}  "
                   f"({time.time() - t0:.0f}s)", flush=True)
         blob = lambda: {'state_dict': model().state_dict(), 'step': step, 'kind': 'dino_target',
                         'args': vars(args) | {'out': str(args.out)},
