@@ -1,0 +1,11 @@
+sweep_decoder, started Sun Nov  8 12:09:26 PM IST 2026
+wamc_l3: n_exec  8:  9/20   failures {'no_grasp': 10, 'dropped': 1} n_exec 16:  6/20   failures {'no_grasp': 14}  total 15/40
+wamc_l3_z_s1: n_exec  8:  5/20   failures {'no_grasp': 13, 'dropped': 2} n_exec 16:  6/20   failures {'no_grasp': 13, 'dropped': 1}  total 11/40
+wamc_l3_z_s2: n_exec  8:  7/20   failures {'no_grasp': 12, 'dropped': 1} n_exec 16:  6/20   failures {'no_grasp': 13, 'wrong_target': 1}  total 13/40
+finished Sun Nov  8 12:15:39 PM IST 2026
+sweep_decoder2 (bc, f), started Sun Nov  8 12:18:42 PM IST 2026
+bc wamc_l3: n_exec  8:  4/20   failures {'no_grasp': 16} n_exec 16:  3/20   failures {'no_grasp': 17}  total 7/40
+f wamc_l3: n_exec  8:  5/20   failures {'no_grasp': 15} n_exec 16:  1/20   failures {'no_grasp': 19}  total 6/40
+f wamc_l3_z_s1: n_exec  8:  2/20   failures {'no_grasp': 17, 'dropped': 1} n_exec 16:  1/20   failures {'no_grasp': 19}  total 3/40
+f wamc_l3_z_s2: n_exec  8:  2/20   failures {'no_grasp': 18} n_exec 16:  6/20   failures {'no_grasp': 14}  total 8/40
+finished2 Sun Nov  8 12:27:02 PM IST 2026

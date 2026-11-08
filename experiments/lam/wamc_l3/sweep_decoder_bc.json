@@ -1,0 +1,178 @@
+{
+ "8": {
+  "ok": 4,
+  "failures": {
+   "no_grasp": 16
+  },
+  "per_seed": {
+   "1000": [
+    false,
+    "no_grasp"
+   ],
+   "1001": [
+    false,
+    "no_grasp"
+   ],
+   "1002": [
+    false,
+    "no_grasp"
+   ],
+   "1003": [
+    true,
+    "none"
+   ],
+   "1004": [
+    false,
+    "no_grasp"
+   ],
+   "1005": [
+    false,
+    "no_grasp"
+   ],
+   "1006": [
+    true,
+    "none"
+   ],
+   "1007": [
+    false,
+    "no_grasp"
+   ],
+   "1008": [
+    false,
+    "no_grasp"
+   ],
+   "1009": [
+    false,
+    "no_grasp"
+   ],
+   "1010": [
+    false,
+    "no_grasp"
+   ],
+   "1011": [
+    false,
+    "no_grasp"
+   ],
+   "1012": [
+    false,
+    "no_grasp"
+   ],
+   "1013": [
+    false,
+    "no_grasp"
+   ],
+   "1014": [
+    false,
+    "no_grasp"
+   ],
+   "1015": [
+    false,
+    "no_grasp"
+   ],
+   "1016": [
+    false,
+    "no_grasp"
+   ],
+   "1017": [
+    false,
+    "no_grasp"
+   ],
+   "1018": [
+    true,
+    "none"
+   ],
+   "1019": [
+    true,
+    "none"
+   ]
+  }
+ },
+ "16": {
+  "ok": 3,
+  "failures": {
+   "no_grasp": 17
+  },
+  "per_seed": {
+   "1000": [
+    false,
+    "no_grasp"
+   ],
+   "1001": [
+    false,
+    "no_grasp"
+   ],
+   "1002": [
+    false,
+    "no_grasp"
+   ],
+   "1003": [
+    false,
+    "no_grasp"
+   ],
+   "1004": [
+    false,
+    "no_grasp"
+   ],
+   "1005": [
+    false,
+    "no_grasp"
+   ],
+   "1006": [
+    true,
+    "none"
+   ],
+   "1007": [
+    false,
+    "no_grasp"
+   ],
+   "1008": [
+    false,
+    "no_grasp"
+   ],
+   "1009": [
+    false,
+    "no_grasp"
+   ],
+   "1010": [
+    false,
+    "no_grasp"
+   ],
+   "1011": [
+    false,
+    "no_grasp"
+   ],
+   "1012": [
+    false,
+    "no_grasp"
+   ],
+   "1013": [
+    false,
+    "no_grasp"
+   ],
+   "1014": [
+    false,
+    "no_grasp"
+   ],
+   "1015": [
+    false,
+    "no_grasp"
+   ],
+   "1016": [
+    false,
+    "no_grasp"
+   ],
+   "1017": [
+    false,
+    "no_grasp"
+   ],
+   "1018": [
+    true,
+    "none"
+   ],
+   "1019": [
+    true,
+    "none"
+   ]
+  }
+ }
+}

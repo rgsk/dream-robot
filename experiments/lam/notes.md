@@ -52,3 +52,77 @@ demos) + real actions (3 labelled), one trunk, 32 labelled + 32 video per batch.
   notebook arms (11-17). So z, not the recipe, takes 3 labelled from 15 -> 32/40. One seed each;
   val a ends ~1.27 in both, offline loss can't tell them apart.
 - Next: seeds 1, 2 of both arms (~45 min each, ~4.5 h queued).
+- 2026-11-08 01:23 IST: seeds_t1.sh (detached, powers off at the end): z / no-z x seeds 1, 2,
+  same LAM. Results -> seeds_t1_results.txt.
+- **Seeds (seeds_t1_results.txt), 3 labelled, /40:**
+
+| arm | seed 0 | seed 1 | seed 2 | total /120 |
+|---|---|---|---|---|
+| WAM-C with z | 32 | 16 | 13 | 61 (51%) |
+| no-z control | 15 | 16 | 17 | 48 (40%) |
+- **Seed 0's 32 was an outlier.** Seeds 1-2: z 16, 13 vs no-z 16, 17 -> no gain. Pooled 61 vs 48
+  (z ~1.8, carried by one run). Not established; the "z doubles it" headline is withdrawn.
+  no-z is very steady (15-17); z swings 13-32. Fruit port also showed no gain (step 21).
+- z-use probe (scripts/wam_c_zuse.py, zuse.log), 512 val samples, chunk-1 actions with z denoised
+  freely / clamped to the true LAM z / clamped to another sample's z (same noise otherwise):
+
+| run (sim /40) | own z vs true z | arm MSE own / true / wrong | gripper MSE own / true / wrong |
+|---|---|---|---|
+| z s0 (32) | 0.126 | 0.149 / 0.148 / 0.149 | **0.102** / 0.101 / 0.102 |
+| z s1 (16) | 0.106 | 0.142 / 0.141 / 0.143 | 0.143 / 0.144 / 0.145 |
+| z s2 (13) | 0.099 | 0.178 / 0.178 / 0.178 | 0.198 / 0.198 / 0.199 |
+- **Actions ignore z at run time** in every seed: even a wrong z moves them by < 0.002. z only
+  shapes the shared weights during training. Seed 0's edge is a better gripper (0.10 vs 0.14-0.20),
+  not z use; its z is no more accurate than the others'. -> 32/40 was a training-seed draw.
+- Same probe with chunk-1 **frames** clamped (--frames, fuse.log), all 6 runs, MSE own / true / wrong:
+
+| run (sim) | arm | gripper |
+|---|---|---|
+| z s0 (32) | 0.149 / 0.146 / 0.152 | 0.102 / 0.102 / 0.118 |
+| z s1 (16) | 0.142 / 0.140 / 0.150 | 0.143 / 0.145 / 0.137 |
+| z s2 (13) | 0.178 / 0.176 / 0.185 | 0.198 / 0.206 / 0.212 |
+| no-z s0 (15) | 0.154 / 0.153 / 0.158 | 0.231 / 0.232 / 0.245 |
+| no-z s1 (16) | 0.140 / 0.140 / 0.145 | 0.252 / 0.254 / 0.258 |
+| no-z s2 (17) | 0.167 / 0.166 / 0.171 | 0.135 / 0.135 / 0.141 |
+- Frames matter a little more than z (wrong frames +0.004-0.016) but barely; real future frames
+  help ~0. Actions come from the now frame + joints; the dreamed future is a training-only job.
+- Offline gripper MSE doesn't rank the sim either (no-z s2 0.135 -> 17/40; z s0 0.102 -> 32).
+
+## Step 3: actions must read the future (scripts/decoder.py, decoders.log)
+- Separate small decoder sees ONLY joints + one input (so nothing leaks via hidden states).
+  Trained on the 3 labelled demos, val on 10, fed the REAL future (upper bound), MSE std units:
+
+| decoder input (+ joints) | arm | gripper |
+|---|---|---|
+| bc: now frame (no future) | 0.139 | 0.210 |
+| z: LAM z t->t+8, t+8->t+16 | **0.102** | **0.068** |
+| f: now + real frames t+8, t+16 | 0.128 | 0.138 |
+| (WAM-C own actions, zuse.log) | 0.14-0.18 | 0.10-0.20 |
+- True z makes 3 demos enough: gripper 0.21 -> 0.07 (3x better), arm 0.14 -> 0.10. z is a far
+  better action input than raw future latents (0.14). Next: feed the WAMs' dreamed z (and frames).
+- Real -> dreamed z (dreamed_z_check.py, dreamed_z.log), 535 val rows, MSE arm / gripper:
+
+| | real z | dreamed z -> decoder | WAM-C own actions |
+|---|---|---|---|
+| s0 (sim 32) | 0.102 / 0.069 | 0.109 / 0.083 | 0.142 / 0.084 |
+| s1 (sim 16) | | 0.108 / 0.077 | 0.132 / 0.098 |
+| s2 (sim 13) | | 0.108 / 0.074 | 0.169 / 0.169 |
+| bc decoder, no future | 0.139 / 0.211 | | |
+- Little is lost: dreamed z keeps most of the gain (arm +0.006, gripper +0.005-0.014). And the
+  decoder evens out the seeds (s2 own 0.169/0.169 -> 0.108/0.074). Offline only; sim next.
+- **Sim, actions = decoder(dreamed z, joints)** (sweep_decoder.sh): s0 **15**, s1 **11**, s2 **13**
+  = 39/120 (no_grasp dominant). WAM own actions 61/120, no-z 48/120. Best offline, worst in the
+  sim -- offline action MSE misranked again. LAM line parked here.
+- Decoder controls (sweep_decoder2.sh), same small decoder, 3 labelled, sim /40:
+
+| decoder input (+ joints) | s0 | s1 | s2 | total /120 |
+|---|---|---|---|---|
+| bc: now frame, no future | 7 | (no WAM; one run) | | ~21 (x3) |
+| f: now + dreamed frames | 6 | 3 | 8 | 17 |
+| z: dreamed z | 15 | 11 | 13 | **39** |
+| (WAM-C own actions) | 32 | 16 | 13 | 61 |
+| (no-z WAM own actions) | 15 | 16 | 17 | 48 |
+- Among decoders, dreamed z wins on every seed (11-15 vs bc 7, frames 3-8): z is the useful
+  future signal; dreamed frames even hurt vs no future. But the 3-demo MLP decoder itself is weak
+  (bc 7 vs WAM heads 15-17) -> the bottleneck is the decoder, not z. Next if resumed: a stronger
+  decoder that reads z (flow-matching head on z + now frame + joints), or z into the WAM head.

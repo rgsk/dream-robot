@@ -1,0 +1,6 @@
+seeds_t1, started Sun Nov  8 01:22:50 AM IST 2026
+z seed 1: n_exec  8:  8/20   failures {'no_grasp': 12} n_exec 16:  8/20   failures {'no_grasp': 11, 'dropped': 1}  total 16/40   
+noz seed 1: n_exec  8:  9/20   failures {'no_grasp': 11} n_exec 16:  7/20   failures {'no_grasp': 13}  total 16/40   
+z seed 2: n_exec  8:  6/20   failures {'no_grasp': 14} n_exec 16:  7/20   failures {'no_grasp': 12, 'dropped': 1}  total 13/40   
+noz seed 2: n_exec  8:  9/20   failures {'no_grasp': 10, 'dropped': 1} n_exec 16:  8/20   failures {'no_grasp': 12}  total 17/40   
+finished Sun Nov  8 04:16:21 AM IST 2026; powering off
