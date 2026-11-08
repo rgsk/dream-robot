@@ -205,3 +205,36 @@ demos) + real actions (3 labelled), one trunk, 32 labelled + 32 video per batch.
   fwd-B 0.18, fwd vs back ~1.8 (reverse=True makes that the cheapest code; frame t gives the side).
 - At release z knows the bin (82% > move 69%): bins look identical, but the arm is a mirrored
   silhouette on each side; pooling drops "where", not edge orientation. z = move + look of the mover.
+
+## Step 7: warm-start fine-tune (wam_c_warm.py, 2026-11-09)
+- Start from trained WAM-C s0 trunk + its jzf head; train together 8000 steps, lr 1e-4. Trunk keeps
+  wam_c.py's losses; head reads the FINISHED chunk-1 dream (10 steps, grad through the last), as jzf did.
+  45 min train + sweeps.
+- Sim s0: head **21/40** (jzf frozen 22), trunk's own actions 29/40 (before 32). No gain.
+- Reliance (swap dream, arm / gripper): 0.36/0.70 at step 0 -> 0.27/0.67 at 8000 (final, 535 rows:
+  0.295/0.644). Unlike training from scratch (0.01), the head keeps reading the dream; arm reads it a bit less.
+- Decision: no seeds 1, 2. Two-stage (train WAM, freeze, fit head) is the answer; the action gradient
+  into the dream buys nothing here.
+
+## Wrap-up (2026-11-09)
+Question: can LAM motion notes z on 80 video-only demos make a WAM act better from 3 labelled (T1)?
+- LAM: deterministic z (8 dims) + reversed pairs reads the motion (kNN arm/gripper 0.90/0.89); fragile, 2/3 seeds click.
+- 3 labelled, 3 seeds, sim /120:
+
+| arm | total |
+|---|---|
+| no-z WAM (co-train control) | 48 |
+| WAM-C own actions (z in the trunk) | 61 (32/16/13, one outlier) |
+| best separate head: jzf on frozen WAM-C (joints + dreamed z + frames) | 55 (22/17/16) |
+| trunk + jzf head trained together from scratch (s0, same-tau / finished dream) | 12 / 15 of 40 |
+| warm-start fine-tune of WAM-C + jzf (s0) | 21 of 40 (jzf 22) |
+
+- Answer: a small, noisy yes. z lifts 48 -> 55-61/120, carried mostly by seed 0; not a clear win.
+- Buys: reliance probe (swap an input, measure the action change) explains the sim results where offline MSE misranks;
+  heads that read the dream beat heads with the now frame (the now frame + joints = replay shortcut).
+- Fails: WAM-C's actions ignore z at run time; joint training lets heads ignore the dream
+  (from scratch: fit 3 demos from joints, never recover); warm start keeps reading but gains nothing.
+  Two-stage (train WAM, freeze, fit head) is the working recipe.
+- Limit of the testbed: the 80 video demos share the labelled demos' distribution, so video can only add
+  "more of the same". Next: a test where video holds what labels lack (T2-fixed hidden goal), via the
+  interpretable route (pixel video model + IDM).
