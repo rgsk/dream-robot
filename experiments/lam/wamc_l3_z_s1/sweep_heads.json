@@ -1,0 +1,1623 @@
+{
+ "j": {
+  "8": {
+   "ok": 7,
+   "failures": {
+    "no_grasp": 13
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     false,
+     "no_grasp"
+    ],
+    "1002": [
+     true,
+     "none"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     true,
+     "none"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     false,
+     "no_grasp"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     false,
+     "no_grasp"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     true,
+     "none"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     true,
+     "none"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "16": {
+   "ok": 6,
+   "failures": {
+    "no_grasp": 13,
+    "wrong_target": 1
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     false,
+     "wrong_target"
+    ],
+    "1002": [
+     false,
+     "no_grasp"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     true,
+     "none"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     true,
+     "none"
+    ],
+    "1009": [
+     false,
+     "no_grasp"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     false,
+     "no_grasp"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     false,
+     "no_grasp"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     true,
+     "none"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "total": 13
+ },
+ "jn": {
+  "8": {
+   "ok": 6,
+   "failures": {
+    "no_grasp": 14
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     false,
+     "no_grasp"
+    ],
+    "1002": [
+     true,
+     "none"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     false,
+     "no_grasp"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     false,
+     "no_grasp"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     true,
+     "none"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     false,
+     "no_grasp"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "16": {
+   "ok": 3,
+   "failures": {
+    "no_grasp": 16,
+    "dropped": 1
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     false,
+     "no_grasp"
+    ],
+    "1002": [
+     false,
+     "no_grasp"
+    ],
+    "1003": [
+     false,
+     "dropped"
+    ],
+    "1004": [
+     false,
+     "no_grasp"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     false,
+     "no_grasp"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     false,
+     "no_grasp"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     false,
+     "no_grasp"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "total": 9
+ },
+ "jz": {
+  "8": {
+   "ok": 2,
+   "failures": {
+    "no_grasp": 16,
+    "wrong_target": 2
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     false,
+     "no_grasp"
+    ],
+    "1002": [
+     true,
+     "none"
+    ],
+    "1003": [
+     false,
+     "no_grasp"
+    ],
+    "1004": [
+     false,
+     "no_grasp"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     false,
+     "no_grasp"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     false,
+     "no_grasp"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     false,
+     "no_grasp"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     false,
+     "wrong_target"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     false,
+     "wrong_target"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "16": {
+   "ok": 6,
+   "failures": {
+    "no_grasp": 14
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     false,
+     "no_grasp"
+    ],
+    "1002": [
+     true,
+     "none"
+    ],
+    "1003": [
+     false,
+     "no_grasp"
+    ],
+    "1004": [
+     true,
+     "none"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     false,
+     "no_grasp"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     false,
+     "no_grasp"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     false,
+     "no_grasp"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     true,
+     "none"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     true,
+     "none"
+    ],
+    "1018": [
+     true,
+     "none"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "total": 8
+ },
+ "jnz": {
+  "8": {
+   "ok": 7,
+   "failures": {
+    "no_grasp": 13
+   },
+   "per_seed": {
+    "1000": [
+     true,
+     "none"
+    ],
+    "1001": [
+     false,
+     "no_grasp"
+    ],
+    "1002": [
+     false,
+     "no_grasp"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     false,
+     "no_grasp"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     false,
+     "no_grasp"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     false,
+     "no_grasp"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     true,
+     "none"
+    ],
+    "1018": [
+     true,
+     "none"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "16": {
+   "ok": 7,
+   "failures": {
+    "no_grasp": 13
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     false,
+     "no_grasp"
+    ],
+    "1002": [
+     false,
+     "no_grasp"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     false,
+     "no_grasp"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     false,
+     "no_grasp"
+    ],
+    "1010": [
+     true,
+     "none"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     false,
+     "no_grasp"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     true,
+     "none"
+    ],
+    "1019": [
+     true,
+     "none"
+    ]
+   }
+  },
+  "total": 14
+ },
+ "jf": {
+  "8": {
+   "ok": 7,
+   "failures": {
+    "no_grasp": 13
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     true,
+     "none"
+    ],
+    "1002": [
+     false,
+     "no_grasp"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     true,
+     "none"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     false,
+     "no_grasp"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     false,
+     "no_grasp"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     true,
+     "none"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     false,
+     "no_grasp"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "16": {
+   "ok": 6,
+   "failures": {
+    "no_grasp": 13,
+    "dropped": 1
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     true,
+     "none"
+    ],
+    "1002": [
+     true,
+     "none"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     false,
+     "no_grasp"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     false,
+     "no_grasp"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     false,
+     "no_grasp"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     false,
+     "no_grasp"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "dropped"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     true,
+     "none"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "total": 13
+ },
+ "jnf": {
+  "8": {
+   "ok": 6,
+   "failures": {
+    "no_grasp": 13,
+    "dropped": 1
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     true,
+     "none"
+    ],
+    "1002": [
+     true,
+     "none"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     false,
+     "no_grasp"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     true,
+     "none"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     false,
+     "dropped"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     false,
+     "no_grasp"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     false,
+     "no_grasp"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "16": {
+   "ok": 9,
+   "failures": {
+    "no_grasp": 10,
+    "dropped": 1
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     true,
+     "none"
+    ],
+    "1002": [
+     true,
+     "none"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     false,
+     "dropped"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     true,
+     "none"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     true,
+     "none"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     false,
+     "no_grasp"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     true,
+     "none"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "total": 15
+ },
+ "jzf": {
+  "8": {
+   "ok": 7,
+   "failures": {
+    "no_grasp": 12,
+    "dropped": 1
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     true,
+     "none"
+    ],
+    "1002": [
+     true,
+     "none"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     false,
+     "no_grasp"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     false,
+     "no_grasp"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     false,
+     "no_grasp"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "dropped"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     true,
+     "none"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "16": {
+   "ok": 10,
+   "failures": {
+    "no_grasp": 9,
+    "dropped": 1
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     true,
+     "none"
+    ],
+    "1002": [
+     true,
+     "none"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     false,
+     "dropped"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     true,
+     "none"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     true,
+     "none"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     true,
+     "none"
+    ],
+    "1019": [
+     true,
+     "none"
+    ]
+   }
+  },
+  "total": 17
+ },
+ "jnzf": {
+  "8": {
+   "ok": 7,
+   "failures": {
+    "no_grasp": 13
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     false,
+     "no_grasp"
+    ],
+    "1002": [
+     false,
+     "no_grasp"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     false,
+     "no_grasp"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     false,
+     "no_grasp"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     true,
+     "none"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     true,
+     "none"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     true,
+     "none"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "16": {
+   "ok": 7,
+   "failures": {
+    "no_grasp": 13
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     false,
+     "no_grasp"
+    ],
+    "1002": [
+     false,
+     "no_grasp"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     false,
+     "no_grasp"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     true,
+     "none"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     true,
+     "none"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     true,
+     "none"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "total": 14
+ },
+ "jnzf_d50": {
+  "8": {
+   "ok": 8,
+   "failures": {
+    "no_grasp": 11,
+    "wrong_target": 1
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     false,
+     "no_grasp"
+    ],
+    "1002": [
+     true,
+     "none"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     true,
+     "none"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     true,
+     "none"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     false,
+     "wrong_target"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     true,
+     "none"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     false,
+     "no_grasp"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "16": {
+   "ok": 8,
+   "failures": {
+    "no_grasp": 11,
+    "wrong_target": 1
+   },
+   "per_seed": {
+    "1000": [
+     false,
+     "no_grasp"
+    ],
+    "1001": [
+     true,
+     "none"
+    ],
+    "1002": [
+     true,
+     "none"
+    ],
+    "1003": [
+     true,
+     "none"
+    ],
+    "1004": [
+     false,
+     "no_grasp"
+    ],
+    "1005": [
+     false,
+     "no_grasp"
+    ],
+    "1006": [
+     true,
+     "none"
+    ],
+    "1007": [
+     true,
+     "none"
+    ],
+    "1008": [
+     false,
+     "no_grasp"
+    ],
+    "1009": [
+     false,
+     "wrong_target"
+    ],
+    "1010": [
+     false,
+     "no_grasp"
+    ],
+    "1011": [
+     true,
+     "none"
+    ],
+    "1012": [
+     false,
+     "no_grasp"
+    ],
+    "1013": [
+     false,
+     "no_grasp"
+    ],
+    "1014": [
+     true,
+     "none"
+    ],
+    "1015": [
+     false,
+     "no_grasp"
+    ],
+    "1016": [
+     false,
+     "no_grasp"
+    ],
+    "1017": [
+     false,
+     "no_grasp"
+    ],
+    "1018": [
+     true,
+     "none"
+    ],
+    "1019": [
+     false,
+     "no_grasp"
+    ]
+   }
+  },
+  "total": 16
+ }
+}

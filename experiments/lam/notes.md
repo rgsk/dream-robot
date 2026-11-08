@@ -126,3 +126,82 @@ demos) + real actions (3 labelled), one trunk, 32 labelled + 32 video per batch.
   future signal; dreamed frames even hurt vs no future. But the 3-demo MLP decoder itself is weak
   (bc 7 vs WAM heads 15-17) -> the bottleneck is the decoder, not z. Next if resumed: a stronger
   decoder that reads z (flow-matching head on z + now frame + joints), or z into the WAM head.
+
+## Step 4: 8 flow-matching action heads on the frozen WAM-C trunk (2026-11-08)
+- wam_c_heads.py + heads.sh. Each head = small FM transformer (3 layers, D 128), trained 6000 steps
+  on the 3 labelled demos, fed the WAM's DREAMED chunk-1 z / frames (4 dreams per row), gradient-cut
+  (= training them inside the WAM run). Head init seed fixed at 0; "seed" = WAM trunk seed.
+  j and jn don't use the WAM, so their 3 "seeds" are one identical run.
+
+| head | joints + | s0 | s1 | s2 | total /120 |
+|---|---|---|---|---|---|
+| j | (blind) | 13 | 13 | 13 | 39 (one run) |
+| jn | now | 9 | 9 | 9 | 27 (one run) |
+| jz | z | 6 | 8 | 5 | 19 |
+| jnz | now + z | 11 | 14 | 10 | 35 |
+| jf | frames | 13 | 13 | 15 | 41 |
+| jnf | now + frames | 12 | 15 | 13 | 40 |
+| jzf | z + frames | **22** | **17** | **16** | **55** |
+| jnzf | now + z + frames | 13 | 14 | 13 | 40 |
+| (WAM-C own actions) | all tokens | 32 | 16 | 13 | 61 |
+| (no-z WAM own) | | 15 | 16 | 17 | 48 |
+- jzf is the best head on every trunk seed, and the only one above no-z WAM's 48; still below WAM-C own 61.
+- The now frame hurts the separate heads (j 13 > jn 9; jzf 55 > jnzf 40). Likely memorising: 630
+  rows, now frame -> action; dreams vary per sample, so z/frames-only heads see augmented inputs.
+- z alone is the worst (19); z helps only paired with frames. Blind 13/40 ~ most heads: at 3 labelled
+  a separate head mostly replays motion from joints.
+- Offline MSE misranked again (jzf among the worst offline).
+- Reliance probe (heads_reliance.py, heads_reliance.log; offline, 535 val rows, swap one input for
+  another row's, same noise; mean squared action change arm/gripper). Same on all 3 trunks; s0:
+
+| head | swap now | swap future (z+f) | swap z | swap f |
+|---|---|---|---|---|
+| jn | 0.158 / 0.614 | | | |
+| jnz | 0.186 / 0.215 | 0.078 / 0.632 | | |
+| jf | | 0.283 / 0.413 | | |
+| jnf | 0.064 / 0.173 | 0.088 / 0.481 | | |
+| jzf | | **0.385** / 0.658 | 0.038 / 0.356 | **0.283** / 0.330 |
+| jnzf | **0.023** / 0.265 | 0.212 / 0.425 | 0.122 / 0.148 | **0.052** / 0.193 |
+- With the now frame, reliance on the future halves (jzf 0.39 -> jnzf 0.21 arm; jf 0.28 -> jnf 0.09),
+  but the now frame itself is barely read (jnzf 0.02, jnf 0.06): the share goes to the joints
+  (replay), not to the now frame. In jnzf the arm stops reading dreamed frames (0.28 -> 0.05) and
+  reads z more (0.04 -> 0.12): now frame and dreamed frames both say "where", so they compete.
+- z mostly drives the gripper (0.3-0.7 change), dreamed frames drive the arm.
+- Arm reliance on the future tracks the sim: jzf 0.39 (55/120), jf 0.28-0.34 (41), jnzf 0.21 (40).
+- Now-frame dropout (heads_drop.sh): jnzf trained with the now frame blanked in 50% of samples
+  (shown always at test). Sim /40: s0 22, s1 16, s2 12 = **50/120** (jnzf 40, jzf 55).
+  Reliance (heads_reliance_drop.log): it learned to ignore the now frame completely (0.001 / 0.004),
+  gripper reads the future much more (0.43-0.53 -> 0.74-0.89), but the arm still reads the future
+  only 0.20-0.22 and barely the dreamed frames (0.05-0.07; jzf 0.28-0.31) -- it reads z + joints.
+  So dropout recovers most of jzf's score but not jzf's arm-on-frames.
+
+## Step 5: option b, trunk + jzf head trained together (wam_c_b.py, 2026-11-08)
+- Trunk = WAM-C with its action tokens hidden; jzf head reads the trunk's clean guess of the dream
+  (x + (1-tau) v, values only) + joints, same tau, all 4 chunks, labelled only. 1.56M params, 46 min.
+- b-grad (action loss reaches the trunk), seed 0: **12/40** (7 + 5, no_grasp 27). Dream quality fine
+  (val f 0.229, z 0.121 vs WAM-C s1 0.242 / 0.155). Seed 0 refs: jzf on frozen WAM-C 22, WAM-C own 32, no-z 15.
+- Reliance probe (b_reliance.py, b_reliance.log), b-grad s0: swap future 0.021 / 0.272, z 0.010 / 0.263,
+  frames 0.007 / 0.012 (jzf on frozen trunk: 0.385 / 0.658, 0.038 / 0.356, 0.283 / 0.330).
+  The arm ignores the dream entirely -> it acts on joints alone, = the blind head (13/40 vs 12/40).
+  Not a leak (a leak would make the swap move the actions). Likely cause: the head reads the dream at
+  the SAME tau as its actions, so at low tau it gets a mush guess; it learns the dream is useless.
+  b-stop would share this, so it's not the right control. Fix to try: dream finished (or high tau)
+  before the head reads it, as jzf had.
+- b-clean (--dream-steps 10: head reads the FINISHED dream; 10-step dream in training, grad through
+  the last step; rollout dreams first, then actions), seed 0, 1 h 56 min: **15/40** (7 + 8, no_grasp 25).
+  vs same-tau b-grad 12, jzf on frozen trunk 22, no-z WAM 15. Clean dream didn't close the gap to jzf.
+- Reliance, b-clean s0 (b_reliance.log): future 0.007 / 0.049, z 0.007 / 0.048, frames 0.000 / 0.002.
+  Ignores the dream even more than b-grad: the head runs on joints alone in both joint-training runs.
+  Likely: trained from scratch together, the dreams are useless early, the head fits the 3 demos from
+  joints, and never needs the dream later. jzf read finished dreams from its first step (0.39).
+
+## Step 6: what z holds, T2-fixed (rough/lam.ipynb steps 7-8, 2026-11-08)
+- T1 probes (notebook LAM, reverse): kNN arm/gripper change 0.89/0.86 (untrained 0.66/0.61); fit on 3
+  demos 0.80/0.61. Position looks known (0.78) but the TRUE change alone gives 0.85: T1's path ties
+  move to place, so no extra position.
+- T2-fixed LAM (same recipe, clicked at 7k). kNN "which bin?", 5 folds over all 100 demos, by fifth:
+  z 42/42/41/61/82%, true move 42/43/45/93/69%, position 53/52/52/81/100% (~42% = fold-vote bias).
+- During the swing z = "away from / toward the center", not left/right: centroid distance fwd-A vs
+  fwd-B 0.18, fwd vs back ~1.8 (reverse=True makes that the cheapest code; frame t gives the side).
+- At release z knows the bin (82% > move 69%): bins look identical, but the arm is a mirrored
+  silhouette on each side; pooling drops "where", not edge orientation. z = move + look of the mover.
