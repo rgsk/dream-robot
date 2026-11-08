@@ -52,6 +52,7 @@ watch/file.txt
 
 practice.ipynb
 rough.ipynb
+prac.ipynb
 .env
 
 # --- envs/<name>/: per-simulator venvs, source clones, assets ---

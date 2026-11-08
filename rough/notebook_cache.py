@@ -14,6 +14,15 @@
 # Going back below the highest version a cell has run with is refused: it would replay a result
 # computed against the other cells as they were back then. Only for that same cell, though: edit
 # anything else in it and it's a new cell, which starts again at any version, plain `@cache` too.
+# `@cache(keep=True)` (or `@cache(2, keep=True)`): when this cell code has no result for a call,
+# replay one stored by an OLDER version of the cell (same function name, same arguments; a
+# parameter added since counts as matching at its default), newest first. It is
+# copied in, so later runs replay it as usual,
+# also after removing keep (one-shot: run once with keep, then drop it). For edits you know
+# don't change the result; left on, it would replay stale results after a real change.
+# Every replay of a copied result says so: `copied by keep=True from older code (cell ...)`.
+# keep only copies results stored at the same version: `@cache(3, keep=True)` right after a
+# bump finds none and recomputes, as the bump asks.
 import ast
 import contextlib
 import functools
@@ -23,6 +32,7 @@ import io
 import json
 import linecache
 import re
+import shutil
 import sys
 import textwrap
 import types
@@ -31,11 +41,20 @@ from pathlib import Path
 from typing import TextIO, cast, overload
 
 from joblib import Memory
+from joblib.func_inspect import filter_args
 from joblib.memory import MemorizedFunc
 
 # `@cache(3)`, read as `@cache` when comparing cells
-VERSION = re.compile(r"(@\w+)\(\s*\d+\s*\)")
+VERSION = re.compile(r'(@\w+)\(\s*\d+\s*\)')
 DOCSTRING_OWNERS = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+# `keep=...` in the decorator is not part of the cell: `@cache(keep=True)` reads as `@cache`,
+# `@cache(2, keep=True)` as `@cache(2)`, so removing it after one run keeps the copied results
+KEEP_ONLY = re.compile(r'(@\w+)\(\s*keep\s*=\s*\w+\s*\)')
+KEEP_ARG = re.compile(r'(@\w+\(\s*\d+)\s*,\s*keep\s*=\s*\w+\s*\)')
+
+
+def without_keep(code: str) -> str:
+    return KEEP_ARG.sub(r'\1)', KEEP_ONLY.sub(r'\1', code))
 
 
 def normalized(code: str) -> str:
@@ -74,44 +93,46 @@ class NotebookCache:
         self.memory = Memory(location=path, verbose=0)
         self.path = Path(path)
         # each cell's highest version so far
-        self.versions = Path(path) / "versions.json"
+        self.versions = Path(path) / 'versions.json'
 
     def check_version(self, func: Callable, version: int) -> None:
         # refuses a version below the highest one func's cell has run with, and records this one.
         # A cell is its code with the version taken out, so a bump keeps it the same cell
         cell = normalized(
-            VERSION.sub(r"\1", "".join(linecache.getlines(inspect.getfile(func))))
+            VERSION.sub(r'\1', without_keep(''.join(linecache.getlines(inspect.getfile(func)))))
         )
-        name = f"{func.__qualname__} {digest(cell)}"
+        name = f'{func.__qualname__} {digest(cell)}'
         seen: dict[str, int] = (
             json.loads(self.versions.read_text()) if self.versions.exists() else {}
         )
         latest = seen.get(name, version)
         if version < latest:
             raise ValueError(
-                f"{func.__qualname__}: version {version} is below {latest}, the highest this cell"
-                " has run with, so it would replay a stale result;"
-                f" use @cache({latest + 1}) to recompute"
+                f'{func.__qualname__}: version {version} is below {latest}, the highest this cell'
+                ' has run with, so it would replay a stale result;'
+                f' use @cache({latest + 1}) to recompute'
             )
         seen[name] = version
         self.versions.parent.mkdir(parents=True, exist_ok=True)
-        self.versions.write_text(json.dumps(seen, indent=1) + "\n")
+        self.versions.write_text(json.dumps(seen, indent=1) + '\n')
 
     @overload
     def __call__[**P, R](self, arg: Callable[P, R], /) -> Callable[P, R]: ...
     @overload
     def __call__[**P, R](
-        self, arg: int, /
+        self, arg: int = 1, /, *, keep: bool = False
     ) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
     def __call__[**P, R](
-        self, arg: Callable[P, R] | int, /
+        self, arg: Callable[P, R] | int = 1, /, *, keep: bool = False
     ) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
-        # @cache is version 1, @cache(n) version n
+        # @cache is version 1, @cache(n) version n; keep=True: replay older code's results
         if isinstance(arg, int):
-            return lambda func: self.wrap(func, arg)
-        return self.wrap(arg, 1)
+            return lambda func: self.wrap(func, arg, keep)
+        return self.wrap(arg, 1, False)
 
-    def wrap[**P, R](self, func: Callable[P, R], version: int) -> Callable[P, R]:
+    def wrap[**P, R](
+        self, func: Callable[P, R], version: int, keep: bool = False
+    ) -> Callable[P, R]:
         self.check_version(func, version)
         ran = False
 
@@ -129,9 +150,9 @@ class NotebookCache:
         # is a new folder). It sits next to the real cell, as joblib reads the folder
         # ipykernel_<pid>/ the same in every session
         file = inspect.getfile(func)
-        cell = normalized("".join(linecache.getlines(file)))
-        stand_in = str(Path(file).with_name(f"cell-{digest(cell)}.py"))
-        source = normalized(textwrap.dedent(inspect.getsource(func))) + "\n"
+        cell = normalized(without_keep(''.join(linecache.getlines(file))))
+        stand_in = str(Path(file).with_name(f'cell-{digest(cell)}.py'))
+        source = normalized(without_keep(textwrap.dedent(inspect.getsource(func)))) + '\n'
         linecache.cache[stand_in] = (
             len(source),
             None,
@@ -156,24 +177,74 @@ class NotebookCache:
         # this cell code's stored calls, one folder per set of arguments
         folder = Path(memorized.store_backend.location) / memorized.func_id
         stored = (
-            sum((d / "output.pkl").exists() for d in folder.iterdir())
-            if folder.exists()
-            else 0
+            sum((d / 'output.pkl').exists() for d in folder.iterdir()) if folder.exists() else 0
         )
         name = func.__qualname__
+        # each cell folder records its version, so keep never copies across a bump
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / 'cache_version').write_text(str(version))
         print(
-            f"{name}: cached, {stored} call(s) stored"
+            f'{name}: cached, {stored} call(s) stored'
             if stored
-            else f"{name}: not cached, will compute"
+            else f'{name}: not cached, will compute'
+            + (" (or replay older code's result: keep)" if keep else '')
         )
+        defaults = {
+            k: repr(p.default)
+            for k, p in inspect.signature(func).parameters.items()
+            if p.default is not inspect.Parameter.empty
+        }
+
+        def adopt(args: tuple, kwargs: dict) -> None:
+            # no result for this call in this cell code: copy the newest matching one stored
+            # by an older version of the cell, with this call's argument key
+            args_id = memorized._get_args_id(*args, **kwargs)
+            if (folder / args_id / 'output.pkl').exists():
+                return
+            want = {
+                k: repr(v)
+                for k, v in filter_args(memorized.func, memorized.ignore, args, kwargs).items()
+            }
+            found = []
+            for meta in folder.parent.parent.glob(f'*/{folder.name}/*/metadata.json'):
+                if meta.parent.parent == folder or not (meta.parent / 'output.pkl').exists():
+                    continue
+                stamp = meta.parent.parent / 'cache_version'
+                if (int(stamp.read_text()) if stamp.exists() else 1) != version:
+                    continue  # another version: a bump means recompute
+                old = json.loads(meta.read_text())['input_args']
+                if set(old) <= set(want) and all(
+                    old[k] == v if k in old else defaults.get(k) == v for k, v in want.items()
+                ):
+                    found.append(meta.parent)
+            if not found:
+                return
+            src = max(found, key=lambda d: (d / 'output.pkl').stat().st_mtime)
+            memorized._check_previous_func_code()  # writes this cell's func_code.py
+            dst = folder / args_id
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+            meta = json.loads((dst / 'metadata.json').read_text())
+            old_cell = src.parent.parent.name.rsplit('cell-', 1)[-1]
+            meta |= {
+                'input_args': want,
+                'copied_by_keep_from': meta.get('copied_by_keep_from', old_cell),
+            }
+            (dst / 'metadata.json').write_text(json.dumps(meta))
 
         @functools.wraps(func)
         def replay(*args: P.args, **kwargs: P.kwargs) -> R:
             nonlocal ran
             ran = False
+            if keep:
+                adopt(args, kwargs)
             result, printed = cached(*args, **kwargs)
             if not ran:
-                print(printed, end="")
+                # a result keep=True copied in says so on every replay
+                meta = folder / memorized._get_args_id(*args, **kwargs) / 'metadata.json'
+                copied = json.loads(meta.read_text()).get('copied_by_keep_from')
+                if copied:
+                    print(f'{name}: result copied by keep=True from older code (cell {copied})')
+                print(printed, end='')
             return result
 
         return replay
