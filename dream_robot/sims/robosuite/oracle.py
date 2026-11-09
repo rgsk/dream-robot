@@ -167,7 +167,9 @@ class ExpertFuture:
         if self._env.which_bin(cube) == self._env.target_bin:
             return                                         # delivered: nothing to redo
         hand = self._expert._ik.site_pos
-        closed = float(observation.state[-1]) < 0.5
+        # Fingers closed on a cube stop at ~0.72 (the cube is in the way), so < 0.5 called
+        # every real grasp "lost" and restarted the plan; 0.85 is the task's "released" mark.
+        closed = float(observation.state[-1]) < 0.85
         if closed and np.linalg.norm(hand - cube) < self._HELD_DISTANCE:
             return                                         # really holding it
         self._expert.reset()                               # re-latches the cube where it is now
