@@ -87,3 +87,22 @@ idle pod bills the same as a busy one.
 - **The network volume is shared by every project.** Only the folder separates dream-robot from llm;
   space and `/workspace/.secrets` are shared.
 - LeRobot's video encoder prints `Svt[info]` lines per episode; filter them out of logs.
+
+## Notebook kernel on a pod (2026-11-09, `rough/t5_video.ipynb`, L40S)
+
+No network volume left: everything on the pod's own disk (`/root/dream-robot`, 60 GB container disk).
+- **Sync only tracked files** (`git ls-files | rsync --files-from=-` + the notebook and
+  `rough/notebook_cache.py`); the repo folder is ~45 GB (`envs/`, `experiments/`). 64 MB in 80 s.
+- **Upload videos, not decoded arrays**: dataset without `decoded/` is 65 MB; re-decode on the pod
+  with `experiments/idm/scripts/build_cache.py` (74 s for top + wrist, matches LeRobot's decode).
+- `uv sync` needs `ruffgrid` at `/projects/ruffgrid` (the `../../projects/ruffgrid` path source):
+  rsync its tracked files there first.
+- Kernel: `uv run --with jupyter-server jupyter server --allow-root --no-browser --ip 127.0.0.1
+  --port 8888 --IdentityProvider.token=<tok> --ServerApp.root_dir=/root/dream-robot/rough`
+  (setsid nohup), tunnel `ssh -N -L 8899:127.0.0.1:8888`, VS Code -> Existing Jupyter Server.
+- `scripts/nb_exec.py` against the pod kernel: copy its connection file into
+  `/run/user/<uid>/jupyter/runtime/` and forward its 5 ports with `ssh -N -L p:127.0.0.1:p`.
+- `cache/<nb>` is portable (keys = cell code + args): rsync it up before, back after; diff
+  `versions.json` keys so nothing local is lost. Never run cached cells on both sides at once.
+- L40S: UNet (1.3M) 30k steps in 10 min; 60-episode closed loop with 8 spawn workers ~1 min
+  (27 cores, 1 TB RAM).
