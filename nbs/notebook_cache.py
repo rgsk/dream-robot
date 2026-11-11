@@ -13,6 +13,8 @@
 # So a version above 1 reads: this cell was rerun for changes in other cells, not its own.
 # `@cache(uses=[module, ...])`: the listed modules' code (parsed, as cells are) joins the cell's,
 # so editing a module the function relies on recomputes, and editing it back replays.
+# `NotebookCache.here(also=['other_notebook'])`: the cache path from the notebook's own path,
+# <repo>/cache/nbs/verne/00_end_to_end for nbs/verne/00_end_to_end.ipynb (VS Code kernels only).
 # `NotebookCache(path, also=[other_path, ...])`: on a miss, read (never copy or write) a result
 # from another notebook's cache whose function matches: same name, parsed code, uses code,
 # version and arguments. Other code in that cell isn't compared. It says `read from <path>`.
@@ -104,11 +106,28 @@ class Tee(io.StringIO):
 class NotebookCache:
     def __init__(self, path: str | Path, also: Sequence[str | Path] = ()) -> None:
         # also: other notebooks' caches, read (never written) on a miss here
-        self.memory = Memory(location=path, verbose=0)
+        # a str, not a Path: joblib adds its 'joblib/' subfolder only for a str location
+        self.memory = Memory(location=str(path), verbose=0)
         self.path = Path(path)
         self.also = [Path(a) for a in also]
         # each cell's highest version so far
         self.versions = Path(path) / 'versions.json'
+
+    @classmethod
+    def here(cls, also: Sequence[str] = ()) -> 'NotebookCache':
+        # the cache of the notebook this kernel runs, at <repo>/cache/<notebook path, no suffix>:
+        # nbs/verne/00_end_to_end.ipynb -> cache/nbs/verne/00_end_to_end. also: names of other
+        # notebooks next to this one ('00_end_to_end'), whose caches are read on a miss
+        from IPython import get_ipython
+
+        ipython = get_ipython()
+        notebook = ipython and ipython.user_ns.get('__vsc_ipynb_file__')
+        if not notebook:
+            raise RuntimeError('NotebookCache.here() needs a VS Code notebook kernel')
+        notebook = Path(notebook).resolve()
+        repo = next(d for d in notebook.parents if (d / '.git').exists())
+        cache = repo / 'cache' / notebook.relative_to(repo).with_suffix('')
+        return cls(cache, also=[cache.with_name(name) for name in also])
 
     def check_version(self, func: Callable, version: int, uses=()) -> None:
         # refuses a version below the highest one func's cell has run with, and records this one.
