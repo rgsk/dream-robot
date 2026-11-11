@@ -13,6 +13,9 @@
 # So a version above 1 reads: this cell was rerun for changes in other cells, not its own.
 # `@cache(uses=[module, ...])`: the listed modules' code (parsed, as cells are) joins the cell's,
 # so editing a module the function relies on recomputes, and editing it back replays.
+# `NotebookCache(path, also=[other_path, ...])`: on a miss, read (never copy or write) a result
+# from another notebook's cache whose function matches: same name, parsed code, uses code,
+# version and arguments. Other code in that cell isn't compared. It says `read from <path>`.
 # Going back below the highest version a cell has run with is refused: it would replay a result
 # computed against the other cells as they were back then. Only for that same cell, though: edit
 # anything else in it and it's a new cell, which starts again at any version, plain `@cache` too.
@@ -43,6 +46,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TextIO, cast, overload
 
+import joblib
 from joblib import Memory
 from joblib.func_inspect import filter_args
 from joblib.memory import MemorizedFunc
@@ -98,9 +102,11 @@ class Tee(io.StringIO):
 
 
 class NotebookCache:
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, also: Sequence[str | Path] = ()) -> None:
+        # also: other notebooks' caches, read (never written) on a miss here
         self.memory = Memory(location=path, verbose=0)
         self.path = Path(path)
+        self.also = [Path(a) for a in also]
         # each cell's highest version so far
         self.versions = Path(path) / 'versions.json'
 
@@ -198,11 +204,14 @@ class NotebookCache:
         # each cell folder records its version, so keep never copies across a bump
         folder.mkdir(parents=True, exist_ok=True)
         (folder / 'cache_version').write_text(str(version))
+        uses_digest = digest(module_code(uses))
+        (folder / 'uses_code').write_text(uses_digest)
         print(
             f'{name}: cached, {stored} call(s) stored'
             if stored
             else f'{name}: not cached, will compute'
             + (" (or replay older code's result: keep)" if keep else '')
+            + (' (or read a matching result from also)' if self.also else '')
         )
         defaults = {
             k: repr(p.default)
@@ -246,12 +255,41 @@ class NotebookCache:
             }
             (dst / 'metadata.json').write_text(json.dumps(meta))
 
+        def borrowed(args: tuple, kwargs: dict) -> tuple[R, str, Path] | None:
+            # no result here: the newest result in an `also` cache of a function with this
+            # name, this parsed code, this uses code, this version and these arguments
+            args_id = memorized._get_args_id(*args, **kwargs)
+            if (folder / args_id / 'output.pkl').exists():
+                return None
+            found = []
+            for root in self.also:
+                for out in (root / 'joblib').glob(f'*/{folder.name}/{args_id}/output.pkl'):
+                    other = out.parent.parent
+                    code = (other / 'func_code.py').read_text().split('\n', 1)[-1]
+                    stamp, used = other / 'cache_version', other / 'uses_code'
+                    if (
+                        normalized(code) == normalized(source)
+                        and (int(stamp.read_text()) if stamp.exists() else 1) == version
+                        and (used.read_text() if used.exists() else digest('')) == uses_digest
+                    ):
+                        found.append((out, root))
+            if not found:
+                return None
+            out, root = max(found, key=lambda f: f[0].stat().st_mtime)
+            result, printed = joblib.load(out)
+            return result, printed, root
+
         @functools.wraps(func)
         def replay(*args: P.args, **kwargs: P.kwargs) -> R:
             nonlocal ran
             ran = False
             if keep:
                 adopt(args, kwargs)
+            if self.also and (got := borrowed(args, kwargs)):
+                result, printed, root = got
+                print(f'{name}: read from {root}')
+                print(printed, end='')
+                return result
             result, printed = cached(*args, **kwargs)
             if not ran:
                 # a result keep=True copied in says so on every replay
