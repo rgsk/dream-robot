@@ -29,6 +29,7 @@ import yaml
 from robosuite.environments.manipulation.lift import Lift
 from robosuite.utils.binding_utils import MjRenderContext
 from robosuite.utils.mjcf_utils import array_to_string, new_body, new_geom
+from robosuite.utils.placement_samplers import UniformRandomSampler
 
 from dream_robot.core.camera import RGBD
 from dream_robot.core.env_api import FailureMode, StepResult
@@ -89,7 +90,8 @@ class TaskConfig:
     camera_mapping: dict[str, str]
     render_camera: str
     render_hw: tuple[int, int]
-    cube_xy_range: tuple[float, float]
+    # per axis: a half-width r (spawn in [-r, r]) or a [min, max] pair, metres about the table centre
+    cube_xy_range: tuple[float | tuple[float, float], float | tuple[float, float]]
     bin: BinSpec
     resting_z_margin: float
     lift_threshold: float
@@ -107,7 +109,9 @@ class TaskConfig:
             camera_mapping=dict(raw["cameras"]["mapping"]),
             render_camera=str(raw["render"]["camera"]),
             render_hw=(int(raw["render"]["height"]), int(raw["render"]["width"])),
-            cube_xy_range=tuple(raw["scene"]["cube_xy_range"]),
+            cube_xy_range=tuple(
+                tuple(r) if isinstance(r, list) else float(r) for r in raw["scene"]["cube_xy_range"]
+            ),
             bin=BinSpec(
                 offset_xy=tuple(b["offset_xy"]),
                 inner_half=float(b["inner_half"]),
@@ -215,11 +219,31 @@ class PickPlaceCube:
             camera_widths=cw,
             control_freq=self._cfg.control_hz,
             horizon=self._cfg.horizon_steps,
+            placement_initializer=self._cube_sampler(),
         )
         self._raw: dict | None = None
         self._t = 0
         self._max_cube_z = -np.inf
         self._gripper_span = self._measure_gripper_span()
+
+    def _cube_sampler(self) -> UniformRandomSampler:
+        """Lift's own cube sampler, with the spawn range from task.yaml.
+
+        Every argument but the range is Lift's default, so at cube_xy_range 0.03 (Lift's
+        built-in range) the spawns are draw-for-draw the ones Lift makes by itself.
+        Lift adds the cube to it in _load_model.
+        """
+        x, y = (list(r) if isinstance(r, tuple) else [-r, r] for r in self._cfg.cube_xy_range)
+        return UniformRandomSampler(
+            name="ObjectSampler",
+            x_range=x,
+            y_range=y,
+            rotation=None,
+            ensure_object_boundary_in_range=False,
+            ensure_valid_placement=True,
+            reference_pos=np.array((0, 0, 0.8)),  # Lift's table_offset default
+            z_offset=0.01,
+        )
 
     # --- Env protocol ------------------------------------------------------
 

@@ -41,8 +41,9 @@ render:
   width: 256
 
 scene:
-  # Cube spawn randomisation, +/- metres about the table centre. robosuite's
-  # Lift default; widen for the noisy-expert work, not before.
+  # Cube spawn randomisation, metres about the table centre, per axis (x, y):
+  # a half-width r for [-r, r], or a [min, max] pair. robosuite's Lift default;
+  # widen for the noisy-expert work, not before.
   cube_xy_range: [0.03, 0.03]
 
   bin:

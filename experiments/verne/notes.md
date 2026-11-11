@@ -24,3 +24,16 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   from top-row tokens 9/20; bottom row (control) 7/20; real 8/20. Register guess wrong.
   T1 cube_xy_range is +-3 cm: the model grasps the average spot, works ~half the time. It does
   not localize the cube. Checks: erase hits 46-54 red px in sim frames; masked sampler == sample.
+
+## T1-wide: a T1 where the eyes have to find the cube (2026-11-11)
+- task.yaml's cube_xy_range was read but never applied (robosuite Lift's built-in +-3 cm did it);
+  env now builds Lift's sampler from it, per axis half-width or [min, max]. T1 spawns identical
+  (10 seeds checked).
+- Expert (experiments/verne/scripts/expert_wide.py, 100 seeds): +-10 cm both axes 95/100, all 5
+  "stuck in descend" with cube y >= +0.076 (fingers on the bin's near wall, bin starts y +0.134);
+  x [-10, 10], y [-10, 6] cm: 100/100.
+- Recorded data/robosuite/pick_place_cube_wide_n100: x [-0.10, 0.10], y [-0.10, 0.06], 100/100
+  expert, 22,409 frames (record.py --cube-x/--cube-y).
+- Step 0 model trained on 90 T1-wide demos, 20k steps: held-out loss 0.05 (no overfit).
+  Rollouts seeds 1000-1019: n_exec 8 **1/20**, n_exec 16 **1/20**, cube erased **1/20**, almost
+  all no_grasp. The model doesn't use the cube. Unchecked: rollout path bug; where the gripper goes.

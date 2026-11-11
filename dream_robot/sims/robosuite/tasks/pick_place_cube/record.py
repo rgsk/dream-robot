@@ -19,6 +19,7 @@ wrong. The seam is only real if you have looked through it.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
 
 from dream_robot.core.dataset import episode_frames, open_dataset
@@ -27,15 +28,15 @@ from dream_robot.core.video import camera_strip, write_video
 from dream_robot.sims.robosuite.tasks.pick_place_cube.env import PickPlaceCube, TaskConfig
 from dream_robot.sims.robosuite.tasks.pick_place_cube.expert import ExpertActor, ExpertPolicy
 
-REPO_ID = "dream_robot/pick_place_cube"
-DEFAULT_ROOT = Path("data/robosuite/pick_place_cube")
-DEFAULT_VIDEO = Path("experiments/expert_demo/videos/dataset_roundtrip.mp4")
+REPO_ID = 'dream_robot/pick_place_cube'
+DEFAULT_ROOT = Path('data/robosuite/pick_place_cube')
+DEFAULT_VIDEO = Path('experiments/expert_demo/videos/dataset_roundtrip.mp4')
 
 
 def verify(root: Path, out: Path, *, episode: int, scale: int) -> Path:
     """Decode one episode back out of the dataset and write it as a video."""
     dataset = open_dataset(REPO_ID, root, episode=episode)
-    cameras = [key.rsplit(".", 1)[-1] for key in dataset.meta.camera_keys]
+    cameras = [key.rsplit('.', 1)[-1] for key in dataset.meta.camera_keys]
     per_camera = {name: episode_frames(dataset, name) for name in cameras}
     frames = [
         camera_strip({name: per_camera[name][t] for name in cameras}, scale=scale)
@@ -43,36 +44,61 @@ def verify(root: Path, out: Path, *, episode: int, scale: int) -> Path:
     ]
     path = write_video(frames, out, fps=dataset.meta.fps)
     print(
-        f"verified: episode {episode}, {len(frames)} frames, cameras {cameras} "
-        f"-> {path.resolve()}"
+        f'verified: episode {episode}, {len(frames)} frames, cameras {cameras} -> {path.resolve()}'
     )
     return path
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--episodes", type=int, default=20, help="successful episodes to keep")
-    p.add_argument("--root", type=Path, default=DEFAULT_ROOT)
-    p.add_argument("--seed-start", type=int, default=0)
-    p.add_argument("--max-attempts", type=int, default=None)
+    p.add_argument('--episodes', type=int, default=20, help='successful episodes to keep')
+    p.add_argument('--root', type=Path, default=DEFAULT_ROOT)
+    p.add_argument('--seed-start', type=int, default=0)
+    p.add_argument('--max-attempts', type=int, default=None)
     p.add_argument(
-        "--keep-failures",
-        action="store_true",
-        help="record failed episodes too; poisons behaviour cloning, see core/record.py",
+        '--keep-failures',
+        action='store_true',
+        help='record failed episodes too; poisons behaviour cloning, see core/record.py',
     )
     p.add_argument(
-        "--noise-sigma",
+        '--noise-sigma',
         type=float,
         default=0.0,
-        help="Gaussian noise (rad) on executed arm joints; the dataset keeps the clean action",
+        help='Gaussian noise (rad) on executed arm joints; the dataset keeps the clean action',
     )
-    p.add_argument("--verify", action="store_true", help="write a video read back from disk")
-    p.add_argument("--verify-episode", type=int, default=0)
-    p.add_argument("--verify-out", type=Path, default=DEFAULT_VIDEO)
-    p.add_argument("--verify-scale", type=int, default=3)
+    p.add_argument(
+        '--cube-x',
+        type=float,
+        nargs=2,
+        default=None,
+        metavar=('MIN', 'MAX'),
+        help='cube spawn x range in metres about the table centre (default: task.yaml)',
+    )
+    p.add_argument(
+        '--cube-y',
+        type=float,
+        nargs=2,
+        default=None,
+        metavar=('MIN', 'MAX'),
+        help='cube spawn y range in metres about the table centre (default: task.yaml)',
+    )
+    p.add_argument('--verify', action='store_true', help='write a video read back from disk')
+    p.add_argument('--verify-episode', type=int, default=0)
+    p.add_argument('--verify-out', type=Path, default=DEFAULT_VIDEO)
+    p.add_argument('--verify-scale', type=int, default=3)
     args = p.parse_args(argv)
 
     cfg = TaskConfig.load()
+    if args.cube_x or args.cube_y:
+        x, y = cfg.cube_xy_range
+        cfg = replace(
+            cfg,
+            cube_xy_range=(
+                tuple(args.cube_x) if args.cube_x else x,
+                tuple(args.cube_y) if args.cube_y else y,
+            ),
+        )
+    print(f'cube spawn range (x, y): {cfg.cube_xy_range}')
     env = PickPlaceCube(cfg)
     try:
         summary = record_episodes(
@@ -82,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
             root=args.root,
             task_prompt=cfg.prompt,
             episodes=args.episodes,
-            robot_type="panda",
+            robot_type='panda',
             seed_start=args.seed_start,
             max_attempts=args.max_attempts,
             keep_failures=args.keep_failures,
@@ -92,12 +118,12 @@ def main(argv: list[str] | None = None) -> int:
         env.close()
 
     print(
-        f"\n{summary.kept} episodes / {summary.total_frames} frames -> "
-        f"{summary.root.resolve()}\n"
-        f"expert success rate {summary.success_rate:.0%} over {summary.attempted} attempts"
+        f'\n{summary.kept} episodes / {summary.total_frames} frames -> '
+        f'{summary.root.resolve()}\n'
+        f'expert success rate {summary.success_rate:.0%} over {summary.attempted} attempts'
     )
     if summary.failure_histogram:
-        print(f"failures: {summary.failure_histogram}")
+        print(f'failures: {summary.failure_histogram}')
 
     if args.verify:
         verify(
@@ -109,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     # Not decoration. LeRobot's video encoder can spawn a process pool, and the
     # forkserver re-imports this module as __main__ in each child -- without the
     # guard the recording restarts itself recursively. core/record.py keeps
