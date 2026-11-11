@@ -13,7 +13,7 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   n_exec 16 **9/20** (no_grasp 10, dropped 1) = **17/40** vs WAMz 34/40. One seed.
 - Missing vs WAMz: VAE latents, future-frame loss (WAMz pixels -> latents went 24 -> 34).
 
-## Practice (nbs/verne/practice.ipynb): opening step 0's boxes
+## Probes (nbs/verne/probes.ipynb): opening step 0's boxes
 - Box 1 patches: cube = ~2 of 64 patches, half the tokens are empty table.
 - Box 1b: grey frame instead of the real one, n_exec 8: **0/20** (all no_grasp) vs 8/20. NOT proof
   the cube is located from the image (see box 2b): a grey frame is just out of distribution.
@@ -37,3 +37,7 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
 - Step 0 model trained on 90 T1-wide demos, 20k steps: held-out loss 0.05 (no overfit).
   Rollouts seeds 1000-1019: n_exec 8 **1/20**, n_exec 16 **1/20**, cube erased **1/20**, almost
   all no_grasp. The model doesn't use the cube. Unchecked: rollout path bug; where the gripper goes.
+- Box 3 (probes cells 52-56): gripper xy at first commanded close vs cube spawn xy, n_exec 8,
+  seeds 1000-1019: slope x -0.09, y +0.07, corr ~0.08 -> **blind**. Mean miss ~10 cm (films
+  looked closer than they were). Close points in two clumps regardless of cube: x +4..+9 cm
+  (14/20) or -4..-8 cm (6/20). Check: expert's close point within 0.1 cm of cube (5 seeds).
