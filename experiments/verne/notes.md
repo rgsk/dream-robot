@@ -44,8 +44,28 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
 
 ## Protocol from 2026-11-11: 50 rollout seeds (1000-1049), training seeds 0 first, 1 and 2 later
 - rollouts.py (env, sweep, close-point probe) shared by every step's notebook; frame_of in data.py.
-- Step 0, train seeds 0 + 1 + 2 (00_end_to_end): T1 n_exec 8 **24 + 17 + 13 = 54/150**, 16
-  **23 + 18 + 18 = 59/150** (seed 0 on 1000-1019 alone: 8, 9, as before; val end 0.246, 0.196,
-  0.201, doesn't predict order). T1-wide **3 + 1 + 1 = 5/150** at both, all no_grasp. Probe:
-  closes 50/50 each, x slopes -0.31/-0.13/-0.17, y -0.09/-0.20/+0.05, intercepts x +3.7/+3.2/+3.1 y -2.4/-1.9/-0.7 cm, miss 10.9/10.3/10.0 cm
-  = blind. Seed-to-seed on T1: 13-24 of 50.
+- Step 0, train seeds 0 + 1 + 2 (00_end_to_end): T1 n_exec 8 **25 + 18 + 13 = 56/150**, 16
+  **25 + 17 + 12 = 54/150** (val end 0.246, 0.196, 0.201, doesn't predict order). T1-wide
+  **3 + 1 + 0 = 4/150**, **1 + 1 + 1 = 3/150**, all no_grasp. Probe: closes 50/50 each, x slopes
+  -0.23/-0.27/-0.11, y +0.04/-0.10/-0.02, intercepts x +3.8/+3.9/+3.1 y -2.9/-1.9/-1.1 cm, miss
+  10.5/10.1/10.1 cm = blind. Seed-to-seed on T1: 12-25 of 50.
+- Rollouts now one torch seed per episode (seed*100 + n_exec), 8 spawn workers (pod: 50 eps ~1 min;
+  one thread per worker, else 128-thread thrash). First pass (one seed per sweep): T1 54/150,
+  59/150, wide 5/150, 5/150: same models, within noise. Each worker holds ~2.3 GB GPU: two
+  notebooks sweeping at once filled the 4090, a worker hung; pool now has a 10 min timeout.
+
+## Step 01 · camera canvas (2026-11-11), nbs/verne/01_canvas.ipynb
+- First pass, old protocol (1 train seed x seeds 1000-1019); to be redone on rollouts.py, 3 x 50.
+- [top | wrist] side by side, 128x256 -> 128 patches, same patch_in, learned positions over the
+  canvas (Verne transforms.py build_canvas; head-camera crop skipped). 3.68M params.
+- T1, 10 labelled, 20k steps: val best 0.167 (2k), end 0.302 (step 0: 0.168, 0.246).
+- Rollouts seeds 1000-1019: n_exec 8 **4/20** (no_grasp 15, wrong_target 1), n_exec 16 **6/20**
+  (no_grasp 14) = **10/40** vs step 0 17/40. One seed.
+- Cache lesson: also=['00_end_to_end'] replayed step 0's train/sweep (identical cells, package
+  not in the key). Each step's notebook now reads only its own cache.
+- T1-wide (01_canvas step 01.5): 90 train demos, val as probes, 20k steps: val end 0.054 (step 0
+  wide 0.05). Rollouts seeds 1000-1019: n_exec 8 **3/20** (no_grasp 17), n_exec 16 **2/20**
+  (no_grasp 18) = **5/40** vs step 0 wide 2/40. One seed, within noise.
+- Close-point probe on the step 01 wide model (01_canvas cells 28-31), n_exec 8: closes 17/20,
+  x slope +0.96 corr 0.97, y slope +0.49 corr 0.55, intercept y -3.3 cm, mean miss **3.6 cm**
+  (step 0 wide: slopes ~0, ~10 cm). The wrist view makes it localize; y is half and short.

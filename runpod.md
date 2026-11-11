@@ -106,3 +106,25 @@ No network volume left: everything on the pod's own disk (`/root/dream-robot`, 6
   `versions.json` keys so nothing local is lost. Never run cached cells on both sides at once.
 - L40S: UNet (1.3M) 30k steps in 10 min; 60-episode closed loop with 8 spawn workers ~1 min
   (27 cores, 1 TB RAM).
+
+## Check the pod's network first (2026-11-11, Verne seeds, RTX 4090)
+
+Network speed varies by host, and a slow one costs more than its GPU saves. Measure it right after
+`pod create`, before syncing anything:
+```bash
+ssh ... 'curl -s -o /dev/null -w "%{speed_download}\n" --max-time 15 \
+  https://download.pytorch.org/whl/cu128/torch-2.10.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl'
+```
+- Two 4090 pods, same day: one did **2 MB/s** from download.pytorch.org and Hugging Face, the
+  other **99 MB/s** (pytorch) / 28 MB/s (HF). On the slow one `uv sync` was still downloading after
+  40 min; on the fast one it took **79 s** (9.6 GB uv cache). Under ~20 MB/s: delete the pod, make
+  another.
+- With a fast host, a fresh `uv sync` is ~1.5 min, so no network volume or uv-cache snapshot is
+  needed, and the pod isn't pinned to a region.
+- Uploads from home are the other slow leg: scp to a US pod ~0.35 MB/s (single SSH stream,
+  India -> US). Upload only code (~94 MB tracked) and small datasets (videos, no decoded/); let the
+  pod fetch anything big itself (pip, HF).
+- No volume means no `/workspace/setup.sh`: run `scripts/runpod_setup.sh` without its first line
+  (`sed '/^bash \/workspace\/setup.sh$/d' scripts/runpod_setup.sh | ssh ... 'bash -s'`).
+- Stock is thin and changes by the minute: `runpodctl gpu list` "Low" often still fails to
+  create. A loop over (gpu, data centre) that checks `pod list` between tries avoids duplicates.

@@ -3,11 +3,17 @@ probe (does the gripper close where the cube is?).
 
 T1 is the cube task as recorded (cube spawn +-3 cm); T1-wide spawns it over x +-10 cm,
 y -10..+6 cm, so the policy has to find the cube to grasp it.
+
+Each episode seeds torch from (rollout seed, n_exec), so its result doesn't depend on which
+episodes ran before it: a sweep gives the same answer serial or spread over worker processes.
 """
 
 import logging
 import os
 from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import get_context
+from types import SimpleNamespace
 
 import numpy as np
 import torch
@@ -16,6 +22,7 @@ from .data import Demos, frame_of
 from .model import Verne, sample
 
 SEEDS = range(1000, 1050)  # rollout seeds, the same for every model
+STATS = ('s_mean', 's_std', 'a_mean', 'a_std')  # all of Demos a rollout needs
 WIDE_XY = ((-0.10, 0.10), (-0.10, 0.06))  # T1-wide's cube spawn, x and y [min, max] in m
 
 
@@ -51,6 +58,7 @@ def act(net: Verne, d: Demos, obs) -> np.ndarray:
 
 def rollout(net: Verne, d: Demos, env, seed: int, n_exec: int) -> tuple[bool, str, int]:
     # one episode, replanning after n_exec actions -> success, failure mode, steps
+    torch.manual_seed(seed * 100 + n_exec)  # this episode's sampling noise
     obs, plan = env.reset(seed=seed), []
     for step in range(600):
         if not plan:
@@ -62,18 +70,9 @@ def rollout(net: Verne, d: Demos, env, seed: int, n_exec: int) -> tuple[bool, st
     return r.success, str(r.failure_mode), step + 1
 
 
-def sweep(net: Verne, d: Demos, env, n_exec: int) -> dict[int, tuple[bool, str, int]]:
-    # every eval seed; prints the score and the failure modes
-    torch.manual_seed(n_exec)
-    res = {seed: rollout(net, d, env, seed, n_exec) for seed in SEEDS}
-    fails = Counter(mode for ok, mode, _ in res.values() if not ok)
-    n_ok = sum(ok for ok, _, _ in res.values())
-    print(f'n_exec {n_exec:2d}: {n_ok:2d}/{len(res)}   failures {dict(fails)}')
-    return res
-
-
 def close_point(net: Verne, d: Demos, env, seed: int, n_exec: int):
     # -> cube xy at spawn, gripper xy at the first commanded close (None if it never closes)
+    torch.manual_seed(seed * 100 + n_exec)  # the same noise as rollout's episode
     obs, plan = env.reset(seed=seed), []
     cube = env.cube_pos[:2]
     for _ in range(600):
@@ -89,10 +88,55 @@ def close_point(net: Verne, d: Demos, env, seed: int, n_exec: int):
     return cube, None
 
 
-def close_points(net: Verne, d: Demos, env, n_exec: int) -> dict:
-    # close_point for every eval seed
-    torch.manual_seed(n_exec)
-    return {seed: close_point(net, d, env, seed, n_exec) for seed in SEEDS}
+_worker = {}  # one worker process's env, net and stats
+
+
+def _start(wide: bool, weights: dict, stats: dict) -> None:
+    torch.set_num_threads(1)  # many workers share the cores; one thread each, no thrashing
+    _worker.update(
+        env=make_env(wide),
+        net=load(weights),
+        d=SimpleNamespace(**{k: v.cuda() for k, v in stats.items()}),
+    )
+
+
+def _episode(job: tuple[str, int, int]):
+    what, seed, n_exec = job
+    w = _worker
+    return (rollout if what == 'rollout' else close_point)(w['net'], w['d'], w['env'], seed, n_exec)
+
+
+def _run(what: str, weights: dict, d: Demos, wide: bool, n_exec: int, workers: int) -> dict:
+    # every eval seed, in `workers` processes (0: here, one after another)
+    stats = {k: getattr(d, k).cpu() for k in STATS}
+    jobs = [(what, seed, n_exec) for seed in SEEDS]
+    if workers == 0:
+        _start(wide, weights, stats)
+        return dict(zip(SEEDS, map(_episode, jobs), strict=True))
+    ctx = get_context('spawn')  # CUDA in children needs spawn, not fork
+    for k in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS'):
+        os.environ[k] = '1'  # read by the children's numpy / torch at import
+    pool = ProcessPoolExecutor(workers, ctx, initializer=_start, initargs=(wide, weights, stats))
+    try:  # a sweep takes ~1 min; a stuck worker raises TimeoutError here instead of hanging
+        return dict(zip(SEEDS, pool.map(_episode, jobs, timeout=600), strict=True))
+    finally:
+        for proc in list(pool._processes.values()):
+            proc.kill()  # results are in (or lost); a stuck worker can't block shutdown
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
+def sweep(weights: dict, d: Demos, wide: bool, n_exec: int, workers: int = 8) -> dict:
+    # seed -> (success, failure mode, steps) for every eval seed; prints the score
+    res = _run('rollout', weights, d, wide, n_exec, workers)
+    fails = Counter(mode for ok, mode, _ in res.values() if not ok)
+    n_ok = sum(ok for ok, _, _ in res.values())
+    print(f'n_exec {n_exec:2d}: {n_ok:2d}/{len(res)}   failures {dict(fails)}')
+    return res
+
+
+def close_points(weights: dict, d: Demos, wide: bool, n_exec: int, workers: int = 8) -> dict:
+    # seed -> (cube xy, gripper xy at first close or None) for every eval seed
+    return _run('close', weights, d, wide, n_exec, workers)
 
 
 def close_fit(points: dict) -> dict[str, float]:
