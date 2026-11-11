@@ -2,6 +2,7 @@
 
 import numpy as np
 import torch
+from frozendict import frozendict
 from numpy.typing import NDArray
 
 from .data import Demos, get_batch
@@ -16,8 +17,8 @@ def train(
     B: int = 32,
     lr: float = 3e-4,
     seed: int = 0,
-) -> tuple[dict, list[tuple[int, float, float]]]:
-    # out: the weights, and (step, train loss, val loss) every 1000 steps
+):
+    # out: {'weights': state dict on the cpu, 'log': (step, train loss, val loss) every 1000 steps}
     torch.manual_seed(seed)
     rng, val_rng = np.random.default_rng(seed), np.random.default_rng(1000 + seed)
     net = Verne().to(d.top.device)
@@ -36,4 +37,4 @@ def train(
                 lv = np.mean([loss(net, v.frame, v.state, v.acts).item() for v in val])
             log.append((step, l.item(), float(lv)))
             print(f'step {step:6d}   train {l.item():.3f}   val {lv:.3f}')
-    return {k: v.cpu() for k, v in net.state_dict().items()}, log
+    return frozendict(weights={k: v.cpu() for k, v in net.state_dict().items()}, log=log)

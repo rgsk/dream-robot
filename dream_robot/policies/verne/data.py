@@ -85,3 +85,10 @@ def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch
         state=(d.state[now] - d.s_mean) / d.s_std,
         acts=(d.action[rows.to(d.action.device)] - d.a_mean) / d.a_std,
     )
+
+
+def frame_of(obs) -> Tensor:
+    # a sim observation -> the model's frame [1, 3, 128, 128] in [-1, 1]: the top camera now,
+    # as get_batch gives it in training
+    top = torch.from_numpy(obs.images['top']).permute(2, 0, 1)
+    return top[None].cuda().float() / 127.5 - 1

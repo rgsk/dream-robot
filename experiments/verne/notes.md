@@ -41,3 +41,11 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   seeds 1000-1019: slope x -0.09, y +0.07, corr ~0.08 -> **blind**. Mean miss ~10 cm (films
   looked closer than they were). Close points in two clumps regardless of cube: x +4..+9 cm
   (14/20) or -4..-8 cm (6/20). Check: expert's close point within 0.1 cm of cube (5 seeds).
+
+## Protocol from 2026-11-11: 50 rollout seeds (1000-1049), training seeds 0 first, 1 and 2 later
+- rollouts.py (env, sweep, close-point probe) shared by every step's notebook; frame_of in data.py.
+- Step 0, train seeds 0 + 1 + 2 (00_end_to_end): T1 n_exec 8 **24 + 17 + 13 = 54/150**, 16
+  **23 + 18 + 18 = 59/150** (seed 0 on 1000-1019 alone: 8, 9, as before; val end 0.246, 0.196,
+  0.201, doesn't predict order). T1-wide **3 + 1 + 1 = 5/150** at both, all no_grasp. Probe:
+  closes 50/50 each, x slopes -0.31/-0.13/-0.17, y -0.09/-0.20/+0.05, intercepts x +3.7/+3.2/+3.1 y -2.4/-1.9/-0.7 cm, miss 10.9/10.3/10.0 cm
+  = blind. Seed-to-seed on T1: 13-24 of 50.
