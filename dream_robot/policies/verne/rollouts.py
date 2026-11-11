@@ -8,10 +8,11 @@ Each episode seeds torch from (rollout seed, n_exec), so its result doesn't depe
 episodes ran before it: a sweep gives the same answer serial or spread over worker processes.
 """
 
+import faulthandler
 import logging
 import os
 from collections import Counter
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, wait
 from multiprocessing import get_context
 from types import SimpleNamespace
 
@@ -103,26 +104,45 @@ def _start(wide: bool, weights: dict, stats: dict) -> None:
 def _episode(job: tuple[str, int, int]):
     what, seed, n_exec = job
     w = _worker
-    return (rollout if what == 'rollout' else close_point)(w['net'], w['d'], w['env'], seed, n_exec)
+    # a worker episode stuck > 2 min writes its stack to stderr (on the pod: the Jupyter log)
+    faulthandler.dump_traceback_later(120)
+    try:
+        fn = rollout if what == 'rollout' else close_point
+        return fn(w['net'], w['d'], w['env'], seed, n_exec)
+    finally:
+        faulthandler.cancel_dump_traceback_later()
 
 
 def _run(what: str, weights: dict, d: Demos, wide: bool, n_exec: int, workers: int) -> dict:
-    # every eval seed, in `workers` processes (0: here, one after another)
-    stats = {k: getattr(d, k).cpu() for k in STATS}
+    # every eval seed, in `workers` processes; episodes they haven't finished after 5 min (a
+    # worker got stuck, ~1 in 1000) run here, one by one: each episode has its own torch seed,
+    # so the result is the same wherever it runs
     jobs = [(what, seed, n_exec) for seed in SEEDS]
-    if workers == 0:
-        _start(wide, weights, stats)
-        return dict(zip(SEEDS, map(_episode, jobs), strict=True))
-    ctx = get_context('spawn')  # CUDA in children needs spawn, not fork
-    for k in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS'):
-        os.environ[k] = '1'  # read by the children's numpy / torch at import
-    pool = ProcessPoolExecutor(workers, ctx, initializer=_start, initargs=(wide, weights, stats))
-    try:  # a sweep takes ~1 min; a stuck worker raises TimeoutError here instead of hanging
-        return dict(zip(SEEDS, pool.map(_episode, jobs, timeout=600), strict=True))
-    finally:
-        for proc in list(pool._processes.values()):
-            proc.kill()  # results are in (or lost); a stuck worker can't block shutdown
-        pool.shutdown(wait=False, cancel_futures=True)
+    res = {}
+    if workers:
+        stats = {k: getattr(d, k).cpu() for k in STATS}
+        ctx = get_context('spawn')  # CUDA in children needs spawn, not fork
+        for k in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS'):
+            os.environ[k] = '1'  # read by the children's numpy / torch at import
+        pool = ProcessPoolExecutor(
+            workers, ctx, initializer=_start, initargs=(wide, weights, stats)
+        )
+        try:
+            futures = {pool.submit(_episode, job): job[1] for job in jobs}
+            done, _ = wait(futures, timeout=300)
+            res = {futures[f]: f.result() for f in done if f.exception() is None}
+        finally:
+            for proc in list(pool._processes.values()):
+                proc.kill()  # a stuck worker can't block shutdown
+            pool.shutdown(wait=False, cancel_futures=True)
+    left = [seed for seed in SEEDS if seed not in res]
+    if left:
+        if workers:
+            print(f'{len(left)} episode(s) not finished by the workers, running here: {left}')
+        env, net = make_env(wide), load(weights)
+        fn = rollout if what == 'rollout' else close_point
+        res |= {seed: fn(net, d, env, seed, n_exec) for seed in left}
+    return {seed: res[seed] for seed in SEEDS}
 
 
 def sweep(weights: dict, d: Demos, wide: bool, n_exec: int, workers: int = 8) -> dict:

@@ -21,7 +21,7 @@ def train(
     # out: {'weights': state dict on the cpu, 'log': (step, train loss, val loss) every 1000 steps}
     torch.manual_seed(seed)
     rng, val_rng = np.random.default_rng(seed), np.random.default_rng(1000 + seed)
-    net = Verne().to(d.top.device)
+    net = Verne().to(d.canvas.device)
     opt = torch.optim.AdamW(net.parameters(), lr=lr)
     val = [get_batch(d, val_ids, 64, val_rng) for _ in range(4)]  # fixed held-out batches
     log = []

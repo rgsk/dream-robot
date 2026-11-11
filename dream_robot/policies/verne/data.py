@@ -28,18 +28,31 @@ def load_table(name: str) -> tuple[NDArray, NDArray, NDArray]:
     )
 
 
-def load_top(name: str) -> NDArray[np.uint8]:
-    # out: [N, 3, 128, 128] uint8, every top-camera frame decoded once (a few minutes)
+def load_cameras(name: str) -> tuple[NDArray[np.uint8], NDArray[np.uint8]]:
+    # out: top, wrist, each [N, 3, 128, 128] uint8, every frame decoded once (a few minutes;
+    # a dataset item decodes all its cameras, so both come from one pass)
     ds = open_demos(name)
-    top = np.zeros((len(ds), 3, 128, 128), dtype=np.uint8)
+    top, wrist = (np.zeros((len(ds), 3, 128, 128), dtype=np.uint8) for _ in range(2))
     for i in range(len(ds)):
-        top[i] = (ds[i]['observation.images.top'] * 255).round().to(torch.uint8).numpy()
-    return top
+        item = ds[i]
+        top[i] = (item['observation.images.top'] * 255).round().to(torch.uint8).numpy()
+        wrist[i] = (item['observation.images.wrist'] * 255).round().to(torch.uint8).numpy()
+    return top, wrist
+
+
+def canvas(top, wrist):
+    # [..., 3, 128, 128] each -> [..., 3, 128, 256]: the two cameras side by side, top on the
+    # left (numpy or torch)
+    return (
+        np.concatenate([top, wrist], -1)
+        if isinstance(top, np.ndarray)
+        else torch.cat([top, wrist], -1)
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
 class Demos:
-    top: Tensor  # [N, 3, 128, 128] uint8
+    canvas: Tensor  # [N, 3, 128, 256] uint8, [top | wrist]
     state: Tensor  # [N, 8] joints + gripper, raw
     action: Tensor  # [N, 8] raw
     episode: NDArray[np.int64]  # [N]
@@ -49,11 +62,11 @@ class Demos:
     a_std: Tensor
 
 
-def to_gpu(top, state, action, episode, train_ids, dev: str = 'cuda') -> Demos:
+def to_gpu(canvas, state, action, episode, train_ids, dev: str = 'cuda') -> Demos:
     s, a = torch.tensor(state, device=dev), torch.tensor(action, device=dev)
     lab = torch.tensor(np.isin(episode, train_ids), device=dev)
     return Demos(
-        top=torch.tensor(top, device=dev),
+        canvas=torch.tensor(canvas, device=dev),
         state=s,
         action=a,
         episode=episode,
@@ -66,7 +79,7 @@ def to_gpu(top, state, action, episode, train_ids, dev: str = 'cuda') -> Demos:
 
 @dataclass(frozen=True, kw_only=True)
 class Batch:
-    frame: Tensor  # [B, 3, 128, 128] in [-1, 1], the top camera now
+    frame: Tensor  # [B, 3, 128, 256] in [-1, 1], the canvas now
     state: Tensor  # [B, 8] std units
     acts: Tensor  # [B, CHUNK, 8] std units, the next CHUNK actions
 
@@ -81,14 +94,14 @@ def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch
     last = first[pick] + lens[pick] - 1
     rows = torch.tensor(np.minimum(now[:, None] + np.arange(CHUNK), last[:, None]))
     return Batch(
-        frame=d.top[now].float() / 127.5 - 1,
+        frame=d.canvas[now].float() / 127.5 - 1,
         state=(d.state[now] - d.s_mean) / d.s_std,
         acts=(d.action[rows.to(d.action.device)] - d.a_mean) / d.a_std,
     )
 
 
 def frame_of(obs) -> Tensor:
-    # a sim observation -> the model's frame [1, 3, 128, 128] in [-1, 1]: the top camera now,
-    # as get_batch gives it in training
-    top = torch.from_numpy(obs.images['top']).permute(2, 0, 1)
-    return top[None].cuda().float() / 127.5 - 1
+    # a sim observation -> the model's frame [1, 3, 128, 256] in [-1, 1]: the canvas
+    # [top | wrist] now, as get_batch gives it in training
+    top, wrist = (torch.from_numpy(obs.images[k]).permute(2, 0, 1) for k in ('top', 'wrist'))
+    return canvas(top, wrist)[None].cuda().float() / 127.5 - 1

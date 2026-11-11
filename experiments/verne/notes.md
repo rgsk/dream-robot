@@ -69,3 +69,19 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
 - Close-point probe on the step 01 wide model (01_canvas cells 28-31), n_exec 8: closes 17/20,
   x slope +0.96 corr 0.97, y slope +0.49 corr 0.55, intercept y -3.3 cm, mean miss **3.6 cm**
   (step 0 wide: slopes ~0, ~10 cm). The wrist view makes it localize; y is half and short.
+
+## Step 01 · camera canvas, 3 x 50 on the pod (2026-11-12), nbs/verne/01_canvas.ipynb
+- Train seeds 0, 1, 2 on an RTX 4090 pod (RunPod), rollouts 1000-1049, one torch seed per episode.
+- T1 (10 demos): n_exec 8 **10 + 30 + 19 = 59/150**, 16 **15 + 16 + 17 = 48/150** (step 0: 56, 54).
+  Val end 0.304, 0.255, 0.239 (step 0: 0.246, 0.196, 0.201). No gain; seed spread 10-30 of 50.
+- T1-wide (90 demos): n_exec 8 **3 + 3 + 12 = 18/150**, 16 **3 + 10 + 8 = 21/150** (step 0: 4, 3).
+- Probe (wide, n_exec 8): x slopes +0.25 / +0.03 / **+0.61**, y +0.07 / +0.02 / +0.30, miss 9.4 /
+  10.2 / **7.5 cm**, all close 50/50. Step 0: all blind.
+- Seed 0 on the local 4060 (first pass) = bit-identical when retrained locally, probe x **+0.95**,
+  miss 3.8 cm, closes 31/50; the pod's seed 0 (same code) probes blind both on the pod and locally.
+  Pod vs local decoded frames identical. -> GPU arithmetic decides which solution a run lands
+  on; finding the cube is fragile (2 of 4 canvas runs). Same seed != same run across GPUs: train
+  a step's seeds on one machine.
+- Parallel sweeps: a worker hung twice (not reproducible serially, 50/50 eps fine). Sweeps now
+  collect what finishes in 5 min and run leftovers in the kernel (same per-episode seed).
+

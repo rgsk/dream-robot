@@ -26,8 +26,12 @@ Scored on T1, 10 labelled demos, rollouts seeds 1000-1019 at n_exec 8 and 16 (st
 
 - **03 · Memory** (input)
   - step 0: only the current frame.
-  - Verne (§4): 16 past slots; recent slots fine, older ones merged coarsely in time and space;
-    a learned attention bias per slot; time-ordered mask.
+  - Verne (`memory.py`, `mot.py` `joint_attention_mask`): past frames packed by a schedule of
+    (frames, time kernel, space kernel), newest first; recent frames fine, older ones merged up to
+    4× in time and 4× in space; one learned attention bias per slot on its key columns; slot i
+    reads slots 0..i, the present frame reads memory + itself, actions read everything.
+    The test config has 16 past frames, 8 video frames apart, schedule
+    [2,1,2] [2,1,4] [4,2,4] [8,4,4]; the checkpoint's own config.json isn't in the repo.
   - why: remembering "I already tried and the cube is still there" (the WAMz 1013 failure).
   - test: a few past frames as extra tokens with a causal mask; then the coarse packing.
 
@@ -42,7 +46,8 @@ Scored on T1, 10 labelled demos, rollouts seeds 1000-1019 at n_exec 8 and 16 (st
 
 - **05 · Sampler** (inference)
   - step 0: 10 evenly spaced Euler steps.
-  - Verne (§9): 4 Euler steps, shifted so more of the effort goes to the noisy early steps.
+  - Verne (`sampler.py`): Euler steps on σ = s·u / (1 + (s−1)·u), u even from 1 to 0, so with
+    s > 1 more of the steps sit at high noise; the test config uses 4 steps, s = 1.5.
   - why: fewer steps = faster plans; the shift puts the steps where the hard choices are made.
   - test: 4 shifted steps vs 10 even, same weights.
 
@@ -60,7 +65,47 @@ Scored on T1, 10 labelled demos, rollouts seeds 1000-1019 at n_exec 8 and 16 (st
   - why: predicting the future forces the video side to understand dynamics (WAMz's gain).
   - test: noisy future-frame tokens + a frame loss in training; run time unchanged.
 
-Not opened: text encoder (T1 has one instruction), real-time chunking, Wan's size.
+- **08 · RoPE positions** (both transformers)
+  - step 0/01: learned absolute positions, one vector per token added to its input
+    (`video_pos` over state + canvas patches, `action_pos` over the chunk).
+  - Verne (`wan_dit.py` `frame_rope`, `wam.py`, `memory.py`, action `chunk_rope`): rotary
+    positions in attention, video tokens by (frame, row, column) of the whole canvas, memory
+    slots by their own grid, action tokens by step in the chunk.
+  - why: attention then sees relative offsets (this patch is 2 to the right of that one) rather
+    than learning every absolute slot; it carries over to grids of other sizes and to more frames.
+  - test: 3-axis RoPE on the video side, 1-axis on the action side, drop the learned positions.
+
+- **09 · State as cross-attention context** (both transformers)
+  - step 0/01: the joints are one more token in the video self-attention; the action side
+    sees them only through the video keys and values.
+  - Verne (`mot.py` `project_context`, `transforms.py`): the state is one row read through
+    cross-attention. Video blocks cross-attend to it, action blocks to [text rows, state row].
+    It holds the current and previous step (a sense of velocity), as poses (58 numbers).
+  - why: the action side reads the state directly, not filtered through the video layers;
+    the previous step gives velocity.
+  - test: state (now + previous) as a cross-attention row on both sides, drop the state token.
+
+- **10 · Layer pairing** (action side)
+  - step 0/01: 4 video layers, 4 action layers, action layer i reads video layer i.
+  - Verne (`config.py` `paired_video_blocks`, `mot.py`): fewer action layers than video
+    layers, each reading a chosen video block (test config [0, 1, 3]); the video side's last
+    block is never run, since nothing reads its output.
+  - why: the action side can be cheaper than the video side and read the depths that help.
+  - test: 2-3 action layers paired to chosen video layers; compare success and ms/step.
+
+- **11 · Cosine LR + EMA weights** (training)
+  - step 0/01: AdamW at a constant 3e-4 for 20k steps; the last step's weights are the model.
+  - Verne: the training code isn't released, so unknown. Both are standard for diffusion and
+    flow policies.
+  - why: at a constant LR the weights keep jittering to the last step; final train loss 0.010,
+    0.027, 0.051 across seeds. Decaying the LR (cosine to ~0) or keeping an exponential moving
+    average of the weights settles them, which should cut the part of the seed-to-seed spread
+    that comes from where training happened to stop (step 0 T1: 13-24 of 50). It won't remove
+    the part from each seed memorising its own solution of 10 demos.
+  - test: cosine alone, EMA alone (decay ~0.999), both; 3 training seeds each; compare the
+    spread across seeds and the mean against 54/150.
+
+Not opened: text encoder (T1 has one instruction), real-time chunking, Wan's size, the head-camera crop (§1: centre 87.5%; our top camera already frames the table).
 
 ## Side work, parked
 
