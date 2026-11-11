@@ -29,15 +29,24 @@ def load_table(name: str) -> tuple[NDArray, NDArray, NDArray]:
 
 
 def load_cameras(name: str) -> tuple[NDArray[np.uint8], NDArray[np.uint8]]:
-    # out: top, wrist, each [N, 3, 128, 128] uint8, every frame decoded once (a few minutes;
-    # a dataset item decodes all its cameras, so both come from one pass)
-    ds = open_demos(name)
-    top, wrist = (np.zeros((len(ds), 3, 128, 128), dtype=np.uint8) for _ in range(2))
-    for i in range(len(ds)):
-        item = ds[i]
-        top[i] = (item['observation.images.top'] * 255).round().to(torch.uint8).numpy()
-        wrist[i] = (item['observation.images.wrist'] * 255).round().to(torch.uint8).numpy()
-    return top, wrist
+    # out: top, wrist, each [N, 3, 128, 128] uint8 by table row. Decoded once per dataset into
+    # data/robosuite/<name>/decoded/<camera>.npy (a few minutes; the layout idm's decoded_frames
+    # uses), then read from there in seconds by every notebook and step
+    folder = REPO / 'data/robosuite' / name / 'decoded'
+    paths = {c: folder / f'{c}.npy' for c in ('top', 'wrist')}
+    if not all(path.exists() for path in paths.values()):
+        ds = open_demos(name)
+        print(f'decoding {len(ds)} top + wrist frames once -> {folder}', flush=True)
+        out = {c: np.zeros((len(ds), 3, 128, 128), dtype=np.uint8) for c in paths}
+        for i in range(len(ds)):  # a dataset item decodes all its cameras: both in one pass
+            item = ds[i]
+            for c in paths:
+                out[c][i] = (item[f'observation.images.{c}'] * 255).round().to(torch.uint8).numpy()
+        folder.mkdir(exist_ok=True)
+        for c, path in paths.items():
+            np.save(path.with_suffix('.partial.npy'), out[c])
+            path.with_suffix('.partial.npy').rename(path)  # never a half-written decoded/<c>.npy
+    return np.load(paths['top']), np.load(paths['wrist'])
 
 
 def canvas(top, wrist):

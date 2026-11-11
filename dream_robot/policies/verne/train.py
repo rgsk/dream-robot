@@ -1,4 +1,5 @@
-"""The training loop: random batches, AdamW, a held-out loss every 1000 steps."""
+"""The training loop: random batches, AdamW with a cosine learning rate (lr -> 0 over the run),
+a held-out loss every 1000 steps."""
 
 import numpy as np
 import torch
@@ -23,6 +24,8 @@ def train(
     rng, val_rng = np.random.default_rng(seed), np.random.default_rng(1000 + seed)
     net = Verne().to(d.canvas.device)
     opt = torch.optim.AdamW(net.parameters(), lr=lr)
+    # step i trains at lr * (1 + cos(pi * i / steps)) / 2: lr at the start, 0 at the last step
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=steps)
     val = [get_batch(d, val_ids, 64, val_rng) for _ in range(4)]  # fixed held-out batches
     log = []
     for step in range(steps + 1):
@@ -32,6 +35,7 @@ def train(
         opt.zero_grad()
         l.backward()
         opt.step()
+        sched.step()
         if step % 1000 == 0:
             with torch.no_grad(), torch.autocast('cuda', dtype=torch.bfloat16):
                 lv = np.mean([loss(net, v.frame, v.state, v.acts).item() for v in val])

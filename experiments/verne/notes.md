@@ -85,3 +85,17 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
 - Parallel sweeps: a worker hung twice (not reproducible serially, 50/50 eps fine). Sweeps now
   collect what finishes in 5 min and run leftovers in the kernel (same per-episode seed).
 
+
+## Step 02 · cosine LR (box 11), seed 0 only (2026-11-12), nbs/verne/02_cosine_lr.ipynb
+- train.py: CosineAnnealingLR(T_max=steps), 3e-4 -> 0, no warmup. Trained on the pod 4090.
+- T1 seed 0: n_exec 8 **5/50**, 16 **14/50** (step 01 seed 0: 10, 15). Train 0.002, val **0.544**
+  (step 01: 0.012, 0.304): on 10 demos cosine deepens the overfit.
+- T1-wide seed 0: n_exec 8 **11/50**, 16 **7/50** (step 01 seed 0: 3, 3). Val 0.042 (0.063).
+- Probe seed 0: closes 28/50, x slope **+0.74** (corr 0.91), y **+0.63**, miss **3.0 cm** (step 01
+  pod seed 0: +0.25, 9.4 cm, blind). Same seed, same GPU: cosine turned a blind run into a seeing
+  one. One seed; seeds 1, 2 pending.
+- load_cameras now decodes once per dataset into data/robosuite/<name>/decoded/{top,wrist}.npy.
+- Kernel friction: the 02 kernel (~10.8 GB: two canvas sets + training) left no GPU for 8 x 2.3 GB
+  workers -> every probe episode fell back to the kernel. Decision (2026-11-12): runs become jobs
+  (one command per task/seed -> files under experiments/verne/runs/<step>/, meta = commit + code
+  hash, a detached queue on the pod), notebooks become readers. Start of next session.
