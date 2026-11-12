@@ -138,3 +138,15 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   don't attend to cube tokens (<= even share), joints token 0.25-0.66 in layers 2-3. Linear probe on 1,000
   home-pose first frames (pre-grasp demo frames leak: joints alone 2.5 cm): joints token after video layer 0
   reads cube xy to **1.4 cm** (step 02 seed 0 pixels: 6.2 cm, patches 5.0; mean guess 7.1).
+
+## Step 04 · sampler (box 05), inference only (2026-11-12), nbs/verne/04_sampler.ipynb
+- model.sample(steps, shift): Verne's σ = s·u/(1+(s−1)u) grid; (10, 1.0) reproduces the old loop (7e-7).
+  scripts/sampler_sweep.py on step 03's 3 T1-wide policies, local 4060 (10 even rerun = L40S scores exactly).
+- n_exec 8 / 16 of 150: 10 even 112/112; 4 even 118/120 (won 17, lost 3 of 300 same episodes);
+  **4 shift 1.5 120/122 (won 23, lost 5)**; 10 shift 1.5 110/114 (6/6). Fewer steps = the gain, shift ~0.
+- Default now (4, 1.5). Sweep: 8 workers OOM on the 8 GB card (parent 3.5 GB) -> 4 workers + empty_cache,
+  ~25 s per sweep; EGL render hang 2x (faulthandler dump, leftovers rerun in parent, scores unaffected).
+- Close-point probe (scripts/sampler_probe.py, n_exec 8): miss 1.38 -> **1.25 cm** (10 even -> 4 shift 1.5), successes
+  1.06 -> 0.97, failures 2.32 -> 2.38 (|dy| ~2.0); > 2 cm share 16% -> 15%; no_grasp 69 -> 50 (n_exec 8+16).
+  Borderline closes pulled in; the sideways misses stay. rollouts: worker wait 300 -> 90 s, stack dump 120 -> 30 s
+  (EGL render hang in parallel workers, ~1 in 500 eps; never seen serially).

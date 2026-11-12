@@ -1,13 +1,12 @@
-"""Step 03, VAE latents: a video transformer reads the [top | wrist] canvas once, as a VAE
-latent grid, an action
-transformer denoises the chunk while reading the video layers' keys and values.
+"""Step 04, the sampler: a video transformer reads the [top | wrist] canvas once, as a VAE latent
+grid; an action transformer denoises the chunk while reading the video layers' keys and values.
 
 Verne's shape (wam.py, mot.py), everything else as simple as possible for now:
 the two cameras side by side as one wide image, as Verne's canvas (no head crop),
 the canvas through a small frozen VAE (vae.py, not Wan's), its latent grid cut into 2x2
-squares, one frame (no memory), joints (no poses), the state as one
-more token (no text), the flow time added to the action tokens (no adaptive norm),
-10 even Euler steps.
+squares, one frame (no memory), joints (no poses), the state as one more token (no text),
+the flow time added to the action tokens (no adaptive norm), and Verne's sampler: 4 Euler
+steps on a grid shifted by 1.5.
 """
 
 import torch
@@ -90,12 +89,31 @@ def loss(net: Verne, frame: Tensor, state: Tensor, acts: Tensor) -> Tensor:
     return F.mse_loss(net.velocity(net.see(frame, state), x, tau), acts - noise)
 
 
+"""
+Verne's sampler (sampler.py): the noise level σ = 1 − τ is stepped down on a shifted grid. With u even
+from 1 to 0 (steps + 1 points),
+
+    σ(u) = s·u / (1 + (s − 1)·u)
+
+s = 1 gives σ = u: even steps (steps 0-03 used 10 even steps). s > 1 bends the grid so σ stays near 1 longer:
+small steps at high noise, where the chunk's overall shape is decided, bigger ones near clean.
+s = 1.5, 4 steps (Verne's test config):
+
+    u   1     0.75   0.5   0.25   0
+    σ   1     0.818  0.6   0.333  0         τ = 1 − σ:  0, 0.18, 0.40, 0.67, 1
+                                            step sizes:  0.18, 0.22, 0.27, 0.33
+
+Each step is one Euler step of the velocity: x ← x + v(x, τ) · (τ_next − τ).
+"""
+
+
 @torch.no_grad()
-def sample(net: Verne, frame: Tensor, state: Tensor, steps: int = 10) -> Tensor:
+def sample(net: Verne, frame: Tensor, state: Tensor, steps: int = 4, shift: float = 1.5) -> Tensor:
     # noise -> a chunk [B, CHUNK, 8] in std units; the video side runs once
     kvs = net.see(frame, state)
     x = torch.randn(len(frame), CHUNK, 8, device=frame.device)
+    u = torch.linspace(1.0, 0.0, steps + 1, device=frame.device)
+    tau = 1 - shift * u / (1 + (shift - 1) * u)  # [steps + 1], 0 -> 1
     for i in range(steps):
-        tau = torch.full((len(frame),), i / steps, device=frame.device)
-        x = x + net.velocity(kvs, x, tau) / steps
+        x = x + net.velocity(kvs, x, tau[i].expand(len(frame))) * (tau[i + 1] - tau[i])
     return x

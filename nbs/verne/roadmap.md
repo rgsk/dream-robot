@@ -91,13 +91,29 @@ frames: canvas 3 × 128 × 256 → latent 4 × 16 × 32, val reconstruction 0.00
 
 ---
 
-### 05 · Sampler (inference)
+### 05 · Sampler (inference) — **DONE**
 
 - step 0: 10 evenly spaced Euler steps.
 - Verne (`sampler.py`): Euler steps on σ = s·u / (1 + (s−1)·u), u even from 1 to 0, so with
   s > 1 more of the steps sit at high noise; the test config uses 4 steps, s = 1.5.
 - why: fewer steps = faster plans; the shift puts the steps where the hard choices are made.
 - test: 4 shifted steps vs 10 even, same weights.
+
+#### Results: 05 · Sampler
+
+From `04_sampler.ipynb` (step 04). Step 03's three T1-wide policies, unchanged, local RTX 4060.
+Successes out of 150 (3 training seeds × 50 episodes), and episodes won / lost against
+10 even steps on the same 300:
+
+| sampler | n_exec 8 | n_exec 16 | won / lost |
+|---|---|---|---|
+| 10 even (steps 0-03) | 112 | 112 | — |
+| 4 even | 118 | 120 | 17 / 3 |
+| 4, shift 1.5 (Verne) | 120 | 122 | 23 / 5 |
+| 10, shift 1.5 | 110 | 114 | 6 / 6 |
+
+- Fewer steps is the gain; the shift alone does nothing.
+- (4, 1.5) is now the package default: 2.5× fewer action-side passes per replan.
 
 ---
 

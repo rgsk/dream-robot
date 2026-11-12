@@ -1,0 +1,10 @@
+{
+ "commit": "8683906",
+ "dirty": true,
+ "package_hash": "e723ae91bff4",
+ "gpu": "NVIDIA GeForce RTX 4060",
+ "weights": "03_vae_latents/t1-wide/seed0",
+ "steps": 10,
+ "shift": 1.5,
+ "started": "2026-11-12 22:22:04"
+}
