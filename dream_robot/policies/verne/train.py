@@ -1,6 +1,8 @@
 """The training loop: random batches, AdamW with a cosine learning rate (lr -> 0 over the run),
 a held-out loss every 1000 steps."""
 
+from typing import Any
+
 import numpy as np
 import torch
 from frozendict import frozendict
@@ -18,11 +20,11 @@ def train(
     B: int = 32,
     lr: float = 3e-4,
     seed: int = 0,
-):
+) -> frozendict[str, Any]:
     # out: {'weights': state dict on the cpu, 'log': (step, train loss, val loss) every 1000 steps}
     torch.manual_seed(seed)
     rng, val_rng = np.random.default_rng(seed), np.random.default_rng(1000 + seed)
-    net = Verne().to(d.canvas.device)
+    net = Verne().to(d.latent.device)
     opt = torch.optim.AdamW(net.parameters(), lr=lr)
     # step i trains at lr * (1 + cos(pi * i / steps)) / 2: lr at the start, 0 at the last step
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=steps)

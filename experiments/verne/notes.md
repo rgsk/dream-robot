@@ -120,3 +120,21 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   past the cube; seed 0 never comes back (<= 1.7 cm), seed 1 sometimes 11-18 cm. Successes stop at x ~+1.5.
   Blind seed 1 wins when the cube spawns near its spot. Open: do demos ever reach x +16 cm?
 - Decision: cosine LR (box 11) done; warmup and EMA later. Roadmap updated.
+
+## Step 03 · VAE latents (box 02), T1-wide 3 seeds (2026-11-12), nbs/verne/03_vae_latents.ipynb
+- vae.py: small conv VAE, Verne's encoder shape (res convs, RMSNorm + SiLU, stride-2, mean/logvar, mean
+  normalised per channel); canvas 3x128x256 -> 4x16x32; 1.88M params. `run vae 03_vae_latents` on the L40S:
+  39,327 frames of both tasks' train demos, 5k steps B64 lr 1e-3 beta 1e-3, ~20 min; val recon **0.0015**
+  ([-1,1]; dreamzero top-only 0.0022), cube sharp in both views, gripper a bit soft. weights.pt gitignored!
+- Latents encoded once per dataset (decoded/latents_<hash>.npy, fp16, ~90 MB; mean 0 std 1 per channel;
+  decode of stored latents 0.0013). Model reads 2x2 latent squares (16 numbers) -> 128 tokens; 3.49M params.
+  Rollout encodes the live canvas with the frozen VAE. Job ~6 min with sweeps (was ~13).
+- T1-wide: n_exec 8 **34 + 36 + 42 = 112/150**, 16 **36 + 37 + 39 = 112/150** (step 02: 29, 14). Probe x
+  +0.99 / +0.95 / +0.99, miss **1.4 / 1.4 / 1.1 cm**: all 3 seeds find the cube (step 02: 1 of 3).
+  Failures mostly no_grasp (7-14 per seed).
+- Not run: T1 (user: pod terminated next). Notebook wrap-up done; explained notebook to come.
+- 03_vae_latents_explained.ipynb (seed 0 models, held-out demo 82): cube squares among the loudest latent
+  tokens (rank 0-17 of 128 at start); live vs stored latent rms 0.057 (10-step move 1.04); action tokens
+  don't attend to cube tokens (<= even share), joints token 0.25-0.66 in layers 2-3. Linear probe on 1,000
+  home-pose first frames (pre-grasp demo frames leak: joints alone 2.5 cm): joints token after video layer 0
+  reads cube xy to **1.4 cm** (step 02 seed 0 pixels: 6.2 cm, patches 5.0; mean guess 7.1).

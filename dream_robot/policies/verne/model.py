@@ -1,9 +1,11 @@
-"""Step 01, the camera canvas: a video transformer reads [top | wrist] once, an action
+"""Step 03, VAE latents: a video transformer reads the [top | wrist] canvas once, as a VAE
+latent grid, an action
 transformer denoises the chunk while reading the video layers' keys and values.
 
 Verne's shape (wam.py, mot.py), everything else as simple as possible for now:
 the two cameras side by side as one wide image, as Verne's canvas (no head crop),
-pixels cut into patches (no VAE), one frame (no memory), joints (no poses), the state as one
+the canvas through a small frozen VAE (vae.py, not Wan's), its latent grid cut into 2x2
+squares, one frame (no memory), joints (no poses), the state as one
 more token (no text), the flow time added to the action tokens (no adaptive norm),
 10 even Euler steps.
 """
@@ -14,9 +16,10 @@ from einops import rearrange
 from torch import Tensor, nn
 
 from .data import CHUNK
+from .vae import Z
 
-P = 16  # patch side: canvas 128 x 256 px -> 8 x 16 = 128 patches
-N_PATCH = (128 // P) * (256 // P)
+P = 2  # patch side in latent cells: latent 16 x 32 -> 8 x 16 = 128 patches (16 x 16 px each)
+N_PATCH = (16 // P) * (32 // P)
 HEADS, HEAD_DIM = 4, 32  # shared by both transformers, so their keys and values can mix
 D_VIDEO, D_ACTION, LAYERS = 256, 128, 4  # the action transformer is the narrow one
 
@@ -45,7 +48,7 @@ class Block(nn.Module):
 class Verne(nn.Module):
     def __init__(self):
         super().__init__()
-        self.patch_in = nn.Linear(3 * P * P, D_VIDEO)
+        self.patch_in = nn.Linear(Z * P * P, D_VIDEO)
         self.state_in = nn.Linear(8, D_VIDEO)
         self.video_pos = nn.Parameter(torch.randn(1, 1 + N_PATCH, D_VIDEO) * 0.02)
         self.video = nn.ModuleList([Block(D_VIDEO) for _ in range(LAYERS)])
@@ -58,7 +61,7 @@ class Verne(nn.Module):
         self.action_out = nn.Linear(D_ACTION, 8)
 
     def see(self, frame: Tensor, state: Tensor) -> list[tuple[Tensor, Tensor]]:
-        # canvas [B, 3, 128, 256] in [-1, 1], state [B, 8] -> each video layer's keys and values
+        # latent [B, Z, 16, 32] (normalised), state [B, 8] -> each video layer's keys and values
         patches = rearrange(frame, 'b c (h p) (w q) -> b (h w) (p q c)', p=P, q=P)
         x = torch.cat([self.state_in(state)[:, None], self.patch_in(patches)], 1)
         x = x + self.video_pos

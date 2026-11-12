@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import numpy as np
 import torch
 
+from . import vae as vae_mod
 from .data import Demos, frame_of
 from .model import Verne, sample
 
@@ -49,21 +50,21 @@ def load(weights: dict) -> Verne:
     return net
 
 
-def act(net: Verne, d: Demos, obs) -> np.ndarray:
+def act(net: Verne, vae, d: Demos, obs) -> np.ndarray:
     # the observation -> [CHUNK, 8] raw actions
     s = (torch.from_numpy(obs.state)[None].cuda() - d.s_mean) / d.s_std
-    chunk = (sample(net, frame_of(obs), s) * d.a_std + d.a_mean)[0].cpu().numpy()
+    chunk = (sample(net, frame_of(obs, vae), s) * d.a_std + d.a_mean)[0].cpu().numpy()
     chunk[:, 7] = np.clip(chunk[:, 7], 0.0, 1.0)  # gripper commands stay in [0, 1]
     return chunk
 
 
-def rollout(net: Verne, d: Demos, env, seed: int, n_exec: int) -> tuple[bool, str, int]:
+def rollout(net: Verne, vae, d: Demos, env, seed: int, n_exec: int) -> tuple[bool, str, int]:
     # one episode, replanning after n_exec actions -> success, failure mode, steps
     torch.manual_seed(seed * 100 + n_exec)  # this episode's sampling noise
     obs, plan = env.reset(seed=seed), []
     for step in range(600):
         if not plan:
-            plan = list(act(net, d, obs)[:n_exec])
+            plan = list(act(net, vae, d, obs)[:n_exec])
         r = env.step(plan.pop(0))
         obs = r.observation
         if r.terminated or r.truncated:
@@ -71,14 +72,14 @@ def rollout(net: Verne, d: Demos, env, seed: int, n_exec: int) -> tuple[bool, st
     return r.success, str(r.failure_mode), step + 1
 
 
-def close_point(net: Verne, d: Demos, env, seed: int, n_exec: int):
+def close_point(net: Verne, vae, d: Demos, env, seed: int, n_exec: int):
     # -> cube xy at spawn, gripper xy at the first commanded close (None if it never closes)
     torch.manual_seed(seed * 100 + n_exec)  # the same noise as rollout's episode
     obs, plan = env.reset(seed=seed), []
     cube = env.cube_pos[:2]
     for _ in range(600):
         if not plan:
-            plan = list(act(net, d, obs)[:n_exec])
+            plan = list(act(net, vae, d, obs)[:n_exec])
         a = plan.pop(0)
         if a[7] < 0.5:
             return cube, np.asarray(env._raw['robot0_eef_pos'][:2], dtype=float).copy()
@@ -97,6 +98,7 @@ def _start(wide: bool, weights: dict, stats: dict) -> None:
     _worker.update(
         env=make_env(wide),
         net=load(weights),
+        vae=vae_mod.load(vae_mod.WEIGHTS),
         d=SimpleNamespace(**{k: v.cuda() for k, v in stats.items()}),
     )
 
@@ -108,7 +110,7 @@ def _episode(job: tuple[str, int, int]):
     faulthandler.dump_traceback_later(120)
     try:
         fn = rollout if what == 'rollout' else close_point
-        return fn(w['net'], w['d'], w['env'], seed, n_exec)
+        return fn(w['net'], w['vae'], w['d'], w['env'], seed, n_exec)
     finally:
         faulthandler.cancel_dump_traceback_later()
 
@@ -141,7 +143,8 @@ def _run(what: str, weights: dict, d: Demos, wide: bool, n_exec: int, workers: i
             print(f'{len(left)} episode(s) not finished by the workers, running here: {left}')
         env, net = make_env(wide), load(weights)
         fn = rollout if what == 'rollout' else close_point
-        res |= {seed: fn(net, d, env, seed, n_exec) for seed in left}
+        vae = vae_mod.load(vae_mod.WEIGHTS)
+        res |= {seed: fn(net, vae, d, env, seed, n_exec) for seed in left}
     return {seed: res[seed] for seed in SEEDS}
 
 

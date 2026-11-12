@@ -5,6 +5,8 @@ only read those files.
     python -m dream_robot.policies.verne.run job 02_cosine_lr t1-wide 0
     python -m dream_robot.policies.verne.run queue 02_cosine_lr --tasks t1 t1-wide --seeds 0 1 2
 
+    python -m dream_robot.policies.verne.run vae 03_vae_latents   (the canvas VAE, both tasks)
+
 `queue` runs its jobs one after another, each in its own process (so each holds only its own
 task's frames on the GPU), and writes each job's output to <run dir>/job.log. Detached, so a
 VS Code reload or a dropped ssh doesn't kill it:
@@ -35,7 +37,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from . import rollouts
+from . import rollouts, vae
 from .data import REPO, canvas, load_cameras, load_table, to_gpu
 from .train import train
 
@@ -71,12 +73,15 @@ def git(*args: str) -> str:
     return subprocess.run(['git', *args], cwd=REPO, capture_output=True, text=True).stdout.strip()
 
 
-def source() -> dict:
+def source() -> dict[str, str | bool]:
     # -> commit, dirty (uncommitted changes in the package). A pod gets the code by rsync with no
     # .git: there the sync writes synced_from.json at the repo root with the local machine's
     # answer at sync time (`python -m dream_robot.policies.verne.run synced-from > ...`)
     if commit := git('rev-parse', '--short', 'HEAD'):
-        return {'commit': commit, 'dirty': bool(git('status', '--porcelain', '--', 'dream_robot/policies/verne'))}
+        return {
+            'commit': commit,
+            'dirty': bool(git('status', '--porcelain', '--', 'dream_robot/policies/verne')),
+        }
     return json.loads((REPO / 'synced_from.json').read_text())
 
 
@@ -98,14 +103,16 @@ def job(step: str, task: str, seed: int, workers: int) -> None:
     if (out / 'meta.json').exists():
         old = json.loads((out / 'meta.json').read_text())
         if old['package_hash'] != meta['package_hash']:
-            sys.exit(f'{out} was made with package {old["package_hash"]}, now {meta["package_hash"]}')
+            sys.exit(
+                f'{out} was made with package {old["package_hash"]}, now {meta["package_hash"]}'
+            )
     else:
         write_json(out / 'meta.json', meta | {'started': time.strftime('%Y-%m-%d %H:%M:%S')})
 
     name, wide = TASKS[task]
     train_ids, val_ids = split(task)
     state, action, episode = load_table(name)
-    d = to_gpu(canvas(*load_cameras(name)), state, action, episode, train_ids)
+    d = to_gpu(vae.load_latents(name, vae.WEIGHTS), state, action, episode, train_ids)
 
     if (out / 'weights.pt').exists():
         weights = torch.load(out / 'weights.pt')
@@ -135,6 +142,46 @@ def job(step: str, task: str, seed: int, workers: int) -> None:
                 },
             },
         )
+    print(f'done: {out}')
+
+
+def train_vae(step: str, seed: int = 0) -> None:
+    # the canvas VAE on the train demos of both tasks -> RUNS/<step>/vae/: weights.pt (with the
+    # latent stats), log.json [step, recon, KL, val recon, KL], meta.json, recon.png (val frames,
+    # real above reconstructed)
+    out = RUNS / step / 'vae'
+    out.mkdir(parents=True, exist_ok=True)
+    if (out / 'weights.pt').exists():
+        sys.exit(f'{out} already has weights')
+    write_json(
+        out / 'meta.json',
+        source()
+        | {
+            'package_hash': package_hash(), 'gpu': torch.cuda.get_device_name(), 'seed': seed,
+            'started': time.strftime('%Y-%m-%d %H:%M:%S'),
+        },
+    )
+    frames, val = [], []
+    for task, (name, _) in TASKS.items():
+        _, val_ids = split(task)
+        episode = load_table(name)[2]
+        c = canvas(*load_cameras(name))
+        frames.append(c[~np.isin(episode, val_ids)])
+        val.append(c[np.flatnonzero(np.isin(episode, val_ids))[::40]])
+        del c
+    frames, val = np.concatenate(frames), np.concatenate(val)
+    print(f'{len(frames)} training frames, {len(val)} val frames', flush=True)
+    run = vae.train(frames, val, seed=seed)
+    write_json(out / 'log.json', run['log'])
+    torch.save(run['weights'], out / 'weights.pt')
+    net = vae.VAE().cuda().eval()
+    net.load_state_dict(run['weights'])
+    pick = val[np.linspace(0, len(val) - 1, 6).astype(int)]
+    rec = vae.reconstruct(net, pick)
+    import imageio.v3 as iio
+
+    grid = np.concatenate([np.concatenate(list(pick), 2), np.concatenate(list(rec), 2)], 1)
+    iio.imwrite(out / 'recon.png', grid.transpose(1, 2, 0))
     print(f'done: {out}')
 
 
@@ -171,8 +218,12 @@ if __name__ == '__main__':
     for s in (j, q):
         s.add_argument('--workers', type=int, default=8)
     sub.add_parser('synced-from')
+    v = sub.add_parser('vae')
+    v.add_argument('step')
     a = p.parse_args()
-    if a.cmd == 'synced-from':
+    if a.cmd == 'vae':
+        train_vae(a.step)
+    elif a.cmd == 'synced-from':
         print(json.dumps(source()))
     elif a.cmd == 'job':
         job(a.step, a.task, a.seed, a.workers)

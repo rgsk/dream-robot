@@ -1,0 +1,14 @@
+39327 training frames, 110 val frames
+step     0   train 0.7996 KL 0.035   val 0.3737 KL 0.223
+step   500   train 0.0084 KL 1.363   val 0.0084 KL 1.364
+step  1000   train 0.0046 KL 1.282   val 0.0047 KL 1.284
+step  1500   train 0.0036 KL 1.169   val 0.0034 KL 1.135
+step  2000   train 0.0026 KL 1.054   val 0.0027 KL 1.049
+step  2500   train 0.0028 KL 0.993   val 0.0028 KL 0.965
+step  3000   train 0.0021 KL 0.908   val 0.0022 KL 0.908
+step  3500   train 0.0018 KL 0.848   val 0.0018 KL 0.824
+step  4000   train 0.0025 KL 0.812   val 0.0024 KL 0.799
+step  4500   train 0.0016 KL 0.773   val 0.0015 KL 0.761
+step  5000   train 0.0016 KL 0.741   val 0.0015 KL 0.737
+latent mean [0.016 0.01  0.008 0.029] std [0.482 0.52  0.905 0.756]
+done: /root/dream-robot/experiments/verne/runs/03_vae_latents/vae

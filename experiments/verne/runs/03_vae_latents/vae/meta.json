@@ -1,0 +1,9 @@
+{
+ "commit": "14d7003",
+ "dirty": true,
+ "package_hash": "883eda2a8f0b",
+ "gpu": "NVIDIA L40S",
+ "seed": 0,
+ "started": "2026-11-12 10:27:19",
+ "note": "package changed after this run only by formatting, dropped -> dict annotations, and the latent model (vae.py VAE / train unchanged)"
+}

@@ -1,0 +1,10 @@
+{
+ "commit": "14d7003",
+ "dirty": true,
+ "package_hash": "7ee6519ae78c",
+ "gpu": "NVIDIA L40S",
+ "task": "t1-wide",
+ "seed": 0,
+ "steps": 20000,
+ "started": "2026-11-12 11:00:11"
+}

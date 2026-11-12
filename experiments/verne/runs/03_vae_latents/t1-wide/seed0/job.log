@@ -1,0 +1,26 @@
+encoding 22409 canvases once -> /root/dream-robot/data/robosuite/pick_place_cube_wide_n100/decoded/latents_290f1308.npy
+step      0   train 2.127   val 2.351
+step   1000   train 0.168   val 0.123
+step   2000   train 0.068   val 0.092
+step   3000   train 0.101   val 0.098
+step   4000   train 0.046   val 0.078
+step   5000   train 0.046   val 0.064
+step   6000   train 0.062   val 0.070
+step   7000   train 0.036   val 0.056
+step   8000   train 0.034   val 0.051
+step   9000   train 0.018   val 0.051
+step  10000   train 0.038   val 0.056
+step  11000   train 0.027   val 0.045
+step  12000   train 0.028   val 0.042
+step  13000   train 0.025   val 0.043
+step  14000   train 0.048   val 0.037
+step  15000   train 0.023   val 0.032
+step  16000   train 0.020   val 0.033
+step  17000   train 0.010   val 0.035
+step  18000   train 0.016   val 0.033
+step  19000   train 0.024   val 0.031
+step  20000   train 0.007   val 0.035
+n_exec  8: 34/50   failures {'no_grasp': 12, 'dropped': 3, 'wrong_target': 1}
+n_exec 16: 36/50   failures {'no_grasp': 13, 'dropped': 1}
+closes 50/50, miss  1.4 cm, x slope +0.99 (corr +0.99, intercept +0.3 cm), y slope +0.96 (corr +0.95, intercept +0.6 cm)
+done: /root/dream-robot/experiments/verne/runs/03_vae_latents/t1-wide/seed0

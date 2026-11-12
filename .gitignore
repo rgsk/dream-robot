@@ -51,7 +51,7 @@ scratch/
 cache/
 # watcher contents are per-session
 watch/file.txt
-
+temp/
 practice.ipynb
 rough.ipynb
 prac.ipynb

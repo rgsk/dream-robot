@@ -61,7 +61,7 @@ def canvas(top, wrist):
 
 @dataclass(frozen=True, kw_only=True)
 class Demos:
-    canvas: Tensor  # [N, 3, 128, 256] uint8, [top | wrist]
+    latent: Tensor  # [N, Z, 16, 32] float16, the [top | wrist] canvas through the VAE
     state: Tensor  # [N, 8] joints + gripper, raw
     action: Tensor  # [N, 8] raw
     episode: NDArray[np.int64]  # [N]
@@ -71,11 +71,11 @@ class Demos:
     a_std: Tensor
 
 
-def to_gpu(canvas, state, action, episode, train_ids, dev: str = 'cuda') -> Demos:
+def to_gpu(latent, state, action, episode, train_ids, dev: str = 'cuda') -> Demos:
     s, a = torch.tensor(state, device=dev), torch.tensor(action, device=dev)
     lab = torch.tensor(np.isin(episode, train_ids), device=dev)
     return Demos(
-        canvas=torch.tensor(canvas, device=dev),
+        latent=torch.tensor(latent, device=dev),
         state=s,
         action=a,
         episode=episode,
@@ -88,7 +88,7 @@ def to_gpu(canvas, state, action, episode, train_ids, dev: str = 'cuda') -> Demo
 
 @dataclass(frozen=True, kw_only=True)
 class Batch:
-    frame: Tensor  # [B, 3, 128, 256] in [-1, 1], the canvas now
+    frame: Tensor  # [B, Z, 16, 32], the canvas's latent now
     state: Tensor  # [B, 8] std units
     acts: Tensor  # [B, CHUNK, 8] std units, the next CHUNK actions
 
@@ -103,14 +103,15 @@ def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch
     last = first[pick] + lens[pick] - 1
     rows = torch.tensor(np.minimum(now[:, None] + np.arange(CHUNK), last[:, None]))
     return Batch(
-        frame=d.canvas[now].float() / 127.5 - 1,
+        frame=d.latent[now].float(),
         state=(d.state[now] - d.s_mean) / d.s_std,
         acts=(d.action[rows.to(d.action.device)] - d.a_mean) / d.a_std,
     )
 
 
-def frame_of(obs) -> Tensor:
-    # a sim observation -> the model's frame [1, 3, 128, 256] in [-1, 1]: the canvas
-    # [top | wrist] now, as get_batch gives it in training
+def frame_of(obs, vae) -> Tensor:
+    # a sim observation -> the model's frame [1, Z, 16, 32]: the canvas [top | wrist] now through
+    # the frozen VAE, as the training latents were made
     top, wrist = (torch.from_numpy(obs.images[k]).permute(2, 0, 1) for k in ('top', 'wrist'))
-    return canvas(top, wrist)[None].cuda().float() / 127.5 - 1
+    with torch.no_grad():
+        return vae.encode(canvas(top, wrist)[None].cuda().float() / 127.5 - 1)
