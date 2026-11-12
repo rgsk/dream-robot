@@ -69,6 +69,33 @@ def split(task: str) -> tuple[np.ndarray, np.ndarray]:
     return rest, val
 
 
+def load_task(task: str):
+    # 'base' or 'base+extra1+extra2' (extra = dataset names under data/robosuite, e.g. DAgger rounds;
+    # 'extra:fail' keeps only that dataset's failed episodes, per its recording_summary.json)
+    # -> state, action, episode, latent, train ids, val ids, wide. Extra datasets' episodes are
+    # renumbered after the base's (1000 * k + i) and all go to training; validation stays the base's
+    # held-out demos, so losses and scores compare with the base task's runs.
+    base, *extra = task.split('+')
+    name, wide = TASKS[base]
+    train_ids, val_ids = split(base)
+    parts = [(*load_table(name), vae.load_latents(name, vae.WEIGHTS))]
+    for k, extra_name in enumerate(extra, 1):
+        extra_name, _, only = extra_name.partition(':')
+        s, a, e = load_table(extra_name)
+        z = vae.load_latents(extra_name, vae.WEIGHTS)
+        if only == 'fail':
+            summary = json.loads(
+                (REPO / 'data/robosuite' / extra_name / 'recording_summary.json').read_text()
+            )
+            failed = [i for i, ep in enumerate(summary['episodes']) if not ep['success']]
+            keep = np.isin(e, failed)
+            s, a, e, z = s[keep], a[keep], e[keep], z[keep]
+        parts.append((s, a, e + 1000 * k, z))
+        train_ids = np.concatenate([train_ids, np.unique(e) + 1000 * k])
+    state, action, episode, latent = (np.concatenate(x) for x in zip(*parts))
+    return state, action, episode, latent, train_ids, val_ids, wide
+
+
 def package_hash() -> str:
     # sha256 over the package's .py files: names the code a run was made with, committed or not
     h = hashlib.sha256()
@@ -117,10 +144,8 @@ def job(step: str, task: str, seed: int, workers: int) -> None:
     else:
         write_json(out / 'meta.json', meta | {'started': time.strftime('%Y-%m-%d %H:%M:%S')})
 
-    name, wide = TASKS[task]
-    train_ids, val_ids = split(task)
-    state, action, episode = load_table(name)
-    d = to_gpu(vae.load_latents(name, vae.WEIGHTS), state, action, episode, train_ids)
+    state, action, episode, latent, train_ids, val_ids, wide = load_task(task)
+    d = to_gpu(latent, state, action, episode, train_ids)
 
     if (out / 'weights.pt').exists():
         weights = torch.load(out / 'weights.pt')
@@ -217,7 +242,7 @@ if __name__ == '__main__':
     sub = p.add_subparsers(dest='cmd', required=True)
     j = sub.add_parser('job')
     j.add_argument('step')
-    j.add_argument('task', choices=TASKS)
+    j.add_argument('task', help="a TASKS name, or 'base+extra[:fail]+...' (see load_task)")
     j.add_argument('seed', type=int)
     q = sub.add_parser('queue')
     q.add_argument('step')
@@ -226,10 +251,23 @@ if __name__ == '__main__':
     for s in (j, q):
         s.add_argument('--workers', type=int, default=8)
     sub.add_parser('synced-from')
+    g = sub.add_parser('dagger')  # collect one DAgger round: the policy drives, StateExpert labels
+    g.add_argument(
+        'policy_run', help='run folder under RUNS, e.g. 05_square/t1-wide-square-noise/seed0'
+    )
+    g.add_argument('base_task', help='the task the policy was trained on (its stats)')
+    g.add_argument('out_name', help='dataset to write under data/robosuite')
+    g.add_argument('--episodes', type=int, default=100)
+    g.add_argument('--seed-start', type=int, default=2000)
     v = sub.add_parser('vae')
     v.add_argument('step')
     a = p.parse_args()
-    if a.cmd == 'vae':
+    if a.cmd == 'dagger':
+        from .dagger import collect
+
+        s = collect(a.policy_run, a.base_task, a.out_name, a.episodes, a.seed_start)
+        print(f'{s.kept} episodes / {s.total_frames} frames, policy placed {s.success_rate:.0%}')
+    elif a.cmd == 'vae':
         train_vae(a.step)
     elif a.cmd == 'synced-from':
         print(json.dumps(source()))

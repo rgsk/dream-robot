@@ -28,8 +28,9 @@ STATS = ('s_mean', 's_std', 'a_mean', 'a_std')  # all of Demos a rollout needs
 WIDE_XY = ((-0.10, 0.10), (-0.10, 0.06))  # T1-wide's cube spawn, x and y [min, max] in m
 
 
-def make_env(wide: bool):
-    # T1 or T1-wide; robosuite's import-time warnings silenced
+def make_env(wide: bool, horizon_seconds: float | None = None):
+    # T1 or T1-wide; robosuite's import-time warnings silenced. horizon_seconds: the episode time
+    # limit (default task.yaml's 20 s = 600 steps, which every score so far uses)
     os.environ.setdefault('MUJOCO_GL', 'egl')
     logging.disable(logging.WARNING)
     import robosuite  # noqa: F401
@@ -41,6 +42,8 @@ def make_env(wide: bool):
     from dream_robot.sims.robosuite.tasks.pick_place_cube.env import PickPlaceCube, TaskConfig
 
     config = TaskConfig.load()
+    if horizon_seconds is not None:
+        config = replace(config, horizon_seconds=horizon_seconds)
     return PickPlaceCube(replace(config, cube_xy_range=WIDE_XY) if wide else config)
 
 
@@ -64,7 +67,7 @@ def rollout(
     # one episode, replanning after n_exec actions -> success, failure mode, steps
     torch.manual_seed(seed * 100 + n_exec)  # this episode's sampling noise
     obs, plan = env.reset(seed=seed), []
-    for step in range(600):
+    for step in range(env._cfg.horizon_steps):
         if not plan:
             plan = list(act(net, vae, d, obs, sampler)[:n_exec])
         r = env.step(plan.pop(0))
@@ -79,7 +82,7 @@ def close_point(net: Verne, vae, d: Demos, env, seed: int, n_exec: int, sampler=
     torch.manual_seed(seed * 100 + n_exec)  # the same noise as rollout's episode
     obs, plan = env.reset(seed=seed), []
     cube = env.cube_pos[:2]
-    for _ in range(600):
+    for _ in range(env._cfg.horizon_steps):
         if not plan:
             plan = list(act(net, vae, d, obs, sampler)[:n_exec])
         a = plan.pop(0)

@@ -161,3 +161,14 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
 - wrist_check.py: a off square 15.2 deg, turn slope 0.18; c 11.5 deg, slope 0.41 (corr 0.63). a hangs on crooked
   holds (wrong_target); c aims off (labels aim at the latched spawn, cube nudged); d hovers square, never closes.
 - Next: DAgger with a state-based labeller (StateExpert, uncommitted: alone 30/30, rescues 21/21 policy failures).
+
+## Step 06 · DAgger, a data step (2026-11-13), nbs/verne/06_dagger.ipynb
+- StateExpert (expert.py): phase from the scene + memory (settled grip stays held, release final, 2-step phase
+  changes) + retries (closed on nothing / slipped -> reopen, rise clear, re-aim). Alone 30/30; takes over step 05
+  clean-square failures 21/21. dagger.py + `run dagger`: recorder records the labeller, executes the policy.
+  run.py load_task: 'base+round[:fail]', val = base's 10.
+- r1: base policy, seeds 2000-2099, placed 79%, 21 failed. r2: r1:fail policy, seeds 2100-2299 (200), placed 76%, 47 failed.
+- Seed 0 n_exec 8 / 16: base 42/44; r1 all 45/44; r1 fail 45/47; **r1+r2 fail 48/47** (no_grasp at n_exec 8: 6 -> 0,
+  y slope 0.86 -> 0.97, miss 0.9 cm). Failures-only >= all with a third fewer frames.
+- Left: all 5 failures hit 600 steps; 4 of 5 place on replay (also at a 40 s limit, within 600 steps): knife-edge
+  nondeterminism, not time. Ep 1001 real: slip, crooked re-grip, never lifts. rollouts.make_env(horizon_seconds).

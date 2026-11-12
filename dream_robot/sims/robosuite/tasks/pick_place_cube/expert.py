@@ -359,6 +359,140 @@ class ExpertPolicy:
         return action, command
 
 
+def _yaw_rotation(angle: float) -> np.ndarray:
+    c, s = np.cos(angle), np.sin(angle)
+    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+
+
+class StateExpert:
+    """The expert as a labeller for any state, for DAgger: the phase is read from the scene every
+    step instead of advanced by a machine, so it can label states the policy wanders into.
+
+    ExpertPolicy's phase machine only moves forward: after a missed grasp it goes on to lift and
+    carry an empty gripper, and labels that as right. This one re-decides each step from privileged
+    state (allowed: an expert, not an observation), with the cube where it is now, not where it
+    spawned:
+
+        cube in the bin                -> open, rise above the bin
+        cube held                      -> lift straight up, then carry above the bin with the wrist
+                                          straightened, lower, open
+        gripper closed on nothing      -> open, back above the cube (the retry no demo shows)
+        fingers at the grasp spot      -> close
+        above the cube                 -> descend
+        otherwise                      -> approach above the cube, wrist squared up (square_up)
+
+    Same waypoints, tolerances and gripper commands as ExpertPolicy (task.yaml).
+    """
+
+    HELD = (0.25, 0.85)  # normalised opening while closed on the cube (~0.5 square, more diagonal)
+    NEAR = 0.025  # m: cube centre to the grasp point, counts as between the fingers
+
+    def __init__(self, env, config: ExpertConfig | None = None, square_up: bool = True):
+        self._env = env
+        self._cfg = config or ExpertConfig.load()
+        self._square_up = square_up
+        self._ik: DifferentialIK | None = None
+
+    def reset(self) -> None:
+        """Call after env.reset()."""
+        model, data = self._env.mujoco
+        self._ik = DifferentialIK(
+            model,
+            data,
+            site_name=EEF_SITE,
+            qpos_idx=self._env.arm_qpos_idx,
+            damping=self._cfg.ik.damping,
+            max_joint_step=self._cfg.ik.max_joint_step,
+        )
+        self._reset_rotation = self._ik.site_mat
+        self._table_z = float(self._env.cube_pos[2])  # the cube's resting height
+        self._openings: list[float] = []
+        self.phase = 'approach'
+        self._pending: str | None = None  # a phase change seen once, waiting for a second step
+
+    def __call__(self, observation) -> np.ndarray:
+        """Absolute joint targets + gripper for this state; also sets self.phase."""
+        k, eef, cube, bin_c = self._cfg, self._ik.site_pos, self._env.cube_pos, self._env.bin_center
+        opening = float(observation.state[-1])
+        self._openings = (self._openings + [opening])[-k.grip_settle_window :]
+        settled = len(self._openings) == k.grip_settle_window and (
+            max(self._openings) - min(self._openings) < k.grip_settle_epsilon
+        )
+        grasp_spot = cube + [0.0, 0.0, k.grasp_dz]
+        near = np.linalg.norm(cube - (eef - [0.0, 0.0, k.grasp_dz])) < self.NEAR
+        by_bin = np.linalg.norm(cube[:2] - bin_c[:2]) < 0.08
+        # memory 1: a grip, once settled, stays a grip through lift / carry / lower while the cube
+        # is still between the fingers (the opening wobbles a little as the load moves)
+        held = (
+            near
+            and (settled or self.phase in ('lift', 'carry', 'lower'))
+            and self.HELD[0] < opening < self.HELD[1]
+        )
+        # memory 2: once released by the bin, keep retreating (open fingers next to the cube in the
+        # bin are not a new grasp)
+        in_bin = by_bin and (cube[2] < self._table_z + 0.06 or self.phase in ('release', 'retreat'))
+        over_bin = np.linalg.norm(cube[:2] - bin_c[:2]) < 0.03  # looser than carry_tolerance
+        above_bin = np.array([bin_c[0], bin_c[1], bin_c[2] + k.lift_height])  # one carry height
+        drop = np.array([bin_c[0], bin_c[1], bin_c[2] + k.drop_height])
+
+        above_cube = grasp_spot + [0.0, 0.0, k.approach_height]
+        cleared = opening > 0.9 and eef[2] > above_cube[2] - k.reach_tolerance  # open and back up
+        # what the scene says, this step
+        if in_bin:
+            decided = 'retreat'
+        elif self.phase == 'reopen' and not cleared:
+            decided = (
+                'reopen'  # a retry opens and rises clear before re-aiming, never re-closes in place
+            )
+        elif self.phase in ('lift', 'carry', 'lower') and not held:
+            decided = 'reopen'  # the cube slipped out: open, rise, start over from above
+        elif held and not over_bin:
+            decided = 'lift' if cube[2] < self._table_z + 0.08 else 'carry'
+        elif held:
+            decided = 'release' if eef[2] < drop[2] + k.reach_tolerance else 'lower'
+        elif opening < self.HELD[0] and settled:
+            decided = 'reopen'  # closed on nothing: open and go back up
+        elif (near and not settled and opening < 0.97) or np.linalg.norm(
+            eef - grasp_spot
+        ) < k.fine_tolerance:
+            decided = 'grasp'  # at the grasp spot, or fingers still moving onto the cube
+        elif (
+            np.linalg.norm(eef[:2] - grasp_spot[:2])
+            < 2 * k.reach_tolerance  # looser to stay than start
+            and eef[2] < grasp_spot[2] + k.approach_height + k.reach_tolerance
+        ):
+            decided = 'descend'
+        else:
+            decided = 'approach'
+        # memory 3: change phase only on the same verdict two steps running, except the failure edge
+        # (reopen), which acts at once
+        if decided == self.phase:
+            self._pending = None
+        elif decided == 'reopen' or decided == self._pending:  # reopen acts at once
+            self.phase, self._pending = decided, None
+        else:
+            self._pending = decided
+
+        squared = self._reset_rotation
+        if self._square_up:
+            squared = (
+                _yaw_rotation((self._env.cube_yaw + np.pi / 4) % (np.pi / 2) - np.pi / 4) @ squared
+            )
+        target, grip, rot = {  # the label for the phase in force
+            'approach': (above_cube, OPEN, squared),
+            'descend': (grasp_spot, OPEN, squared),
+            'grasp': (grasp_spot, CLOSED, squared),
+            'reopen': (above_cube, OPEN, squared),
+            'lift': (np.array([eef[0], eef[1], above_bin[2]]), CLOSED, self._ik.site_mat),
+            'carry': (above_bin, CLOSED, self._reset_rotation),
+            'lower': (drop, CLOSED, self._reset_rotation),
+            'release': (drop, OPEN, self._reset_rotation),
+            'retreat': (above_bin, OPEN, self._reset_rotation),
+        }[self.phase]
+        joints = self._ik.solve(target, rot)
+        return np.concatenate([joints, [grip]]).astype(np.float32)
+
+
 class ExpertActor:
     """``ExpertPolicy`` narrowed to ``core.record.Policy``: an action, nothing else.
 

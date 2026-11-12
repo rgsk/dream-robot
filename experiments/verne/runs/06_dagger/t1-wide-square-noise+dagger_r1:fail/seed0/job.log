@@ -1,0 +1,25 @@
+step      0   train 2.437   val 2.238
+step   1000   train 0.198   val 0.173
+step   2000   train 0.121   val 0.125
+step   3000   train 0.128   val 0.139
+step   4000   train 0.079   val 0.126
+step   5000   train 0.105   val 0.106
+step   6000   train 0.106   val 0.113
+step   7000   train 0.071   val 0.096
+step   8000   train 0.077   val 0.098
+step   9000   train 0.050   val 0.101
+step  10000   train 0.087   val 0.102
+step  11000   train 0.069   val 0.104
+step  12000   train 0.065   val 0.097
+step  13000   train 0.062   val 0.103
+step  14000   train 0.068   val 0.093
+step  15000   train 0.059   val 0.092
+step  16000   train 0.058   val 0.092
+step  17000   train 0.040   val 0.099
+step  18000   train 0.040   val 0.096
+step  19000   train 0.053   val 0.092
+step  20000   train 0.032   val 0.101
+n_exec  8: 45/50   failures {'dropped': 2, 'no_grasp': 3}
+n_exec 16: 47/50   failures {'no_grasp': 3}
+closes 49/50, miss  1.0 cm, x slope +1.02 (corr +1.00, intercept -0.4 cm), y slope +0.90 (corr +0.98, intercept -0.4 cm)
+done: /home/rahul/Documents/codes/ml/dream-robot/experiments/verne/runs/06_dagger/t1-wide-square-noise+dagger_r1:fail/seed0

@@ -219,6 +219,9 @@ Not opened: text encoder (T1 has one instruction), real-time chunking, Wan's siz
 - **05 · Square up to the cube** — **DONE** (`05_square.ipynb`): the expert turns the wrist to the cube's
   nearest face. Seed 0, T1-wide, n_exec 8 / 16: clean squaring 28 / 25, **+ full shake 42 / 44** (step 04:
   36 / 39), + ±45° aim bias 26 / 33, both 35 / 33. Next: DAgger.
+- **06 · DAgger** — **DONE** (`06_dagger.ipynb`): the policy drives, a state-based expert (with retries)
+  labels its states, failed episodes only. Seed 0, n_exec 8 / 16: 42 / 44 → round 1 45 / 47 → round 2
+  **48 / 47**; what's left is mostly run-to-run noise plus one crooked re-grip after a drop.
 
 ## Side work, parked
 
