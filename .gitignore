@@ -23,6 +23,8 @@ experiments/*/checkpoints/
 experiments/*/rollouts/
 # run logs: the numbers that matter are copied into notes.md
 experiments/**/*.log
+# a run.py job log is short (losses, scores, probe): it is the run's readable record
+!experiments/verne/runs/**/job.log
 experiments/**/*.pid
 checkpoints/
 *.pt

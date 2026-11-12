@@ -99,3 +99,24 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   workers -> every probe episode fell back to the kernel. Decision (2026-11-12): runs become jobs
   (one command per task/seed -> files under experiments/verne/runs/<step>/, meta = commit + code
   hash, a detached queue on the pod), notebooks become readers. Start of next session.
+
+## Runs as jobs (2026-11-12): dream_robot/policies/verne/run.py
+- `run job <step> <task> <seed>` trains + sweeps (n_exec 8, 16) + probes (wide) -> experiments/verne/runs/<step>/<task>/seed<k>/
+  (meta: commit, dirty, package hash, GPU; log, sweep_*, probe JSON committed; weights.pt, job.log ignored).
+  `run queue` = jobs one by one, fresh process each. Pod has no .git: sync writes synced_from.json (`run synced-from`).
+- RunPod L40S (US-TX-4, 16 vCPU, 320 MB/s): load_cameras decode ~6 min per dataset on the pod (not 74 s);
+  one job ~13 min wide (train ~6), ~10 min T1.
+
+## Step 02 seed 0 rerun as jobs on the L40S; cosine LR closed (one seed)
+- T1: n_exec 8 **5/50**, 16 **10/50**, val end 0.531 (4090: 5, 14, 0.544). Val min 0.167 at 2k steps.
+- T1-wide: **9/50**, **4/50**; probe x **+0.73**, y +0.55, miss **3.3 cm** (4090: 11, 7; +0.74, 3.0 cm).
+  Seed 0 sees the cube on both GPUs (step 01's seed 0: blind on the 4090).
+- Decision (user): seeds 1, 2 not run; cosine LR done for now. Spread-across-seeds question open.
+  Wrap-up in nbs/verne/02_cosine_lr.ipynb (step 02.7 + wrap-up).
+- T1-wide seeds 1, 2 (L40S): seed 1 **11/50, 6/50**, probe x +0.05, miss 8.7 cm (blind); seed 2 **9/50, 4/50**,
+  x +0.23, miss 7.6 cm. Totals n_exec 8 **29/150** (step 01: 18), 16 **14/150** (21). 1 of 3 sees, as step 01.
+- Films (scripts/films.py, seed 0 vs 1, scratch/verne_films/) + reach_track.py (10 eps each): every failure
+  drives the gripper forward to x ≈ +16-17 cm (robot base at -56 cm; cube spawns to +10) and parks 11-24 cm
+  past the cube; seed 0 never comes back (<= 1.7 cm), seed 1 sometimes 11-18 cm. Successes stop at x ~+1.5.
+  Blind seed 1 wins when the cube spawns near its spot. Open: do demos ever reach x +16 cm?
+- Decision: cosine LR (box 11) done; warmup and EMA later. Roadmap updated.

@@ -93,7 +93,10 @@ Scored on T1, 10 labelled demos, rollouts seeds 1000-1019 at n_exec 8 and 16 (st
   - why: the action side can be cheaper than the video side and read the depths that help.
   - test: 2-3 action layers paired to chosen video layers; compare success and ms/step.
 
-- **11 · Cosine LR + EMA weights** (training)
+- **11 · Cosine LR + EMA weights** (training) — **cosine LR DONE** (step 02, `02_cosine_lr.ipynb`):
+  T1-wide 3 seeds n_exec 8 29/150 (step 01: 18), n_exec 16 14/150 (21); still 1 of 3 runs sees
+  the cube, a different seed; T1 seed 0 overfits harder (5/50 vs 10). Failures drive forward to
+  x ≈ +16 cm and park past the cube. Later: cosine with warmup; EMA alone and with cosine.
   - step 0/01: AdamW at a constant 3e-4 for 20k steps; the last step's weights are the model.
   - Verne: the training code isn't released, so unknown. Both are standard for diffusion and
     flow policies.

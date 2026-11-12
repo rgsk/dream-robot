@@ -1,0 +1,11 @@
+{
+ "commit": "806a3e3",
+ "dirty": true,
+ "package_hash": "8864487fb252",
+ "gpu": "NVIDIA L40S",
+ "task": "t1-wide",
+ "seed": 0,
+ "steps": 20000,
+ "started": "2026-11-12 09:20:02",
+ "note": "run as 1a588af2bb2c; the only change after: run.py meta records the synced-from commit"
+}

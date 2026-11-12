@@ -1,0 +1,25 @@
+step      0   train 2.157   val 3.411
+step   1000   train 0.149   val 0.150
+step   2000   train 0.124   val 0.110
+step   3000   train 0.117   val 0.093
+step   4000   train 0.059   val 0.081
+step   5000   train 0.078   val 0.080
+step   6000   train 0.050   val 0.062
+step   7000   train 0.048   val 0.085
+step   8000   train 0.043   val 0.055
+step   9000   train 0.045   val 0.053
+step  10000   train 0.032   val 0.058
+step  11000   train 0.044   val 0.051
+step  12000   train 0.060   val 0.050
+step  13000   train 0.023   val 0.045
+step  14000   train 0.023   val 0.046
+step  15000   train 0.055   val 0.050
+step  16000   train 0.026   val 0.038
+step  17000   train 0.027   val 0.048
+step  18000   train 0.011   val 0.042
+step  19000   train 0.015   val 0.037
+step  20000   train 0.033   val 0.036
+n_exec  8:  9/50   failures {'no_grasp': 38, 'dropped': 3}
+n_exec 16:  4/50   failures {'no_grasp': 46}
+closes 50/50, miss  7.6 cm, x slope +0.23 (corr +0.19, intercept +0.4 cm), y slope +0.06 (corr +0.07, intercept -2.6 cm)
+done: /root/dream-robot/experiments/verne/runs/02_cosine_lr/t1-wide/seed2
