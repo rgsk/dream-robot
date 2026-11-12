@@ -214,6 +214,12 @@ T1, successes out of 50 (seed 0 only):
 
 Not opened: text encoder (T1 has one instruction), real-time chunking, Wan's size, the head-camera crop (§1: centre 87.5%; our top camera already frames the table).
 
+## Data steps (not boxes: the model is unchanged, the demos change)
+
+- **05 · Square up to the cube** — **DONE** (`05_square.ipynb`): the expert turns the wrist to the cube's
+  nearest face. Seed 0, T1-wide, n_exec 8 / 16: clean squaring 28 / 25, **+ full shake 42 / 44** (step 04:
+  36 / 39), + ±45° aim bias 26 / 33, both 35 / 33. Next: DAgger.
+
 ## Side work, parked
 
 - T1-wide blindness (probes.ipynb cells 52-56, notes.md "Box 3"): the step 0 gripper closes in the

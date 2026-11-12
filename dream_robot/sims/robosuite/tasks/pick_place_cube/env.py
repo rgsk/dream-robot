@@ -41,6 +41,7 @@ from dream_robot.core.schema import (
     validate_action,
 )
 
+
 def _own_context(method):
     """Make this render context's GL context current, then run ``method``.
 
@@ -56,7 +57,7 @@ def _own_context(method):
         try:
             self.gl_ctx.make_current()
         except Exception:
-            if method.__name__ != "__del__":
+            if method.__name__ != '__del__':
                 raise
             # At interpreter exit EGL may already be gone; nothing left to protect.
         return method(self, *args, **kwargs)
@@ -65,12 +66,12 @@ def _own_context(method):
     return wrapped
 
 
-for _name in ("render", "__del__"):
-    if not hasattr(getattr(MjRenderContext, _name), "__wrapped__"):
+for _name in ('render', '__del__'):
+    if not hasattr(getattr(MjRenderContext, _name), '__wrapped__'):
         setattr(MjRenderContext, _name, _own_context(getattr(MjRenderContext, _name)))
 
 
-TASK_YAML = Path(__file__).with_name("task.yaml")
+TASK_YAML = Path(__file__).with_name('task.yaml')
 
 
 @dataclass(frozen=True)
@@ -100,27 +101,27 @@ class TaskConfig:
     @classmethod
     def load(cls, path: Path = TASK_YAML) -> TaskConfig:
         raw = yaml.safe_load(path.read_text())
-        b = raw["scene"]["bin"]
+        b = raw['scene']['bin']
         return cls(
-            prompt=str(raw["prompt"]),
-            control_hz=float(raw["control"]["hz"]),
-            horizon_seconds=float(raw["control"]["horizon_seconds"]),
-            camera_hw=(int(raw["cameras"]["height"]), int(raw["cameras"]["width"])),
-            camera_mapping=dict(raw["cameras"]["mapping"]),
-            render_camera=str(raw["render"]["camera"]),
-            render_hw=(int(raw["render"]["height"]), int(raw["render"]["width"])),
+            prompt=str(raw['prompt']),
+            control_hz=float(raw['control']['hz']),
+            horizon_seconds=float(raw['control']['horizon_seconds']),
+            camera_hw=(int(raw['cameras']['height']), int(raw['cameras']['width'])),
+            camera_mapping=dict(raw['cameras']['mapping']),
+            render_camera=str(raw['render']['camera']),
+            render_hw=(int(raw['render']['height']), int(raw['render']['width'])),
             cube_xy_range=tuple(
-                tuple(r) if isinstance(r, list) else float(r) for r in raw["scene"]["cube_xy_range"]
+                tuple(r) if isinstance(r, list) else float(r) for r in raw['scene']['cube_xy_range']
             ),
             bin=BinSpec(
-                offset_xy=tuple(b["offset_xy"]),
-                inner_half=float(b["inner_half"]),
-                wall_half_thickness=float(b["wall_half_thickness"]),
-                wall_half_height=float(b["wall_half_height"]),
+                offset_xy=tuple(b['offset_xy']),
+                inner_half=float(b['inner_half']),
+                wall_half_thickness=float(b['wall_half_thickness']),
+                wall_half_height=float(b['wall_half_height']),
             ),
-            resting_z_margin=float(raw["success"]["resting_z_margin"]),
-            lift_threshold=float(raw["failure"]["lift_threshold"]),
-            dropped_radius=float(raw["failure"]["dropped_radius"]),
+            resting_z_margin=float(raw['success']['resting_z_margin']),
+            lift_threshold=float(raw['failure']['lift_threshold']),
+            dropped_radius=float(raw['failure']['dropped_radius']),
         )
 
     @property
@@ -132,7 +133,7 @@ class _LiftWithBin(Lift):
     """robosuite's Lift scene plus a static open-top bin. MJCF only."""
 
     def __init__(self, bin_spec: BinSpec, **kwargs):
-        self._bin = bin_spec          # must exist before _load_model runs
+        self._bin = bin_spec  # must exist before _load_model runs
         super().__init__(**kwargs)
 
     def _load_model(self) -> None:
@@ -141,21 +142,23 @@ class _LiftWithBin(Lift):
         cx = self.table_offset[0] + b.offset_xy[0]
         cy = self.table_offset[1] + b.offset_xy[1]
         body = new_body(
-            name="goal_bin",
+            name='goal_bin',
             pos=array_to_string([cx, cy, self.table_offset[2] + b.wall_half_height]),
         )
         span = b.inner_half + b.wall_half_thickness
         t, h = b.wall_half_thickness, b.wall_half_height
         for suffix, size, pos in (
-            ("px", [t, span, h], [span, 0, 0]),
-            ("nx", [t, span, h], [-span, 0, 0]),
-            ("py", [span, t, h], [0, span, 0]),
-            ("ny", [span, t, h], [0, -span, 0]),
+            ('px', [t, span, h], [span, 0, 0]),
+            ('nx', [t, span, h], [-span, 0, 0]),
+            ('py', [span, t, h], [0, span, 0]),
+            ('ny', [span, t, h], [0, -span, 0]),
         ):
             body.append(
                 new_geom(
-                    name=f"goal_bin_{suffix}", type="box",
-                    size=array_to_string(size), pos=array_to_string(pos),
+                    name=f'goal_bin_{suffix}',
+                    type='box',
+                    size=array_to_string(size),
+                    pos=array_to_string(pos),
                     rgba=array_to_string([0.15, 0.35, 0.75, 1.0]),
                     # group=1, NOT new_geom's default of 0. robosuite treats
                     # group 0 as collision-only and its cameras do not draw it,
@@ -169,11 +172,13 @@ class _LiftWithBin(Lift):
         self.model.worldbody.append(body)
 
     def bin_center(self) -> np.ndarray:
-        return np.array([
-            self.table_offset[0] + self._bin.offset_xy[0],
-            self.table_offset[1] + self._bin.offset_xy[1],
-            self.table_offset[2],
-        ])
+        return np.array(
+            [
+                self.table_offset[0] + self._bin.offset_xy[0],
+                self.table_offset[1] + self._bin.offset_xy[1],
+                self.table_offset[2],
+            ]
+        )
 
 
 def _joint_position_controller_config() -> dict:
@@ -183,19 +188,24 @@ def _joint_position_controller_config() -> dict:
     goal_qpos = action verbatim, and nothing in the step path clips it. The
     default BASIC config is OSC, which is end-effector deltas and banned.
     """
-    cfg = suite.load_composite_controller_config(controller="BASIC", robot="Panda")
+    cfg = suite.load_composite_controller_config(controller='BASIC', robot='Panda')
     # The loader flattens body_parts.arms.{right,left} -> body_parts.{right,left}
-    cfg["body_parts"]["right"] = {
-        "type": "JOINT_POSITION",
-        "input_type": "absolute",
-        "input_max": 1, "input_min": -1,
-        "output_max": 0.05, "output_min": -0.05,
-        "kp": 150, "damping_ratio": 1,
-        "impedance_mode": "fixed",           # required for absolute input
-        "kp_limits": [0, 300], "damping_ratio_limits": [0, 10],
-        "qpos_limits": None,
-        "interpolation": None, "ramp_ratio": 0.2,
-        "gripper": {"type": "GRIP"},
+    cfg['body_parts']['right'] = {
+        'type': 'JOINT_POSITION',
+        'input_type': 'absolute',
+        'input_max': 1,
+        'input_min': -1,
+        'output_max': 0.05,
+        'output_min': -0.05,
+        'kp': 150,
+        'damping_ratio': 1,
+        'impedance_mode': 'fixed',  # required for absolute input
+        'kp_limits': [0, 300],
+        'damping_ratio_limits': [0, 10],
+        'qpos_limits': None,
+        'interpolation': None,
+        'ramp_ratio': 0.2,
+        'gripper': {'type': 'GRIP'},
     }
     return cfg
 
@@ -209,7 +219,7 @@ class PickPlaceCube:
         self._backend_cams = list(self._cfg.camera_mapping)
         self._env = _LiftWithBin(
             self._cfg.bin,
-            robots="Panda",
+            robots='Panda',
             controller_configs=_joint_position_controller_config(),
             has_renderer=False,
             has_offscreen_renderer=True,
@@ -235,7 +245,7 @@ class PickPlaceCube:
         """
         x, y = (list(r) if isinstance(r, tuple) else [-r, r] for r in self._cfg.cube_xy_range)
         return UniformRandomSampler(
-            name="ObjectSampler",
+            name='ObjectSampler',
             x_range=x,
             y_range=y,
             rotation=None,
@@ -277,7 +287,7 @@ class PickPlaceCube:
         # Measuring against the table instead is wrong: robosuite's placement
         # sampler spawns with a z_offset, so the cube already sits above the
         # table surface and an idle episode reads as a successful grasp.
-        self._cube_z0 = float(self._raw["cube_pos"][2])
+        self._cube_z0 = float(self._raw['cube_pos'][2])
         self._max_cube_z = self._cube_z0
         return self._observe()
 
@@ -289,7 +299,7 @@ class PickPlaceCube:
         self._raw, _, _, _ = self._env.step(np.concatenate([arm, [1.0 - 2.0 * opening]]))
         self._t += 1
 
-        cube = np.asarray(self._raw["cube_pos"], dtype=float)
+        cube = np.asarray(self._raw['cube_pos'], dtype=float)
         self._max_cube_z = max(self._max_cube_z, float(cube[2]))
 
         success = self._cube_in_bin(cube)
@@ -304,16 +314,14 @@ class PickPlaceCube:
 
     def render(self) -> np.ndarray:
         h, w = self._cfg.render_hw
-        frame = self._env.sim.render(
-            width=w, height=h, camera_name=self._cfg.render_camera
-        )
+        frame = self._env.sim.render(width=w, height=h, camera_name=self._cfg.render_camera)
         return np.ascontiguousarray(frame[::-1])
 
     def frame(self, camera: str, hw: tuple[int, int] = (512, 512)) -> np.ndarray:
         """One RGB frame, rows top-down, from "scene" (the wide render camera) or a
         canonical camera ("top", "wrist"), at any resolution. For recording: the
         observation's own images stay at the dataset's size."""
-        if camera == "scene":
+        if camera == 'scene':
             backend = self._cfg.render_camera
         else:
             backend = {v: k for k, v in self._cfg.camera_mapping.items()}[camera]
@@ -321,7 +329,7 @@ class PickPlaceCube:
         frame = self._env.sim.render(width=w, height=h, camera_name=backend)
         return np.ascontiguousarray(frame[::-1])
 
-    def rgbd(self, camera: str = "top", hw: tuple[int, int] = (256, 256)) -> RGBD:
+    def rgbd(self, camera: str = 'top', hw: tuple[int, int] = (256, 256)) -> RGBD:
         """A calibrated depth frame from a canonical camera, for the executor.
 
         Not part of the observation, and not privileged: a real RGB-D camera
@@ -362,7 +370,7 @@ class PickPlaceCube:
         (cx, cy, _), (sx, sy, _) = self._env.table_offset, self._env.table_full_size
         return (cx - sx / 2, cx + sx / 2, cy - sy / 2, cy + sy / 2)
 
-    def robot_mask(self, camera: str = "top", hw: tuple[int, int] = (256, 256)) -> np.ndarray:
+    def robot_mask(self, camera: str = 'top', hw: tuple[int, int] = (256, 256)) -> np.ndarray:
         """(H, W) bool: the pixels showing the robot itself, rows top-down as rgbd's.
 
         Self-filtering, as a real cell does it: the arm's model and joint angles
@@ -396,7 +404,13 @@ class PickPlaceCube:
 
     @property
     def cube_pos(self) -> np.ndarray:
-        return np.asarray(self._raw["cube_pos"], dtype=float).copy()
+        return np.asarray(self._raw['cube_pos'], dtype=float).copy()
+
+    @property
+    def cube_yaw(self) -> float:
+        """The cube's rotation about the vertical, radians (robosuite quaternions are x, y, z, w)."""
+        x, y, z, w = np.asarray(self._raw['cube_quat'], dtype=float)
+        return float(np.arctan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)))
 
     @property
     def bin_center(self) -> np.ndarray:
@@ -416,23 +430,23 @@ class PickPlaceCube:
     def _measure_gripper_span(self) -> float:
         """Max finger separation, read from the model rather than hardcoded."""
         m = self._env.sim.model._model
-        names = self._env.robots[0].gripper["right"].joints
-        lo_hi = np.array([
-            m.jnt_range[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, n)] for n in names
-        ])
+        names = self._env.robots[0].gripper['right'].joints
+        lo_hi = np.array(
+            [m.jnt_range[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, n)] for n in names]
+        )
         span = float(lo_hi[0][1] - lo_hi[1][0])
         if span <= 0:
-            raise ValueError(f"non-positive gripper span {span} from joints {names}")
+            raise ValueError(f'non-positive gripper span {span} from joints {names}')
         return span
 
     def _observe(self) -> Observation:
         raw = self._raw
-        width = float(raw["robot0_gripper_qpos"][0] - raw["robot0_gripper_qpos"][1])
+        width = float(raw['robot0_gripper_qpos'][0] - raw['robot0_gripper_qpos'][1])
         return build_observation(
-            joint_positions=raw["robot0_joint_pos"],
+            joint_positions=raw['robot0_joint_pos'],
             gripper_openings=[np.clip(width / self._gripper_span, 0.0, 1.0)],
             images={
-                canonical: np.ascontiguousarray(raw[f"{backend}_image"][::-1])
+                canonical: np.ascontiguousarray(raw[f'{backend}_image'][::-1])
                 # robosuite renders bottom-up (OpenGL row order). Unflipped, a
                 # policy trains happily on upside-down frames and nothing
                 # complains until they meet a real camera or another simulator.

@@ -28,6 +28,24 @@ from dream_robot.core.video import camera_strip, write_video
 from dream_robot.sims.robosuite.tasks.pick_place_cube.env import PickPlaceCube, TaskConfig
 from dream_robot.sims.robosuite.tasks.pick_place_cube.expert import ExpertActor, ExpertPolicy
 
+
+class AimBias:
+    """Executes the expert's biased action (ExpertPolicy.executed) instead of the recorded one, plus
+    optional joint noise on top. The dataset keeps the clean action: see ExpertPolicy's aim_bias_deg."""
+
+    def __init__(self, policy: ExpertPolicy, degrees: float, noise: JointNoise | None):
+        self.policy, self.degrees, self.noise = policy, degrees, noise
+
+    def __call__(self, action, rng):
+        executed = self.policy.executed if self.policy.executed is not None else action
+        return self.noise(executed, rng) if self.noise else executed
+
+    def to_dict(self) -> dict:
+        return {'type': 'aim_bias', 'degrees': self.degrees} | (
+            {'noise': self.noise.to_dict()} if self.noise else {}
+        )
+
+
 REPO_ID = 'dream_robot/pick_place_cube'
 DEFAULT_ROOT = Path('data/robosuite/pick_place_cube')
 DEFAULT_VIDEO = Path('experiments/expert_demo/videos/dataset_roundtrip.mp4')
@@ -82,6 +100,18 @@ def main(argv: list[str] | None = None) -> int:
         metavar=('MIN', 'MAX'),
         help='cube spawn y range in metres about the table centre (default: task.yaml)',
     )
+    p.add_argument(
+        '--square-up',
+        action='store_true',
+        help='the expert turns the gripper to close square to the cube (default: fixed orientation)',
+    )
+    p.add_argument(
+        '--aim-bias-deg',
+        type=float,
+        default=0.0,
+        help='with --square-up: execute a per-episode wrist bias in [-deg, deg] until the lift, '
+        'record the clean action (an imperfect grasp that still carries on)',
+    )
     p.add_argument('--verify', action='store_true', help='write a video read back from disk')
     p.add_argument('--verify-episode', type=int, default=0)
     p.add_argument('--verify-out', type=Path, default=DEFAULT_VIDEO)
@@ -100,10 +130,13 @@ def main(argv: list[str] | None = None) -> int:
         )
     print(f'cube spawn range (x, y): {cfg.cube_xy_range}')
     env = PickPlaceCube(cfg)
+    expert = ExpertPolicy(env, square_up=args.square_up, aim_bias_deg=args.aim_bias_deg)
+    noise = JointNoise(args.noise_sigma, env.embodiment) if args.noise_sigma > 0 else None
+    perturb = AimBias(expert, args.aim_bias_deg, noise) if args.aim_bias_deg else noise
     try:
         summary = record_episodes(
             env,
-            ExpertActor(ExpertPolicy(env)),
+            ExpertActor(expert),
             repo_id=REPO_ID,
             root=args.root,
             task_prompt=cfg.prompt,
@@ -112,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
             seed_start=args.seed_start,
             max_attempts=args.max_attempts,
             keep_failures=args.keep_failures,
-            perturb=JointNoise(args.noise_sigma, env.embodiment) if args.noise_sigma > 0 else None,
+            perturb=perturb,
         )
     finally:
         env.close()

@@ -1,0 +1,25 @@
+step      0   train 2.189   val 2.325
+step   1000   train 0.182   val 0.172
+step   2000   train 0.104   val 0.126
+step   3000   train 0.113   val 0.130
+step   4000   train 0.115   val 0.116
+step   5000   train 0.081   val 0.111
+step   6000   train 0.102   val 0.115
+step   7000   train 0.068   val 0.103
+step   8000   train 0.069   val 0.101
+step   9000   train 0.048   val 0.109
+step  10000   train 0.062   val 0.122
+step  11000   train 0.058   val 0.120
+step  12000   train 0.064   val 0.109
+step  13000   train 0.062   val 0.129
+step  14000   train 0.065   val 0.117
+step  15000   train 0.047   val 0.115
+step  16000   train 0.045   val 0.116
+step  17000   train 0.031   val 0.127
+step  18000   train 0.024   val 0.126
+step  19000   train 0.055   val 0.133
+step  20000   train 0.014   val 0.134
+n_exec  8: 35/50   failures {'no_grasp': 14, 'dropped': 1}
+n_exec 16: 33/50   failures {'no_grasp': 14, 'dropped': 3}
+closes 50/50, miss  1.5 cm, x slope +1.03 (corr +0.99, intercept -0.3 cm), y slope +0.82 (corr +0.94, intercept -0.6 cm)
+done: /home/rahul/Documents/codes/ml/dream-robot/experiments/verne/runs/05_square/t1-wide-square-bias-noise/seed0

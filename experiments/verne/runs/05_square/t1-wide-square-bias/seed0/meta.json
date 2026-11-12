@@ -1,0 +1,10 @@
+{
+ "commit": "9b2fdb2",
+ "dirty": true,
+ "package_hash": "44472eee020c",
+ "gpu": "NVIDIA GeForce RTX 4060",
+ "task": "t1-wide-square-bias",
+ "seed": 0,
+ "steps": 20000,
+ "started": "2026-11-13 00:38:14"
+}

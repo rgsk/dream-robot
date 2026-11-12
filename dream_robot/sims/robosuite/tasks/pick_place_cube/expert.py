@@ -31,7 +31,7 @@ import yaml
 
 from dream_robot.sims.robosuite.ik import DifferentialIK
 
-TASK_YAML = Path(__file__).with_name("task.yaml")
+TASK_YAML = Path(__file__).with_name('task.yaml')
 
 
 @dataclass(frozen=True)
@@ -58,23 +58,23 @@ class ExpertConfig:
 
     @classmethod
     def load(cls, path: Path = TASK_YAML) -> ExpertConfig:
-        raw = yaml.safe_load(path.read_text())["expert"]
+        raw = yaml.safe_load(path.read_text())['expert']
         return cls(
-            approach_height=float(raw["approach_height"]),
-            grasp_dz=float(raw["grasp_dz"]),
-            lift_height=float(raw["lift_height"]),
-            drop_height=float(raw["drop_height"]),
-            reach_tolerance=float(raw["reach_tolerance"]),
-            fine_tolerance=float(raw["fine_tolerance"]),
-            carry_tolerance=float(raw["carry_tolerance"]),
-            lift_clearance=float(raw["lift_clearance"]),
-            release_opening=float(raw["release_opening"]),
-            grip_settle_window=int(raw["grip_settle_window"]),
-            grip_settle_epsilon=float(raw["grip_settle_epsilon"]),
-            phase_timeout_seconds=float(raw["phase_timeout_seconds"]),
+            approach_height=float(raw['approach_height']),
+            grasp_dz=float(raw['grasp_dz']),
+            lift_height=float(raw['lift_height']),
+            drop_height=float(raw['drop_height']),
+            reach_tolerance=float(raw['reach_tolerance']),
+            fine_tolerance=float(raw['fine_tolerance']),
+            carry_tolerance=float(raw['carry_tolerance']),
+            lift_clearance=float(raw['lift_clearance']),
+            release_opening=float(raw['release_opening']),
+            grip_settle_window=int(raw['grip_settle_window']),
+            grip_settle_epsilon=float(raw['grip_settle_epsilon']),
+            phase_timeout_seconds=float(raw['phase_timeout_seconds']),
             ik=IKConfig(
-                damping=float(raw["ik"]["damping"]),
-                max_joint_step=float(raw["ik"]["max_joint_step"]),
+                damping=float(raw['ik']['damping']),
+                max_joint_step=float(raw['ik']['max_joint_step']),
             ),
         )
 
@@ -84,10 +84,10 @@ class ExpertContext:
     """The privileged view. Numbers only -- no simulator handle."""
 
     eef_pos: np.ndarray
-    cube_pos: np.ndarray        # grasp reference, latched at reset
+    cube_pos: np.ndarray  # grasp reference, latched at reset
     bin_center: np.ndarray
-    gripper_opening: float      # normalised [0, 1], 1 open
-    grip_settled: bool          # fingers have stopped moving
+    gripper_opening: float  # normalised [0, 1], 1 open
+    grip_settled: bool  # fingers have stopped moving
 
 
 # Gripper commands, in the contract's units (schema.py: 0 closed .. 1 open).
@@ -111,55 +111,51 @@ def _near(ctx: ExpertContext, target: np.ndarray, tol: float) -> bool:
 
 PHASES: tuple[Phase, ...] = (
     Phase(
-        "approach",
+        'approach',
         lambda c, k: c.cube_pos + [0.0, 0.0, k.approach_height],
         OPEN,
         lambda c, k, t: _near(c, t, k.reach_tolerance),
     ),
     Phase(
-        "descend",
+        'descend',
         lambda c, k: c.cube_pos + [0.0, 0.0, k.grasp_dz],
         OPEN,
         lambda c, k, t: _near(c, t, k.fine_tolerance),
     ),
     Phase(
         # Predicate, not a wait: the fingers have stopped closing.
-        "grasp",
+        'grasp',
         lambda c, k: c.cube_pos + [0.0, 0.0, k.grasp_dz],
         CLOSED,
         lambda c, k, t: c.grip_settled,
     ),
     Phase(
-        "lift",
+        'lift',
         lambda c, k: c.cube_pos + [0.0, 0.0, k.grasp_dz + k.lift_height],
         CLOSED,
         lambda c, k, t: bool(c.eef_pos[2] > t[2] - k.lift_clearance),
     ),
     Phase(
-        "carry",
-        lambda c, k: np.array([c.bin_center[0], c.bin_center[1],
-                               c.bin_center[2] + k.lift_height]),
+        'carry',
+        lambda c, k: np.array([c.bin_center[0], c.bin_center[1], c.bin_center[2] + k.lift_height]),
         CLOSED,
         lambda c, k, t: _near(c, t, k.carry_tolerance),
     ),
     Phase(
-        "lower",
-        lambda c, k: np.array([c.bin_center[0], c.bin_center[1],
-                               c.bin_center[2] + k.drop_height]),
+        'lower',
+        lambda c, k: np.array([c.bin_center[0], c.bin_center[1], c.bin_center[2] + k.drop_height]),
         CLOSED,
         lambda c, k, t: _near(c, t, k.reach_tolerance),
     ),
     Phase(
-        "release",
-        lambda c, k: np.array([c.bin_center[0], c.bin_center[1],
-                               c.bin_center[2] + k.drop_height]),
+        'release',
+        lambda c, k: np.array([c.bin_center[0], c.bin_center[1], c.bin_center[2] + k.drop_height]),
         OPEN,
         lambda c, k, t: c.gripper_opening > k.release_opening,
     ),
     Phase(
-        "retreat",
-        lambda c, k: np.array([c.bin_center[0], c.bin_center[1],
-                               c.bin_center[2] + k.lift_height]),
+        'retreat',
+        lambda c, k: np.array([c.bin_center[0], c.bin_center[1], c.bin_center[2] + k.lift_height]),
         OPEN,
         lambda c, k, t: bool(c.eef_pos[2] > t[2] - k.lift_clearance),
     ),
@@ -209,7 +205,7 @@ class ScriptedExpert:
 
     @property
     def phase(self) -> str:
-        return self._phases[self._i].name if self._i < len(self._phases) else "done"
+        return self._phases[self._i].name if self._i < len(self._phases) else 'done'
 
     def grip_settled(self, opening: float) -> bool:
         """True once the recorded opening has stopped changing.
@@ -229,7 +225,7 @@ class ScriptedExpert:
             return ExpertCommand(
                 waypoint=np.asarray(last.waypoint(ctx, self._cfg), dtype=float),
                 gripper=last.gripper,
-                phase="done",
+                phase='done',
                 finished=True,
             )
 
@@ -241,8 +237,9 @@ class ScriptedExpert:
             self._i += 1
             self._steps_in_phase = 0
             self._widths = []
-            return ExpertCommand(target, phase.gripper, phase.name,
-                                 finished=self._i >= len(self._phases))
+            return ExpertCommand(
+                target, phase.gripper, phase.name, finished=self._i >= len(self._phases)
+            )
 
         if self._steps_in_phase >= self._timeout_steps:
             return ExpertCommand(target, phase.gripper, phase.name, timed_out=True)
@@ -252,7 +249,7 @@ class ScriptedExpert:
 
 # The end-effector site the IK drives. robosuite/Panda name; it stays on the sim
 # side of the seam and nothing downstream ever sees it.
-EEF_SITE = "gripper0_right_grip_site"
+EEF_SITE = 'gripper0_right_grip_site'
 
 
 class ExpertPolicy:
@@ -263,9 +260,29 @@ class ExpertPolicy:
     ``core`` never learns that an IK solver exists.
     """
 
-    def __init__(self, env, config: ExpertConfig | None = None):
+    def __init__(
+        self,
+        env,
+        config: ExpertConfig | None = None,
+        square_up: bool = False,
+        aim_bias_deg: float = 0.0,
+    ):
         self._env = env
         self._cfg = config or ExpertConfig.load()
+        # square_up: turn the gripper about the vertical so the fingers close square to the cube's
+        # faces (at most 45 degrees either way: a cube repeats every 90), then, once the cube is
+        # lifted, turn back to the reset orientation for the carry, as a person straightens the
+        # wrist. Off, the reset orientation is held whatever the cube's angle, and a diagonal cube
+        # leaves the fingers ~1 cm of room to spare instead of ~1.8.
+        self._square_up = square_up
+        # aim_bias_deg: each episode draws a wrist bias in [-aim_bias_deg, aim_bias_deg]. Each step the
+        # expert computes two actions from the same pose: `action` (returned, recorded) aims as above;
+        # `executed` (what record.py's AimBias sends to the sim) aims with the bias, from the approach
+        # until the lift. The gripper really arrives and closes crooked, while every label still turns
+        # back toward square. A constant offset added to the executed joints instead would wind the
+        # wrist up: actions are absolute targets from the current pose, so it would add up each step.
+        self._aim_bias = np.radians(aim_bias_deg)
+        self.executed: np.ndarray | None = None
         self._machine = ScriptedExpert(self._cfg, control_hz=env.control_hz)
         self._ik: DifferentialIK | None = None
 
@@ -284,7 +301,22 @@ class ExpertPolicy:
         # wherever it has been nudged to since. Also the orientation to hold --
         # the reset pose already points the gripper down.
         self._cube0 = self._env.cube_pos
-        self._hold_rotation = self._ik.site_mat
+        self._hold_rotation = self._reset_rotation = self._ik.site_mat
+        if self._square_up:
+            turn = (self._env.cube_yaw + np.pi / 4) % (
+                np.pi / 2
+            ) - np.pi / 4  # in [-45, 45) degrees
+            c, s = np.cos(turn), np.sin(turn)
+            self._hold_rotation = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]]) @ self._hold_rotation
+        # the episode's bias, repeatable per episode: seeded by the cube's spawn, which the seed fixes
+        bias_rng = np.random.default_rng(int(abs(self._env.cube_yaw) * 1e9) % 2**32)
+        b = bias_rng.uniform(-self._aim_bias, self._aim_bias) if self._aim_bias else 0.0
+        self._biased_rotation = (
+            np.array([[np.cos(b), -np.sin(b), 0], [np.sin(b), np.cos(b), 0], [0, 0, 1]])
+            @ self._hold_rotation
+        )
+        self.bias_deg = float(np.degrees(b))
+        self.executed = None
         self._machine.reset()
 
     @property
@@ -299,7 +331,7 @@ class ExpertPolicy:
         simulator for finger joints in metres.
         """
         if self._ik is None:
-            raise RuntimeError("call reset() after env.reset() before stepping")
+            raise RuntimeError('call reset() after env.reset() before stepping')
 
         opening = float(observation.state[-1])
         ctx = ExpertContext(
@@ -310,8 +342,20 @@ class ExpertPolicy:
             grip_settled=self._machine.grip_settled(opening),
         )
         command = self._machine(ctx)
-        joints = self._ik.solve(command.waypoint, self._hold_rotation)
+        turned = command.phase in (
+            'approach',
+            'descend',
+            'grasp',
+            'lift',
+        )  # squared up until lifted
+        joints = self._ik.solve(
+            command.waypoint, self._hold_rotation if turned else self._reset_rotation
+        )
         action = np.concatenate([joints, [command.gripper]]).astype(np.float32)
+        self.executed = action
+        if self._aim_bias and turned and command.phase != 'lift':  # crooked from approach to grasp
+            biased = self._ik.solve(command.waypoint, self._biased_rotation)
+            self.executed = np.concatenate([biased, [command.gripper]]).astype(np.float32)
         return action, command
 
 

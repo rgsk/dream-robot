@@ -49,6 +49,14 @@ N_EXECS = (8, 16)
 TASKS = {
     't1': ('pick_place_cube_n100', False),
     't1-wide': ('pick_place_cube_wide_n100', True),
+    # the expert squares the gripper up to the cube (record.py --square-up); rollouts as t1-wide
+    't1-wide-square': ('pick_place_cube_wide_square_n100', True),
+    # the same expert with joint noise sigma 0.05 on the executed actions, clean labels (--noise-sigma)
+    't1-wide-square-noise': ('pick_place_cube_wide_square_noise005_n100', True),
+    # the squaring expert executes a per-episode wrist bias in +-45 deg until the lift, clean labels
+    't1-wide-square-bias': ('pick_place_cube_wide_square_bias45_n100', True),
+    # both: the +-45 deg wrist bias and joint noise sigma 0.05, clean labels
+    't1-wide-square-bias-noise': ('pick_place_cube_wide_square_bias45_noise005_n100', True),
 }
 
 

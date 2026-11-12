@@ -150,3 +150,14 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   1.06 -> 0.97, failures 2.32 -> 2.38 (|dy| ~2.0); > 2 cm share 16% -> 15%; no_grasp 69 -> 50 (n_exec 8+16).
   Borderline closes pulled in; the sideways misses stay. rollouts: worker wait 300 -> 90 s, stack dump 120 -> 30 s
   (EGL render hang in parallel workers, ~1 in 500 eps; never seen serially).
+
+## Step 05 · square up to the cube, a data step (2026-11-12/13), nbs/verne/05_square.ipynb
+- Why: failures miss sideways and the fingers close along y; room each side 1.8 cm square, ~1.0 cm diagonal.
+- expert.py square_up (turn <= 45 deg to the nearest face, straighten after lift), aim_bias_deg (executed-only
+  per-episode wrist bias, clean labels); env.cube_yaw; record.py --square-up / --aim-bias-deg. Expert closes
+  1.9 deg off square (fixed wrist 21.3), 100/100 (expert_square.py).
+- Seed 0, T1-wide, n_exec 8 / 16: step 04 36/39; a square 28/25; **b + shake 42/44 (miss 1.0 cm)**; c + bias45
+  26/33 (miss 2.4); d bias + shake 35/33 (expert 72% of attempts).
+- wrist_check.py: a off square 15.2 deg, turn slope 0.18; c 11.5 deg, slope 0.41 (corr 0.63). a hangs on crooked
+  holds (wrong_target); c aims off (labels aim at the latched spawn, cube nudged); d hovers square, never closes.
+- Next: DAgger with a state-based labeller (StateExpert, uncommitted: alone 30/30, rescues 21/21 policy failures).

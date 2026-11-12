@@ -1,0 +1,252 @@
+{
+ "1000": [
+  true,
+  "none",
+  232
+ ],
+ "1001": [
+  true,
+  "none",
+  218
+ ],
+ "1002": [
+  true,
+  "none",
+  209
+ ],
+ "1003": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1004": [
+  false,
+  "wrong_target",
+  600
+ ],
+ "1005": [
+  false,
+  "wrong_target",
+  600
+ ],
+ "1006": [
+  true,
+  "none",
+  208
+ ],
+ "1007": [
+  true,
+  "none",
+  206
+ ],
+ "1008": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1009": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1010": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1011": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1012": [
+  false,
+  "wrong_target",
+  600
+ ],
+ "1013": [
+  true,
+  "none",
+  263
+ ],
+ "1014": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1015": [
+  true,
+  "none",
+  250
+ ],
+ "1016": [
+  true,
+  "none",
+  235
+ ],
+ "1017": [
+  true,
+  "none",
+  224
+ ],
+ "1018": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1019": [
+  true,
+  "none",
+  246
+ ],
+ "1020": [
+  true,
+  "none",
+  267
+ ],
+ "1021": [
+  false,
+  "wrong_target",
+  600
+ ],
+ "1022": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1023": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1024": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1025": [
+  false,
+  "wrong_target",
+  600
+ ],
+ "1026": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1027": [
+  true,
+  "none",
+  281
+ ],
+ "1028": [
+  false,
+  "wrong_target",
+  600
+ ],
+ "1029": [
+  true,
+  "none",
+  216
+ ],
+ "1030": [
+  true,
+  "none",
+  274
+ ],
+ "1031": [
+  true,
+  "none",
+  235
+ ],
+ "1032": [
+  true,
+  "none",
+  239
+ ],
+ "1033": [
+  true,
+  "none",
+  254
+ ],
+ "1034": [
+  true,
+  "none",
+  270
+ ],
+ "1035": [
+  true,
+  "none",
+  275
+ ],
+ "1036": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1037": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1038": [
+  true,
+  "none",
+  250
+ ],
+ "1039": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1040": [
+  true,
+  "none",
+  277
+ ],
+ "1041": [
+  true,
+  "none",
+  274
+ ],
+ "1042": [
+  true,
+  "none",
+  217
+ ],
+ "1043": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1044": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1045": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1046": [
+  true,
+  "none",
+  233
+ ],
+ "1047": [
+  true,
+  "none",
+  236
+ ],
+ "1048": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1049": [
+  false,
+  "no_grasp",
+  600
+ ]
+}
