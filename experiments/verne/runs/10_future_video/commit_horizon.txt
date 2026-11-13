@@ -1,0 +1,9 @@
+columns: steps (0, 16, 32, 48, 64, 80)
+ep 71: put the red cube in the left box  named slot 0  first close at step 81
+ep 108: put the green cube in the left box  named slot 0  first close at step 82
+ep 54: put the red cube in the left box  named slot 1  first close at step 114
+ep 118: put the blue cube in the left box  named slot 1  first close at step 110
+ep 130: put the blue cube in the right box  named slot 0  first close at step 93
+ep 52: put the blue cube in the right box  named slot 1  first close at step 88
+ep 64: put the blue cube in the right box  named slot 1  first close at step 88
+ep 110: put the blue cube in the left box  named slot 1  first close at step 100

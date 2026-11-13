@@ -1,0 +1,13 @@
+columns: present | real future | one-shot | sampled
+ep 71 t 0: "red left"  latent mse one-shot 0.831 sampled 1.466
+ep 71 t 40: "red left"  latent mse one-shot 0.614 sampled 1.130
+ep 71 t 80: "red left"  latent mse one-shot 0.500 sampled 0.845
+ep 108 t 0: "green left"  latent mse one-shot 0.717 sampled 1.182
+ep 108 t 40: "green left"  latent mse one-shot 0.700 sampled 1.059
+ep 108 t 80: "green left"  latent mse one-shot 0.424 sampled 0.651
+ep 54 t 0: "red left"  latent mse one-shot 0.797 sampled 1.293
+ep 54 t 40: "red left"  latent mse one-shot 0.564 sampled 0.935
+ep 54 t 80: "red left"  latent mse one-shot 0.411 sampled 0.725
+ep 118 t 0: "blue left"  latent mse one-shot 0.750 sampled 1.149
+ep 118 t 40: "blue left"  latent mse one-shot 0.561 sampled 0.903
+ep 118 t 80: "blue left"  latent mse one-shot 0.378 sampled 0.627

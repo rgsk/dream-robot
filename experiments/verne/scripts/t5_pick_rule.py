@@ -12,7 +12,9 @@ from dream_robot.policies.verne.rollouts import make_env
 p = json.loads((Path(sys.argv[1]) / 'probe.json').read_text())
 env = make_env('t5')
 by_colour, by_slot, rows = Counter(), Counter(), []
-for seed, (cube, grip) in p['points'].items():
+for seed, (cube, grip) in p["points"].items():
+    if grip is None:  # never closed
+        continue
     env.reset(seed=int(seed))
     ins = env.instruction
     xs = env._cube_positions()[:, 0]

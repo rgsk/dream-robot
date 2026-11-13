@@ -217,3 +217,28 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   rollout seeds, arm = head 49/50. Left: no_grasp 4/4, dropped 1/2 (the T1-wide failure modes).
 - Read: binding was the missing piece, and it needed more scenes than 135 demos give; the arm reads the head's answer
   through the last layer's k,v. Label is sim-only here. One seed.
+
+## Step 10 · future frame on the video side (box 07), T5 seed 0 (2026-11-14), runs/10_future_video/t5
+- Slot head + scenes removed from the package (sim-label test, step 09 is its record). Package = step 08 + future frame:
+  noisy latent of frame now+16 as 128 more video tokens (own tau), read the present, never read by it (actions'
+  k,v unchanged, diff 1e-6); x-prediction, weight 1.0. Binding probe = binding_probe.py on frozen weights (linear,
+  instruction token entering the last video layer, 1000 reset scenes fit / 200 scored): step 08 66%, 09 81%, 09b 98%.
+- Losses: flow val 0.100 (08 ~0.1); future val 1.27 -> 0.20.
+- **Rollouts 19/16 of 50** (08: 21/17 same architecture); wrong cube 28/27; named cube 21/50 (chance); picks slot 1 30/50.
+- **Probe 79.5%** (08: 66%): the future loss puts more binding in the token, about step 09's level, but the arm doesn't
+  follow it (09 at 81% picked 32/50).
+- future_frames.png: top camera predicted well (arm, cubes, bins); wrist view one-shot = blank table, samples = blobs.
+  At t=0 the real future (0.5 s) shows the arm barely moved: the frame carries almost no which-cube signal at the
+  moment the choice is made. Result as feared: 22-32 band, actually at the bottom.
+
+## Step 10b · future clip: top camera at +16..+80, open mask, T5 seed 0 (2026-11-14), runs/10_future_clip/t5
+- Why: at t=0 the +16 frame shows the arm barely moved; real demos (commit_horizon.png) commit only at +64..+80
+  (+48: gripper over the upper cube either way; first close at 81-114). Clip = 5 frames x 64 top patches, one shared
+  tau, future frames read each other both ways (user's pick; causal / independent masks not run).
+- Losses: flow val 0.096; future val 1.18 -> 0.18.
+- **Rollouts 19/13 of 50, named cube 22/49 (chance)**; picks slot 1 28/49. **Probe 79.5%** (same as 10).
+- future_frames.png (4 val eps x t 0/40; real / one-shot / sampled): the arm path is right in shape (leave home, descend
+  to the cubes); for named-slot-1 episodes the dream hovers at the upper cube; cubes change colour in the dream
+  (green -> blue, red -> orange/green), as rough/t5_video's dreams recoloured the held cube.
+- Read: the future loss doesn't bind colour to cube in this model; the dream itself doesn't know which cube.
+  The mask isn't the limit (probe unchanged from 10, dream already wrong at high noise).

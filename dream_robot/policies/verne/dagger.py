@@ -68,7 +68,7 @@ def collect(policy_run: str, base_task: str, out_name: str, episodes: int, seed_
     from dream_robot.sims.robosuite.tasks.pick_place_cube.record import REPO_ID
 
     # the stats the policy was trained with: its whole task's training rows (base + any extra data)
-    state, action, episode, _, _, _, train_ids, _, scene = load_task(base_task)
+    state, action, episode, _, _, train_ids, _, scene = load_task(base_task)
     lab = np.isin(episode, train_ids)
     stats = dict(
         s_mean=state[lab].mean(0),

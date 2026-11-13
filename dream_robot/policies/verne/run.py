@@ -17,8 +17,7 @@ VS Code reload or a dropped ssh doesn't kill it:
 A run folder holds:
     meta.json        commit, uncommitted changes?, package hash, GPU, task, seed, steps
     weights.pt       the trained weights (gitignored)
-    log.json         [step, train loss, val loss, val slot accuracy, first-frame slot accuracy
-                     (both null without labels), val scene slot accuracy (null without scenes)] every 1000 steps
+    log.json         [step, train loss, val loss, train future loss, val future loss] every 1000 steps
     sweep_8.json     rollout seed -> [success, failure mode, steps], n_exec 8 (and _16)
     probe.json       T1-wide and T5 (the named cube): rollout seed -> [cube xy, gripper xy at first
                      close or null],
@@ -40,9 +39,7 @@ import numpy as np
 import torch
 
 from . import rollouts, vae
-from .data import (
-    REPO, canvas, load_cameras, load_instructions, load_scenes, load_slots, load_table, to_gpu,
-)
+from .data import REPO, canvas, load_cameras, load_instructions, load_table, to_gpu
 from .train import train
 
 RUNS = REPO / 'experiments/verne/runs'
@@ -65,10 +62,7 @@ TASKS = {
     't1-wide-low': ('pick_place_cube_wide_square_low_noise005_n100', 't1-wide'),
     # T5: two cubes, two bins, 'put the <colour> cube in the <side> box'; square + shake, low grasp
     't5': ('instructed_pick_place_square_noise005_n150', 't5'),
-    # step 09: T5 + 1000 demo-less scenes (data.SCENE_SEEDS) for the slot head only
-    't5-scenes': ('instructed_pick_place_square_noise005_n150', 't5'),
 }
-HEAD_SCENES = {'t5-scenes'}
 
 
 def split(task: str, n: int = 100) -> tuple[np.ndarray, np.ndarray]:
@@ -84,32 +78,30 @@ def split(task: str, n: int = 100) -> tuple[np.ndarray, np.ndarray]:
 def load_task(task: str):
     # 'base' or 'base+extra1+extra2' (extra = dataset names under data/robosuite, e.g. DAgger rounds;
     # 'extra:fail' keeps only that dataset's failed episodes, per its recording_summary.json)
-    # -> state, action, episode, latent, instruction, slot, train ids, val ids, scene. Extra datasets'
+    # -> state, action, episode, latent, instruction, train ids, val ids, scene. Extra datasets'
     # episodes are renumbered after the base's (1000 * k + i) and all go to training; validation
     # stays the base's held-out demos, so losses and scores compare with the base task's runs.
     base, *extra = task.split('+')
     name, scene = TASKS[base]
     s, a, e = load_table(name)
     train_ids, val_ids = split(base, int(e.max()) + 1)
-    parts = [
-        (s, a, e, vae.load_latents(name, vae.WEIGHTS), load_instructions(name), load_slots(name))
-    ]
+    parts = [(s, a, e, vae.load_latents(name, vae.WEIGHTS), load_instructions(name))]
     for k, extra_name in enumerate(extra, 1):
         extra_name, _, only = extra_name.partition(':')
         s, a, e = load_table(extra_name)
         z = vae.load_latents(extra_name, vae.WEIGHTS)
-        ins, slot = load_instructions(extra_name), load_slots(extra_name)
+        ins = load_instructions(extra_name)
         if only == 'fail':
             summary = json.loads(
                 (REPO / 'data/robosuite' / extra_name / 'recording_summary.json').read_text()
             )
             failed = [i for i, ep in enumerate(summary['episodes']) if not ep['success']]
             keep = np.isin(e, failed)
-            s, a, e, z, ins, slot = s[keep], a[keep], e[keep], z[keep], ins[keep], slot[keep]
-        parts.append((s, a, e + 1000 * k, z, ins, slot))
+            s, a, e, z, ins = s[keep], a[keep], e[keep], z[keep], ins[keep]
+        parts.append((s, a, e + 1000 * k, z, ins))
         train_ids = np.concatenate([train_ids, np.unique(e) + 1000 * k])
-    state, action, episode, latent, instruction, slot = (np.concatenate(x) for x in zip(*parts))
-    return state, action, episode, latent, instruction, slot, train_ids, val_ids, scene
+    state, action, episode, latent, instruction = (np.concatenate(x) for x in zip(*parts))
+    return state, action, episode, latent, instruction, train_ids, val_ids, scene
 
 
 def package_hash() -> str:
@@ -166,16 +158,13 @@ def job(step: str, task: str, seed: int, workers: int) -> None:
     else:
         write_json(out / 'meta.json', meta | {'started': time.strftime('%Y-%m-%d %H:%M:%S')})
 
-    state, action, episode, latent, instruction, slot, train_ids, val_ids, scene = load_task(task)
-    d = to_gpu(latent, state, instruction, slot, action, episode, train_ids)
+    state, action, episode, latent, instruction, train_ids, val_ids, scene = load_task(task)
+    d = to_gpu(latent, state, instruction, action, episode, train_ids)
 
     if (out / 'weights.pt').exists():
         weights = torch.load(out / 'weights.pt')
     else:
-        scenes = None
-        if task.split('+')[0] in HEAD_SCENES:
-            scenes = (load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS))
-        run = train(d, train_ids, val_ids, STEPS, seed=seed, ckpt=out / 'ckpt', scenes=scenes)
+        run = train(d, train_ids, val_ids, STEPS, seed=seed, ckpt=out / 'ckpt')
         weights = run['weights']
         write_json(out / 'log.json', run['log'])
         torch.save(weights, out / 'weights.pt')
