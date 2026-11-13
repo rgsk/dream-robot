@@ -1,0 +1,54 @@
+ 32  ('head right', 'arm right', 'arm = head')
+  6  ('head right', 'arm wrong', 'arm != head')
+ 12  ('head wrong', 'arm wrong', 'arm = head')
+seed, prompt, named slot, head, p(named), arm slot
+1000  put the yellow cube in the right box  0  0  1.0  1
+1001  put the green cube in the left box  0  0  0.99  0
+1002  put the yellow cube in the right box  0  1  0.06  1
+1003  put the yellow cube in the right box  0  1  0.0  1
+1004  put the blue cube in the left box  0  0  1.0  0
+1005  put the yellow cube in the right box  0  1  0.01  1
+1006  put the red cube in the left box  0  1  0.0  1
+1007  put the yellow cube in the right box  0  1  0.17  1
+1008  put the blue cube in the right box  1  0  0.0  0
+1009  put the red cube in the right box  1  1  1.0  1
+1010  put the blue cube in the left box  0  0  1.0  1
+1011  put the red cube in the right box  0  1  0.17  1
+1012  put the blue cube in the right box  0  0  1.0  0
+1013  put the red cube in the right box  0  0  0.91  0
+1014  put the yellow cube in the right box  0  0  1.0  0
+1015  put the green cube in the left box  0  0  0.93  0
+1016  put the green cube in the left box  0  0  1.0  1
+1017  put the green cube in the left box  0  1  0.07  1
+1018  put the red cube in the left box  0  0  1.0  0
+1019  put the red cube in the right box  1  1  1.0  1
+1020  put the red cube in the right box  1  1  1.0  1
+1021  put the red cube in the left box  1  1  1.0  1
+1022  put the red cube in the right box  1  1  1.0  1
+1023  put the red cube in the right box  1  1  1.0  1
+1024  put the red cube in the left box  0  0  1.0  0
+1025  put the yellow cube in the right box  1  1  0.95  1
+1026  put the blue cube in the right box  1  1  1.0  1
+1027  put the red cube in the right box  0  0  1.0  1
+1028  put the red cube in the left box  0  0  1.0  0
+1029  put the red cube in the right box  0  1  0.0  1
+1030  put the red cube in the left box  0  0  0.82  0
+1031  put the yellow cube in the right box  0  0  1.0  0
+1032  put the yellow cube in the right box  1  1  0.99  1
+1033  put the green cube in the left box  0  0  0.93  0
+1034  put the blue cube in the left box  1  1  1.0  1
+1035  put the green cube in the left box  1  1  1.0  1
+1036  put the blue cube in the left box  0  0  1.0  1
+1037  put the green cube in the left box  0  1  0.0  1
+1038  put the red cube in the left box  1  1  1.0  1
+1039  put the green cube in the left box  0  1  0.29  1
+1040  put the red cube in the left box  0  0  1.0  0
+1041  put the red cube in the left box  0  0  1.0  0
+1042  put the blue cube in the right box  1  1  1.0  1
+1043  put the green cube in the left box  1  1  0.95  1
+1044  put the green cube in the left box  0  0  1.0  0
+1045  put the yellow cube in the right box  1  0  0.0  0
+1046  put the yellow cube in the right box  0  0  0.89  0
+1047  put the green cube in the left box  1  1  0.6  0
+1048  put the blue cube in the right box  0  0  1.0  0
+1049  put the red cube in the left box  0  0  0.76  0

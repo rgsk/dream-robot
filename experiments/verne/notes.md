@@ -191,3 +191,29 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   Picks: run 1 "red" (named red 16/19), run 2 "far" (31/50). Colour swap flips 12/50 picks, zeroing 7/50.
 - Binding probe (t5_colour_binding.py): picture + colour -> near/far, 135 scenes 89% held-out, 1000 -> 100%. Info is there; the
   policy doesn't bind it. Next: near/far aux head (train-only), then future-video loss; more T5 demos.
+
+## Step 09 · slot head on the instruction token, T5 seed 0 (2026-11-13), runs/09_slot_head
+- Head: Linear(256 -> 2) on the instruction token at the input of the last video layer (its k,v are what the last
+  action layer reads; the last layer's output feeds nothing). Label = target_slot (instructions.json), only frames
+  before the first gripper close (34% of rows); loss flow + 0.1 CE; logs held-out first-frame accuracy (home pose).
+- First labels ran to the episode end: 98% held-out in 1k steps = read off the arm's pose (user caught it), cut at close.
+- Head, held-out first frame (15 eps): 0.60 at 0 -> 0.87 at 4k -> 0.93 (14/15) at 16k-20k. Val flow 0.091 (step 08 ~0.1).
+- Rollouts: 28/26 of 50 (step 08: 22/22, + action side 21/17); wrong_cube 17/15 (~21). Named cube grasped 32/50
+  (step 08 25 and 22). Bias toward slot 1: picked 29/50; target slot 0 right 18/33, target slot 1 right 14/17.
+- Read: the head binds (14/15 at home pose) but the arm follows it in only ~2/3 -> binding helps, reading it is partial.
+  One seed. Next: head's first-frame answer vs the cube grasped per rollout; seeds 1-2.
+- Head vs arm per rollout (slot_head_vs_pick.py -> runs/.../head_vs_pick.txt): arm = head 44/50 (head right + arm right
+  32, head wrong + arm wrong 12, head right + arm wrong 6). The arm reads the head; the head is the limit:
+  38/50 in the sim (vs 14/15 held-out demos), wrong ones confident (p(named) ~0), 11/12 say slot 1 when it's 0
+  (train prior 63% slot 1). Train data balanced per prompt (no word -> slot shortcut). Matches the binding probe at
+  135 scenes (89%); 1000 scenes -> 100%. Next: more labelled scenes for the head (first frames need no demo).
+
+## Step 09b · slot head + 1000 demo-less scenes (2026-11-14), runs/09_slot_head/t5-scenes
+- data.load_scenes: T5 resets seeds 5000-5999 (train) / 9000-9199 (val), first frame through the VAE + target_slot,
+  cached data/robosuite/t5_scenes/<part>_<vae tag>.npz (also on the data volume). Task t5-scenes: each step the head
+  also gets 32 scenes, its loss = mean(demo rows, scenes); actions untouched.
+- Head on val scenes: 0.49 -> 0.985 at 5k, 0.985-0.995 after. Demo first frames 15/15. Val flow 0.092 (09: 0.091).
+- **Rollouts 44/43 of 50** (09: 28/26, 08: 22/22). Wrong cube 1/1; named cube grasped 49/50; head right 50/50 on the
+  rollout seeds, arm = head 49/50. Left: no_grasp 4/4, dropped 1/2 (the T1-wide failure modes).
+- Read: binding was the missing piece, and it needed more scenes than 135 demos give; the arm reads the head's answer
+  through the last layer's k,v. Label is sim-only here. One seed.

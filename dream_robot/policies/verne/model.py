@@ -1,4 +1,4 @@
-"""Step 04, the sampler: a video transformer reads the [top | wrist] canvas once, as a VAE latent
+"""Step 09, a slot head (train-only) on the instruction token; step 04, the sampler: a video transformer reads the [top | wrist] canvas once, as a VAE latent
 grid; an action transformer denoises the chunk while reading the video layers' keys and values.
 
 Verne's shape (wam.py, mot.py), everything else as simple as possible for now:
@@ -63,10 +63,16 @@ class Verne(nn.Module):
         self.instruction_act = nn.Linear(len(WORDS), D_ACTION)  # the instruction, action side
         self.action = nn.ModuleList([Block(D_ACTION) for _ in range(LAYERS)])
         self.action_out = nn.Linear(D_ACTION, 8)
+        # step 09, train-time only: which slot (0/1) holds the named cube, read off the instruction
+        # token where it enters the last video layer, so the answer sits in the keys and values the
+        # last action layer reads (the last layer's output feeds nothing)
+        self.slot_head = nn.Linear(D_VIDEO, 2)
 
-    def see(self, frame: Tensor, state: Tensor, ins: Tensor) -> list[tuple[Tensor, Tensor]]:
+    def see(
+        self, frame: Tensor, state: Tensor, ins: Tensor
+    ) -> tuple[list[tuple[Tensor, Tensor]], Tensor]:
         # latent [B, Z, 16, 32] (normalised), state [B, 8], instruction [B, 6] -> each video layer's
-        # keys and values. Tokens: [state, instruction, 128 patches]
+        # keys and values, slot logits [B, 2]. Tokens: [state, instruction, 128 patches]
         patches = rearrange(frame, 'b c (h p) (w q) -> b (h w) (p q c)', p=P, q=P)
         x = torch.cat(
             [
@@ -78,11 +84,13 @@ class Verne(nn.Module):
         )
         x = x + self.video_pos
         kvs = []
-        for block in self.video:
+        for i, block in enumerate(self.video):
+            if i == LAYERS - 1:
+                slot_logits = self.slot_head(x[:, 1])
             q, k, v = block.qkv_of(x)
             kvs.append((k, v))
             x = block.finish(x, q, k, v)
-        return kvs
+        return kvs, slot_logits
 
     def velocity(
         self, kvs: list[tuple[Tensor, Tensor]], x: Tensor, tau: Tensor, ins: Tensor
@@ -97,12 +105,23 @@ class Verne(nn.Module):
         return self.action_out(y)
 
 
-def loss(net: Verne, frame: Tensor, state: Tensor, ins: Tensor, acts: Tensor) -> Tensor:
-    # flow matching: on the line from noise (tau 0) to the chunk (tau 1), predict the direction
+SLOT_WEIGHT = 0.1  # the slot head's cross-entropy next to the flow loss (~0.1-1 late in training)
+
+
+def loss(
+    net: Verne, frame: Tensor, state: Tensor, ins: Tensor, slot: Tensor, acts: Tensor
+) -> tuple[Tensor, Tensor, Tensor]:
+    # flow matching: on the line from noise (tau 0) to the chunk (tau 1), predict the direction;
+    # plus the slot head's cross-entropy on the rows that have a label (slot >= 0)
+    # -> flow loss, slot loss (0 when no row is labelled), correct slots [B] bool (labelled rows)
     noise = torch.randn_like(acts)
     tau = torch.rand(len(acts), device=acts.device)
     x = (1 - tau[:, None, None]) * noise + tau[:, None, None] * acts
-    return F.mse_loss(net.velocity(net.see(frame, state, ins), x, tau, ins), acts - noise)
+    kvs, logits = net.see(frame, state, ins)
+    flow = F.mse_loss(net.velocity(kvs, x, tau, ins), acts - noise)
+    lab = slot >= 0
+    ce = F.cross_entropy(logits[lab].float(), slot[lab]) if lab.any() else flow.new_zeros(())
+    return flow, ce, (logits[lab].argmax(-1) == slot[lab])
 
 
 """
@@ -128,7 +147,7 @@ def sample(
     net: Verne, frame: Tensor, state: Tensor, ins: Tensor, steps: int = 4, shift: float = 1.5
 ) -> Tensor:
     # noise -> a chunk [B, CHUNK, 8] in std units; the video side runs once
-    kvs = net.see(frame, state, ins)
+    kvs, _ = net.see(frame, state, ins)
     x = torch.randn(len(frame), CHUNK, 8, device=frame.device)
     u = torch.linspace(1.0, 0.0, steps + 1, device=frame.device)
     tau = 1 - shift * u / (1 + (shift - 1) * u)  # [steps + 1], 0 -> 1
