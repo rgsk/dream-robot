@@ -66,6 +66,7 @@ dev = [
     "matplotlib>=3.9",
     # format and fixes on save in VS Code (rgsk.ruffgrid) and `uv run ruffgrid save FILE` from the shell
     "ruffgrid",
+    "modal>=1.6.4",
 ]
 
 [build-system]

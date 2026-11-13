@@ -11,6 +11,7 @@ The decoder only exists to train the encoder.
 """
 
 import hashlib
+import os
 from pathlib import Path
 from typing import Any
 
@@ -19,9 +20,18 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-# the step 03 VAE every later step reads through (`run vae 03_vae_latents`)
-WEIGHTS = (
-    Path(__file__).resolve().parents[3] / 'experiments/verne/runs/03_vae_latents/vae/weights.pt'
+from . import lr as lr_mod
+
+# the VAE every step reads through: step 07's, on T1, T1-wide (low grasp, +-45 deg bias) and T5 frames
+# (`run vae 07_instruction`, WSD at 5e-4 on a 4090; its step6000.pt, before a loss spike at step 7000,
+# made into weights.pt by experiments/verne/scripts/vae_from_ckpt.py). Keeps T5's colours: 97-99% of
+# held-out cube pixels (step 03's: green 7%, blue 0%)
+WEIGHTS = Path(
+    os.environ.get(  # a one-off run on another VAE sets VERNE_VAE_WEIGHTS (inherited by sweep workers)
+        'VERNE_VAE_WEIGHTS',
+        Path(__file__).resolve().parents[3]
+        / 'experiments/verne/runs/07_instruction/vae_wsd/weights.pt',
+    )
 )
 Z = 4  # latent channels
 DIMS = (32, 64, 128)  # channels at 128x256, 64x128, 32x64; the latent is at 16x32
@@ -41,8 +51,12 @@ class ResBlock(nn.Module):
     def __init__(self, i: int, o: int):
         super().__init__()
         self.body = nn.Sequential(
-            RMSNorm(i), nn.SiLU(), nn.Conv2d(i, o, 3, padding=1),
-            RMSNorm(o), nn.SiLU(), nn.Conv2d(o, o, 3, padding=1),
+            RMSNorm(i),
+            nn.SiLU(),
+            nn.Conv2d(i, o, 3, padding=1),
+            RMSNorm(o),
+            nn.SiLU(),
+            nn.Conv2d(o, o, 3, padding=1),
         )
         self.skip = nn.Conv2d(i, o, 1) if i != o else nn.Identity()
 
@@ -104,43 +118,59 @@ def to_float(frames: np.ndarray) -> Tensor:
 def train(
     frames: np.ndarray,
     val: np.ndarray,
-    steps: int = 5000,
+    steps: int = 10000,
     B: int = 64,
-    lr: float = 1e-3,
+    lr: float = 5e-4,  # stable-phase lr; 1e-3 spiked 20x twice in the WSD stable phase
+    warmup: int = 250,
+    decay: float = 0.2,
     beta: float = 1e-3,
     seed: int = 0,
+    ckpt: Path | None = None,
+    extend_from: Path | None = None,
 ) -> dict[str, Any]:
     # frames: uint8 canvases [N, 3, 128, 256] (cpu) to train on, val: a few held-out ones
+    # lr: warmup-stable-decay (lr.py); ckpt: a folder for step<N>.pt / stable.pt (resumes from the
+    # latest step<N>.pt);
+    # extend_from: a shorter run's ckpt folder to continue from its stable.pt
     # out: {'weights': state dict incl. latent stats (cpu), 'log': [step, recon, KL, val recon, KL]}
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     vae = VAE().cuda()
     opt = torch.optim.AdamW(vae.parameters(), lr=lr)
-    vx, log = to_float(val), []
-    for step in range(steps + 1):
-        with torch.autocast('cuda', dtype=torch.bfloat16):
-            rec, kl = loss(vae, to_float(frames[np.sort(rng.integers(0, len(frames), B))]))
+    start, log = lr_mod.resume(ckpt, extend_from, steps, decay, vae, opt, rng)
+    vx = to_float(val)
+    # batch 64 at 128x256 needs > 8 GB in one pass: on a small card, halves with gradients summed
+    parts = 1 if torch.cuda.get_device_properties(0).total_memory > 20e9 else 2
+    for step in range(start, steps + 1):
+        lr_mod.checkpoint(ckpt, step, steps, decay, 1000, vae, opt, step, rng, log)
+        lr_mod.set_lr(opt, lr * lr_mod.wsd(step, steps, warmup, decay))
+        ids = np.sort(rng.integers(0, len(frames), B))
         opt.zero_grad()
-        (rec + beta * kl).backward()
+        for part in np.array_split(ids, parts):
+            with torch.autocast('cuda', dtype=torch.bfloat16):
+                rec, kl = loss(vae, to_float(frames[part]))
+            ((rec + beta * kl) / parts).backward()
+        torch.nn.utils.clip_grad_norm_(vae.parameters(), lr_mod.CLIP)
         opt.step()
         if step % 500 == 0:
             with torch.no_grad(), torch.autocast('cuda', dtype=torch.bfloat16):
-                v_rec, v_kl = loss(vae, vx)
+                chunks = [loss(vae, vx[i : i + 64]) for i in range(0, len(vx), 64)]  # 8 GB card
+                v_rec, v_kl = (torch.stack(x).mean() for x in zip(*chunks))
             log.append([step, rec.item(), kl.item(), v_rec.item(), v_kl.item()])
             print(f'step {step:5d}   train {rec:.4f} KL {kl:.3f}   val {v_rec:.4f} KL {v_kl:.3f}')
-    # latent stats: the mean's per-channel mean and std over every 10th training frame
+    set_latent_stats(vae, frames)
+    return {'weights': {k: v.cpu() for k, v in vae.state_dict().items()}, 'log': log}
+
+
+@torch.no_grad()
+def set_latent_stats(vae: VAE, frames: np.ndarray) -> None:
+    # z_mean / z_std: the encoder mean's per-channel mean and std over every 10th training frame
     every10 = np.arange(0, len(frames), 10)
-    with torch.no_grad():
-        mu = torch.cat(
-            [
-                vae.enc(to_float(frames[ids]))[:, :Z]
-                for ids in np.array_split(every10, len(every10) // 256 + 1)
-            ]
-        )
+    chunks = np.array_split(every10, len(every10) // 64 + 1)  # 8 GB card
+    mu = torch.cat([vae.enc(to_float(frames[ids]))[:, :Z] for ids in chunks])
     vae.z_mean.copy_(mu.mean((0, 2, 3)))
     vae.z_std.copy_(mu.std((0, 2, 3)))
     print('latent mean', vae.z_mean.cpu().numpy().round(3), 'std', vae.z_std.cpu().numpy().round(3))
-    return {'weights': {k: v.cpu() for k, v in vae.state_dict().items()}, 'log': log}
 
 
 @torch.no_grad()

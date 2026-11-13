@@ -1,8 +1,9 @@
 """A trained Verne in the sim: one rollout, a sweep over the eval seeds, and the close-point
 probe (does the gripper close where the cube is?).
 
-T1 is the cube task as recorded (cube spawn +-3 cm); T1-wide spawns it over x +-10 cm,
-y -10..+6 cm, so the policy has to find the cube to grasp it.
+Scenes: 't1', the cube task as recorded (cube spawn +-3 cm); 't1-wide', the cube over x +-10 cm,
+y -10..+6 cm, so the policy has to find it; 't5', two cubes of two colours and two bins, and an
+instruction naming one of each (seen colour/side pairs, the recorded wording).
 
 Each episode seeds torch from (rollout seed, n_exec), so its result doesn't depend on which
 episodes ran before it: a sweep gives the same answer serial or spread over worker processes.
@@ -20,7 +21,7 @@ import numpy as np
 import torch
 
 from . import vae as vae_mod
-from .data import Demos, frame_of
+from .data import Demos, frame_of, one_hot
 from .model import Verne, sample
 
 SEEDS = range(1000, 1050)  # rollout seeds, the same for every model
@@ -28,9 +29,9 @@ STATS = ('s_mean', 's_std', 'a_mean', 'a_std')  # all of Demos a rollout needs
 WIDE_XY = ((-0.10, 0.10), (-0.10, 0.06))  # T1-wide's cube spawn, x and y [min, max] in m
 
 
-def make_env(wide: bool, horizon_seconds: float | None = None):
-    # T1 or T1-wide; robosuite's import-time warnings silenced. horizon_seconds: the episode time
-    # limit (default task.yaml's 20 s = 600 steps, which every score so far uses)
+def make_env(scene: str, horizon_seconds: float | None = None):
+    # 't1', 't1-wide' or 't5'; robosuite's import-time warnings silenced. horizon_seconds: the
+    # episode time limit (default task.yaml's 20 s = 600 steps, which every score so far uses)
     os.environ.setdefault('MUJOCO_GL', 'egl')
     logging.disable(logging.WARNING)
     import robosuite  # noqa: F401
@@ -39,12 +40,26 @@ def make_env(wide: bool, horizon_seconds: float | None = None):
     logging.getLogger('robosuite_logs').setLevel(logging.ERROR)
     from dataclasses import replace
 
+    if scene == 't5':
+        from dream_robot.sims.robosuite.tasks.instructed_pick_place import env as t5
+
+        config = t5.TaskConfig.load()
+        if horizon_seconds is not None:
+            config = replace(config, horizon_seconds=horizon_seconds)
+        return t5.InstructedPickPlace(config, pairs='seen', wording='template')
     from dream_robot.sims.robosuite.tasks.pick_place_cube.env import PickPlaceCube, TaskConfig
 
     config = TaskConfig.load()
     if horizon_seconds is not None:
         config = replace(config, horizon_seconds=horizon_seconds)
-    return PickPlaceCube(replace(config, cube_xy_range=WIDE_XY) if wide else config)
+    return PickPlaceCube(replace(config, cube_xy_range=WIDE_XY) if scene == 't1-wide' else config)
+
+
+def failure_of(env, r) -> str:
+    # the env's failure mode; T5's wrong target split into wrong_cube / wrong_bin
+    if hasattr(env, 'instruction_failure') and (half := env.instruction_failure()):
+        return half
+    return str(r.failure_mode)
 
 
 def load(weights: dict) -> Verne:
@@ -53,10 +68,12 @@ def load(weights: dict) -> Verne:
     return net
 
 
-def act(net: Verne, vae, d: Demos, obs, sampler: tuple[int, float] = (4, 1.5)) -> np.ndarray:
-    # the observation -> [CHUNK, 8] raw actions; sampler = (Euler steps, shift), see model.sample
+def act(net: Verne, vae, d: Demos, obs, ins, sampler: tuple[int, float] = (4, 1.5)) -> np.ndarray:
+    # the observation + the episode's instruction one-hot [6] -> [CHUNK, 8] raw actions;
+    # sampler = (Euler steps, shift), see model.sample
     s = (torch.from_numpy(obs.state)[None].cuda() - d.s_mean) / d.s_std
-    chunk = (sample(net, frame_of(obs, vae), s, *sampler) * d.a_std + d.a_mean)[0].cpu().numpy()
+    i = torch.from_numpy(ins)[None].cuda()
+    chunk = (sample(net, frame_of(obs, vae), s, i, *sampler) * d.a_std + d.a_mean)[0].cpu().numpy()
     chunk[:, 7] = np.clip(chunk[:, 7], 0.0, 1.0)  # gripper commands stay in [0, 1]
     return chunk
 
@@ -67,24 +84,26 @@ def rollout(
     # one episode, replanning after n_exec actions -> success, failure mode, steps
     torch.manual_seed(seed * 100 + n_exec)  # this episode's sampling noise
     obs, plan = env.reset(seed=seed), []
+    ins = one_hot(env.prompt)  # drawn at reset (T5); T1's reads all zeros
     for step in range(env._cfg.horizon_steps):
         if not plan:
-            plan = list(act(net, vae, d, obs, sampler)[:n_exec])
+            plan = list(act(net, vae, d, obs, ins, sampler)[:n_exec])
         r = env.step(plan.pop(0))
         obs = r.observation
         if r.terminated or r.truncated:
             break
-    return r.success, str(r.failure_mode), step + 1
+    return r.success, 'none' if r.success else failure_of(env, r), step + 1
 
 
 def close_point(net: Verne, vae, d: Demos, env, seed: int, n_exec: int, sampler=(4, 1.5)):
     # -> cube xy at spawn, gripper xy at the first commanded close (None if it never closes)
     torch.manual_seed(seed * 100 + n_exec)  # the same noise as rollout's episode
     obs, plan = env.reset(seed=seed), []
-    cube = env.cube_pos[:2]
+    cube = env.cube_pos[:2]  # T5: the named cube
+    ins = one_hot(env.prompt)
     for _ in range(env._cfg.horizon_steps):
         if not plan:
-            plan = list(act(net, vae, d, obs, sampler)[:n_exec])
+            plan = list(act(net, vae, d, obs, ins, sampler)[:n_exec])
         a = plan.pop(0)
         if a[7] < 0.5:
             return cube, np.asarray(env._raw['robot0_eef_pos'][:2], dtype=float).copy()
@@ -98,10 +117,10 @@ def close_point(net: Verne, vae, d: Demos, env, seed: int, n_exec: int, sampler=
 _worker = {}  # one worker process's env, net and stats
 
 
-def _start(wide: bool, weights: dict, stats: dict, sampler: tuple[int, float]) -> None:
+def _start(scene: str, weights: dict, stats: dict, sampler: tuple[int, float]) -> None:
     torch.set_num_threads(1)  # many workers share the cores; one thread each, no thrashing
     _worker.update(
-        env=make_env(wide),
+        env=make_env(scene),
         net=load(weights),
         vae=vae_mod.load(vae_mod.WEIGHTS),
         sampler=sampler,
@@ -122,7 +141,7 @@ def _episode(job: tuple[str, int, int]):
 
 
 def _run(
-    what: str, weights: dict, d: Demos, wide: bool, n_exec: int, workers: int, sampler
+    what: str, weights: dict, d: Demos, scene: str, n_exec: int, workers: int, sampler
 ) -> dict:
     # every eval seed, in `workers` processes; episodes they haven't finished after 90 s (a
     # worker got stuck, ~1 in 1000) run here, one by one: each episode has its own torch seed,
@@ -135,7 +154,7 @@ def _run(
         for k in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS'):
             os.environ[k] = '1'  # read by the children's numpy / torch at import
         pool = ProcessPoolExecutor(
-            workers, ctx, initializer=_start, initargs=(wide, weights, stats, sampler)
+            workers, ctx, initializer=_start, initargs=(scene, weights, stats, sampler)
         )
         try:
             futures = {pool.submit(_episode, job): job[1] for job in jobs}
@@ -149,7 +168,7 @@ def _run(
     if left:
         if workers:
             print(f'{len(left)} episode(s) not finished by the workers, running here: {left}')
-        env, net = make_env(wide), load(weights)
+        env, net = make_env(scene), load(weights)
         fn = rollout if what == 'rollout' else close_point
         vae = vae_mod.load(vae_mod.WEIGHTS)
         res |= {seed: fn(net, vae, d, env, seed, n_exec, sampler) for seed in left}
@@ -157,10 +176,10 @@ def _run(
 
 
 def sweep(
-    weights: dict, d: Demos, wide: bool, n_exec: int, workers: int = 8, sampler=(4, 1.5)
+    weights: dict, d: Demos, scene: str, n_exec: int, workers: int = 8, sampler=(4, 1.5)
 ) -> dict:
     # seed -> (success, failure mode, steps) for every eval seed; prints the score
-    res = _run('rollout', weights, d, wide, n_exec, workers, sampler)
+    res = _run('rollout', weights, d, scene, n_exec, workers, sampler)
     fails = Counter(mode for ok, mode, _ in res.values() if not ok)
     n_ok = sum(ok for ok, _, _ in res.values())
     print(f'n_exec {n_exec:2d}: {n_ok:2d}/{len(res)}   failures {dict(fails)}')
@@ -168,10 +187,10 @@ def sweep(
 
 
 def close_points(
-    weights: dict, d: Demos, wide: bool, n_exec: int, workers: int = 8, sampler=(4, 1.5)
+    weights: dict, d: Demos, scene: str, n_exec: int, workers: int = 8, sampler=(4, 1.5)
 ) -> dict:
     # seed -> (cube xy, gripper xy at first close or None) for every eval seed
-    return _run('close', weights, d, wide, n_exec, workers, sampler)
+    return _run('close', weights, d, scene, n_exec, workers, sampler)
 
 
 def close_fit(points: dict) -> dict[str, float]:

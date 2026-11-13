@@ -1,4 +1,4 @@
-"""T1 demos on the GPU, and random training samples from them."""
+"""Demos (T1, T1-wide, T5) on the GPU, and random training samples from them."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +10,9 @@ from torch import Tensor
 
 REPO = Path(__file__).resolve().parents[3]
 CHUNK = 16  # actions per sample
+# the instruction as a one-hot: T5's colour words, then its side words. T1's prompt ('put the cube
+# in the bin') has none of them, so every T1 frame reads all zeros
+WORDS = ('red', 'green', 'blue', 'yellow', 'left', 'right')
 
 
 def open_demos(name: str):
@@ -26,6 +29,20 @@ def load_table(name: str) -> tuple[NDArray, NDArray, NDArray]:
         np.asarray(ds.hf_dataset['action'], dtype=np.float32),
         np.asarray(ds.hf_dataset['episode_index'], dtype=np.int64),
     )
+
+
+def one_hot(prompt: str) -> NDArray[np.float32]:
+    # 'put the green cube in the left box' -> [6]: 1 at 'green' and 'left'
+    words = prompt.lower().replace('.', ' ').split()
+    return np.array([w in words for w in WORDS], dtype=np.float32)
+
+
+def load_instructions(name: str) -> NDArray[np.float32]:
+    # out: [N, 6] by table row, each frame's prompt as one_hot
+    ds = open_demos(name)
+    prompts = {i: t for t, i in ds.meta.tasks['task_index'].items()}
+    table = np.stack([one_hot(prompts[i]) for i in range(len(prompts))])
+    return table[np.asarray(ds.hf_dataset['task_index'], dtype=np.int64)]
 
 
 def load_cameras(name: str) -> tuple[NDArray[np.uint8], NDArray[np.uint8]]:
@@ -63,6 +80,7 @@ def canvas(top, wrist):
 class Demos:
     latent: Tensor  # [N, Z, 16, 32] float16, the [top | wrist] canvas through the VAE
     state: Tensor  # [N, 8] joints + gripper, raw
+    instruction: Tensor  # [N, 6] one-hot (WORDS)
     action: Tensor  # [N, 8] raw
     episode: NDArray[np.int64]  # [N]
     s_mean: Tensor  # [8], stats from the training demos only
@@ -71,12 +89,13 @@ class Demos:
     a_std: Tensor
 
 
-def to_gpu(latent, state, action, episode, train_ids, dev: str = 'cuda') -> Demos:
+def to_gpu(latent, state, instruction, action, episode, train_ids, dev: str = 'cuda') -> Demos:
     s, a = torch.tensor(state, device=dev), torch.tensor(action, device=dev)
     lab = torch.tensor(np.isin(episode, train_ids), device=dev)
     return Demos(
         latent=torch.tensor(latent, device=dev),
         state=s,
+        instruction=torch.tensor(instruction, device=dev),
         action=a,
         episode=episode,
         s_mean=s[lab].mean(0),
@@ -90,6 +109,7 @@ def to_gpu(latent, state, action, episode, train_ids, dev: str = 'cuda') -> Demo
 class Batch:
     frame: Tensor  # [B, Z, 16, 32], the canvas's latent now
     state: Tensor  # [B, 8] std units
+    instruction: Tensor  # [B, 6]
     acts: Tensor  # [B, CHUNK, 8] std units, the next CHUNK actions
 
 
@@ -105,6 +125,7 @@ def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch
     return Batch(
         frame=d.latent[now].float(),
         state=(d.state[now] - d.s_mean) / d.s_std,
+        instruction=d.instruction[now],
         acts=(d.action[rows.to(d.action.device)] - d.a_mean) / d.a_std,
     )
 

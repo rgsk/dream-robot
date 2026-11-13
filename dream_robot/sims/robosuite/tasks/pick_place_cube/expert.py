@@ -323,6 +323,10 @@ class ExpertPolicy:
     def phase(self) -> str:
         return self._machine.phase
 
+    def _bin_center(self) -> np.ndarray:
+        # where to carry the cube (T2 overrides: the episode's bin)
+        return self._env.bin_center
+
     def __call__(self, observation) -> tuple[np.ndarray, ExpertCommand]:
         """Absolute joint targets for one control step, plus what the expert is doing.
 
@@ -337,7 +341,7 @@ class ExpertPolicy:
         ctx = ExpertContext(
             eef_pos=self._ik.site_pos,
             cube_pos=self._cube0,
-            bin_center=self._env.bin_center,
+            bin_center=self._bin_center(),
             gripper_opening=opening,
             grip_settled=self._machine.grip_settled(opening),
         )

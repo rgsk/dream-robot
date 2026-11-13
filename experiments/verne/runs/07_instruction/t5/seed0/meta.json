@@ -1,0 +1,10 @@
+{
+ "commit": "a26a225",
+ "dirty": true,
+ "package_hash": "c5006be31765",
+ "gpu": "NVIDIA L40S",
+ "task": "t5",
+ "seed": 0,
+ "steps": 20000,
+ "started": "2026-11-13 13:12:17"
+}

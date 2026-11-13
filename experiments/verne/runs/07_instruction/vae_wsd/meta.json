@@ -1,0 +1,17 @@
+{
+ "commit": "a26a225",
+ "dirty": true,
+ "package_hash": "38a767aac3a1",
+ "gpu": "NVIDIA GeForce RTX 4090",
+ "seed": 0,
+ "data": {
+  "pick_place_cube_n100": 100,
+  "pick_place_cube_wide_square_low_noise005_n100": 100,
+  "pick_place_cube_wide_square_bias45_n100": 100,
+  "instructed_pick_place_square_noise005_n150": 150
+ },
+ "every": 2,
+ "steps": 10000,
+ "extend_from": null,
+ "started": "2026-11-13 12:24:55"
+}

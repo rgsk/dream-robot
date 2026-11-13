@@ -22,7 +22,7 @@ import torch
 from dream_robot.core.record import record_episodes
 
 from . import rollouts, vae
-from .data import REPO
+from .data import REPO, one_hot
 from .run import RUNS, load_task
 
 
@@ -41,7 +41,10 @@ class DaggerActor:
     def __call__(self, observation) -> np.ndarray:
         label = self.expert(observation)
         if not self.plan:
-            self.plan = list(rollouts.act(self.net, self.enc, self.d, observation)[: self.n_exec])
+            ins = one_hot(self.expert._env.prompt)  # T1: all zeros
+            self.plan = list(
+                rollouts.act(self.net, self.enc, self.d, observation, ins)[: self.n_exec]
+            )
         self.executed = self.plan.pop(0)
         return label
 
@@ -65,7 +68,7 @@ def collect(policy_run: str, base_task: str, out_name: str, episodes: int, seed_
     from dream_robot.sims.robosuite.tasks.pick_place_cube.record import REPO_ID
 
     # the stats the policy was trained with: its whole task's training rows (base + any extra data)
-    state, action, episode, _, train_ids, _, wide = load_task(base_task)
+    state, action, episode, _, _, train_ids, _, scene = load_task(base_task)
     lab = np.isin(episode, train_ids)
     stats = dict(
         s_mean=state[lab].mean(0),
@@ -75,7 +78,7 @@ def collect(policy_run: str, base_task: str, out_name: str, episodes: int, seed_
     )
     d = SimpleNamespace(**{k: torch.tensor(v, device='cuda') for k, v in stats.items()})
     net = rollouts.load(torch.load(RUNS / policy_run / 'weights.pt'))
-    env = rollouts.make_env(wide)
+    env = rollouts.make_env(scene)
     actor = DaggerActor(
         StateExpert(env, square_up=True), net, vae.load(vae.WEIGHTS), d, seed_start=seed_start
     )

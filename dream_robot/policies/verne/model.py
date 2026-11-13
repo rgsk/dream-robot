@@ -4,7 +4,10 @@ grid; an action transformer denoises the chunk while reading the video layers' k
 Verne's shape (wam.py, mot.py), everything else as simple as possible for now:
 the two cameras side by side as one wide image, as Verne's canvas (no head crop),
 the canvas through a small frozen VAE (vae.py, not Wan's), its latent grid cut into 2x2
-squares, one frame (no memory), joints (no poses), the state as one more token (no text),
+squares, one frame (no memory), joints (no poses), the state as one more token, the instruction as one
+more (a one-hot of T5's colour and side words through a linear layer; no text encoder) and also
+added to every action token (Verne's action blocks read the text directly), so the action side's
+queries can ask for the named colour from its first layer,
 the flow time added to the action tokens (no adaptive norm), and Verne's sampler: 4 Euler
 steps on a grid shifted by 1.5.
 """
@@ -14,7 +17,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor, nn
 
-from .data import CHUNK
+from .data import CHUNK, WORDS
 from .vae import Z
 
 P = 2  # patch side in latent cells: latent 16 x 32 -> 8 x 16 = 128 patches (16 x 16 px each)
@@ -49,20 +52,30 @@ class Verne(nn.Module):
         super().__init__()
         self.patch_in = nn.Linear(Z * P * P, D_VIDEO)
         self.state_in = nn.Linear(8, D_VIDEO)
-        self.video_pos = nn.Parameter(torch.randn(1, 1 + N_PATCH, D_VIDEO) * 0.02)
+        self.instruction_in = nn.Linear(len(WORDS), D_VIDEO)
+        self.video_pos = nn.Parameter(torch.randn(1, 2 + N_PATCH, D_VIDEO) * 0.02)
         self.video = nn.ModuleList([Block(D_VIDEO) for _ in range(LAYERS)])
         self.action_in = nn.Linear(8, D_ACTION)
         self.time_in = nn.Sequential(
             nn.Linear(1, D_ACTION), nn.SiLU(), nn.Linear(D_ACTION, D_ACTION)
         )
         self.action_pos = nn.Parameter(torch.randn(1, CHUNK, D_ACTION) * 0.02)
+        self.instruction_act = nn.Linear(len(WORDS), D_ACTION)  # the instruction, action side
         self.action = nn.ModuleList([Block(D_ACTION) for _ in range(LAYERS)])
         self.action_out = nn.Linear(D_ACTION, 8)
 
-    def see(self, frame: Tensor, state: Tensor) -> list[tuple[Tensor, Tensor]]:
-        # latent [B, Z, 16, 32] (normalised), state [B, 8] -> each video layer's keys and values
+    def see(self, frame: Tensor, state: Tensor, ins: Tensor) -> list[tuple[Tensor, Tensor]]:
+        # latent [B, Z, 16, 32] (normalised), state [B, 8], instruction [B, 6] -> each video layer's
+        # keys and values. Tokens: [state, instruction, 128 patches]
         patches = rearrange(frame, 'b c (h p) (w q) -> b (h w) (p q c)', p=P, q=P)
-        x = torch.cat([self.state_in(state)[:, None], self.patch_in(patches)], 1)
+        x = torch.cat(
+            [
+                self.state_in(state)[:, None],
+                self.instruction_in(ins)[:, None],
+                self.patch_in(patches),
+            ],
+            1,
+        )
         x = x + self.video_pos
         kvs = []
         for block in self.video:
@@ -71,22 +84,25 @@ class Verne(nn.Module):
             x = block.finish(x, q, k, v)
         return kvs
 
-    def velocity(self, kvs: list[tuple[Tensor, Tensor]], x: Tensor, tau: Tensor) -> Tensor:
-        # noisy chunk x [B, CHUNK, 8] at flow time tau [B] -> velocity [B, CHUNK, 8];
+    def velocity(
+        self, kvs: list[tuple[Tensor, Tensor]], x: Tensor, tau: Tensor, ins: Tensor
+    ) -> Tensor:
+        # noisy chunk x [B, CHUNK, 8] at flow time tau [B], instruction [B, 6] -> velocity [B, CHUNK, 8];
         # the action tokens attend to the video tokens of the same layer and to each other
         y = self.action_in(x) + self.action_pos + self.time_in(tau[:, None])[:, None]
+        y = y + self.instruction_act(ins)[:, None]
         for block, (k_video, v_video) in zip(self.action, kvs):
             q, k, v = block.qkv_of(y)
             y = block.finish(y, q, torch.cat([k_video, k], 2), torch.cat([v_video, v], 2))
         return self.action_out(y)
 
 
-def loss(net: Verne, frame: Tensor, state: Tensor, acts: Tensor) -> Tensor:
+def loss(net: Verne, frame: Tensor, state: Tensor, ins: Tensor, acts: Tensor) -> Tensor:
     # flow matching: on the line from noise (tau 0) to the chunk (tau 1), predict the direction
     noise = torch.randn_like(acts)
     tau = torch.rand(len(acts), device=acts.device)
     x = (1 - tau[:, None, None]) * noise + tau[:, None, None] * acts
-    return F.mse_loss(net.velocity(net.see(frame, state), x, tau), acts - noise)
+    return F.mse_loss(net.velocity(net.see(frame, state, ins), x, tau, ins), acts - noise)
 
 
 """
@@ -108,12 +124,14 @@ Each step is one Euler step of the velocity: x ← x + v(x, τ) · (τ_next − 
 
 
 @torch.no_grad()
-def sample(net: Verne, frame: Tensor, state: Tensor, steps: int = 4, shift: float = 1.5) -> Tensor:
+def sample(
+    net: Verne, frame: Tensor, state: Tensor, ins: Tensor, steps: int = 4, shift: float = 1.5
+) -> Tensor:
     # noise -> a chunk [B, CHUNK, 8] in std units; the video side runs once
-    kvs = net.see(frame, state)
+    kvs = net.see(frame, state, ins)
     x = torch.randn(len(frame), CHUNK, 8, device=frame.device)
     u = torch.linspace(1.0, 0.0, steps + 1, device=frame.device)
     tau = 1 - shift * u / (1 + (shift - 1) * u)  # [steps + 1], 0 -> 1
     for i in range(steps):
-        x = x + net.velocity(kvs, x, tau[i].expand(len(frame))) * (tau[i + 1] - tau[i])
+        x = x + net.velocity(kvs, x, tau[i].expand(len(frame)), ins) * (tau[i + 1] - tau[i])
     return x

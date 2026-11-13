@@ -22,9 +22,7 @@ import numpy as np
 
 from dream_robot.sims.robosuite.tasks.pick_place_cube.expert import (
     ExpertActor,
-    ExpertCommand,
     ExpertConfig,
-    ExpertContext,
 )
 from dream_robot.sims.robosuite.tasks.pick_place_cube.expert import (
     ExpertPolicy as _OneBinExpertPolicy,
@@ -38,8 +36,9 @@ __all__ = ["ExpertActor", "ExpertPolicy"]
 class ExpertPolicy(_OneBinExpertPolicy):
     """T1's ``ExpertPolicy``, aimed at a bin chosen by coin flip each episode."""
 
-    def __init__(self, env, config: ExpertConfig | None = None):
-        super().__init__(env, config or ExpertConfig.load(TASK_YAML))
+    def __init__(self, env, config: ExpertConfig | None = None, **options):
+        # options: T1's square_up, aim_bias_deg
+        super().__init__(env, config or ExpertConfig.load(TASK_YAML), **options)
         self.target_bin: int | None = None
 
     def reset(self) -> None:
@@ -47,19 +46,7 @@ class ExpertPolicy(_OneBinExpertPolicy):
         super().reset()
         self.target_bin = int(np.random.randint(len(self._env.bin_centers)))
 
-    def __call__(self, observation) -> tuple[np.ndarray, ExpertCommand]:
-        if self._ik is None or self.target_bin is None:
+    def _bin_center(self) -> np.ndarray:
+        if self.target_bin is None:
             raise RuntimeError("call reset() after env.reset() before stepping")
-
-        opening = float(observation.state[-1])
-        ctx = ExpertContext(
-            eef_pos=self._ik.site_pos,
-            cube_pos=self._cube0,
-            bin_center=self._env.bin_centers[self.target_bin],
-            gripper_opening=opening,
-            grip_settled=self._machine.grip_settled(opening),
-        )
-        command = self._machine(ctx)
-        joints = self._ik.solve(command.waypoint, self._hold_rotation)
-        action = np.concatenate([joints, [command.gripper]]).astype(np.float32)
-        return action, command
+        return self._env.bin_centers[self.target_bin]

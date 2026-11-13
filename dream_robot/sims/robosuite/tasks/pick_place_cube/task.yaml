@@ -69,7 +69,10 @@ success:
 # honour rather than a discipline to maintain.
 expert:
   approach_height: 0.10       # hover this far above the cube before descending
-  grasp_dz: 0.005             # grip-site target relative to cube centre
+  # grip-site target relative to cube centre. 0.5 cm below it: the close triggers ~1 cm above the target
+  # while the arm still descends, so at +0.5 the fingers caught the cube's top quarter (T5 with joint noise
+  # 0.05: 150/180 -> 163/180, experiments/verne/scripts/grasp_height_t5.py). Datasets before 2026-11-13: +0.005.
+  grasp_dz: -0.005
   lift_height: 0.25           # above the grasp point
   drop_height: 0.085          # must clear the bin walls before releasing
 

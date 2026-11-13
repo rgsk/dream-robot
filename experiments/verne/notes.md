@@ -172,3 +172,22 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   y slope 0.86 -> 0.97, miss 0.9 cm). Failures-only >= all with a third fewer frames.
 - Left: all 5 failures hit 600 steps; 4 of 5 place on replay (also at a 40 s limit, within 600 steps): knife-edge
   nondeterminism, not time. Ep 1001 real: slip, crooked re-grip, never lifts. rollouts.make_env(horizon_seconds).
+
+## Step 07 · grasp lower, a data step (2026-11-13), nbs/verne/07_low_grasp.ipynb
+- Expert closes ~1 cm above its target while descending; at grasp_dz +0.5 cm it caught the cube's top quarter (+1.5 cm).
+  T5 + shake (grasp_height_t5.py, 180 seeds): +0.5 150, **-0.5 163**, -0.5 tight 160, 0 tight 143. grasp_dz -0.005 in T1 + T5
+  task.yaml; clean 50/50 both. T1-wide low data: expert 93% (was 85%).
+- Package: new VAE (step 08), instruction token (zeros on T1), clipping 1.0, checkpoints; Verne LR WSD -> 29/23 (miss 3.1 cm,
+  slopes 0.61/0.69), **back to cosine: 43/33** (miss 1.5, 0.86/0.84); step 05 42/44. Held-out loss ~1.1 = ep 82 outlier action (10 sd).
+- Failures: close beside the cube, carry empty, park (no retry) -> DAgger. Runs on Modal (scripts/modal_app.py).
+
+## Step 08 · the instruction on T5 (2026-11-13), nbs/verne/08_t5_instruction.ipynb
+- T5 expert squares up to the named cube (T2 expert reuses T1 __call__; T5 cube_yaw = named cube); data
+  instructed_pick_place_square_noise005_n150 (low grasp + shake, 91%).
+- Step 03 VAE paints T5 cubes red (green 7%, blue 0% of cube pixels); new VAE on T1 + T1-wide low + bias45 + T5: 97-99%.
+  VAE runs: local cosine 0.0015 lost (crash in latent stats, no ckpt); WSD 1e-3 spiked 20x at 3500/7000; WSD 5e-4 + clip spiked
+  5x at 7000 (same batches) -> step6000.pt (0.0017) is vae.WEIGHTS.
+- Instruction one-hot (6 words) as a video token: T5 22/22 of 50, 0 wrong_bin, wrong_cube ~21; + added to action tokens 21/17.
+  Picks: run 1 "red" (named red 16/19), run 2 "far" (31/50). Colour swap flips 12/50 picks, zeroing 7/50.
+- Binding probe (t5_colour_binding.py): picture + colour -> near/far, 135 scenes 89% held-out, 1000 -> 100%. Info is there; the
+  policy doesn't bind it. Next: near/far aux head (train-only), then future-video loss; more T5 demos.

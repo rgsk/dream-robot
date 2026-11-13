@@ -96,9 +96,12 @@ success:
   resting_z_margin: 0.05
 
 expert:
-  # T2's (so T1's) values, unchanged.
+  # T2's (so T1's) values, except grasp_dz.
   approach_height: 0.10
-  grasp_dz: 0.005
+  # 0.5 cm below the cube centre (T1: +0.5 above). The close triggers ~1 cm above the target while
+  # the arm still descends; at +0.5 it caught the top quarter of the cube, and with joint noise 0.05
+  # placed 150/180 vs 163/180 here (experiments/verne/scripts/grasp_height_t5.py). Clean: 50/50 both.
+  grasp_dz: -0.005
   lift_height: 0.25
   drop_height: 0.085
 

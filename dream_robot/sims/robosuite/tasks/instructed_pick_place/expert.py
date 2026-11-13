@@ -31,8 +31,9 @@ __all__ = ["ExpertActor", "ExpertPolicy"]
 class ExpertPolicy(_CoinExpertPolicy):
     """T2's ``ExpertPolicy`` with the coin replaced by the instruction."""
 
-    def __init__(self, env, config: ExpertConfig | None = None):
-        super().__init__(env, config or ExpertConfig.load(TASK_YAML))
+    def __init__(self, env, config: ExpertConfig | None = None, **options):
+        # options: T1's square_up, aim_bias_deg
+        super().__init__(env, config or ExpertConfig.load(TASK_YAML), **options)
 
     def reset(self) -> None:
         """Call after env.reset(seed=...). Reads this episode's target bin."""

@@ -72,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seed-start", type=int, default=0)
     p.add_argument("--max-attempts", type=int, default=None)
     p.add_argument("--noise-sigma", type=float, default=0.0)
+    p.add_argument("--square-up", action="store_true",
+                   help="turn the wrist square to the named cube for the grasp (T1's square_up)")
     p.add_argument("--camera-size", type=int, default=None,
                    help="square camera frames of this size instead of task.yaml's (128); "
                         "same seeds give the same episodes, only the pictures differ")
@@ -85,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.camera_size:
         config = replace(config, camera_hw=(args.camera_size, args.camera_size))
     env = InstructedPickPlace(config, pairs="seen", wording="template")
-    actor = _InstructionLog(ExpertPolicy(env))
+    actor = _InstructionLog(ExpertPolicy(env, square_up=args.square_up))
     try:
         summary = record_episodes(
             env,

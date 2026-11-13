@@ -316,6 +316,12 @@ class InstructedPickPlace(PickPlaceTwoBins):
         return self._cube_positions()[self.instruction.target_slot].copy()
 
     @property
+    def cube_yaw(self) -> float:
+        """The *named* cube's rotation about the vertical, radians (T1's reads slot 0)."""
+        m = self._env.sim.data.body_xmat[self._env.cube_body_ids[self.instruction.target_slot]]
+        return float(np.arctan2(m[3], m[0]))  # row-major 3x3: R[1,0], R[0,0]
+
+    @property
     def distractor_pos(self) -> np.ndarray:
         return self._cube_positions()[1 - self.instruction.target_slot].copy()
 
