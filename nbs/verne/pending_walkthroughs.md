@@ -3,7 +3,7 @@
 Probes and checks done in scripts that haven't been walked through yet. Each entry says what was asked,
 how, and what came out, so it can be rebuilt step by step later.
 
-## T5 colour binding probe (2026-11-13, step 07)
+## T5 colour binding probe (2026-11-13, step 07) — **walked through: [08_binding_explained.ipynb](08_binding_explained.ipynb)**
 
 - **Question:** is "which cube spot holds the named colour" learnable from the VAE latents at all?
   The T5 policy picks the named cube at chance (25/50, then 22/50 with the instruction also on the
