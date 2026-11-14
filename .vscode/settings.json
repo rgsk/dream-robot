@@ -19,6 +19,9 @@
     // notebooks: notebook-wide, Ruff seeing the whole notebook (an import used in a later cell is used)
     "notebook.defaultFormatter": "rgsk.ruffgrid",
     "notebook.formatOnSave.enabled": true,
+    // plain-text outputs: don't turn ' / ' etc. into file links (show(256 / 8) underlined '/');
+    // paths meant to be clicked are shown as Markdown links, which still work
+    "notebook.output.linkifyFilePaths": false,
     "notebook.codeActionsOnSave": {
         // "notebook.source.fixAll": "explicit",
         "notebook.source.organizeImports": "explicit"
