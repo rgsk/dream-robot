@@ -10,8 +10,6 @@ from torch import Tensor
 
 REPO = Path(__file__).resolve().parents[3]
 CHUNK = 16  # actions per sample
-# step 10: the future frames the video side predicts at training, in steps ahead of now (top camera only)
-FUTURE = (16, 32, 48, 64, 80)
 # the instruction as a one-hot: T5's colour words, then its side words. T1's prompt ('put the cube
 # in the bin') has none of them, so every T1 frame reads all zeros
 WORDS = ('red', 'green', 'blue', 'yellow', 'left', 'right')
@@ -112,8 +110,6 @@ class Batch:
     frame: Tensor  # [B, Z, 16, 32], the canvas's latent now
     state: Tensor  # [B, 8] std units
     instruction: Tensor  # [B, 6]
-    future: Tensor  # [B, len(FUTURE), Z, 16, 16], the top camera's latent FUTURE steps ahead (the
-    # episode's last frame past its end)
     acts: Tensor  # [B, CHUNK, 8] std units, the next CHUNK actions
 
 
@@ -130,7 +126,6 @@ def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch
         frame=d.latent[now].float(),
         state=(d.state[now] - d.s_mean) / d.s_std,
         instruction=d.instruction[now],
-        future=d.latent[np.minimum(now[:, None] + np.array(FUTURE), last[:, None])][..., :16].float(),
         acts=(d.action[rows.to(d.action.device)] - d.a_mean) / d.a_std,
     )
 

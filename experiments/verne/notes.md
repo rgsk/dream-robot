@@ -242,3 +242,20 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   (green -> blue, red -> orange/green), as rough/t5_video's dreams recoloured the held cube.
 - Read: the future loss doesn't bind colour to cube in this model; the dream itself doesn't know which cube.
   The mask isn't the limit (probe unchanged from 10, dream already wrong at high noise).
+
+## Step 11 · instruction words as cross-attention rows, T5 seed 0 (2026-11-14), runs/11_cross_attn/t5
+- Package = step 08 with the words moved out of the token sequence: each side has a 7-row word table ('no word' + WORDS),
+  every video and action block cross-attends to [no word + the prompt's words] (masked), Wan's block order
+  self -> cross -> MLP. Instruction token, instruction_act and step 10's future branch removed. 4.28M params (08: 3.49M).
+  Walkthrough: nbs/verne/11_cross_attn_explained.ipynb (shapes; 1/130 attention share vs a softmax over the words alone).
+- Losses: train 0.025, val 0.095 (08 ~0.1).
+- **Rollouts 14/13 of 50** (08: 22/22 same seed); wrong_cube 20/23 (08: ~21-23), no_grasp 16/13 (08: 5/8).
+  Probe (gripper at first close vs named cube): slopes ~0, miss 8.7 cm (08: 7.7) -> still blind to which cube.
+- Read: the wiring alone doesn't bind colour to cube (wrong cube unchanged at ~chance) and grasping got worse (one seed).
+  Binding probe not run: its read point (instruction token 1) no longer exists.
+
+## Step 11b · zero rows instead of mask + 'no word' (Verne's padding), T5 seed 0, runs/11b_zero_rows/t5
+- words_of only: 6 word rows, absent words zero, all attended (no mask, no 'no word' row). Reverted after the run.
+- Losses: train 0.021, val 0.101.
+- **Rollouts 13/13 of 50** (11 masked: 14/13; 08: 22/22); wrong_cube 29/26 (11: 20/23), no_grasp 8/11; miss 9.8 cm.
+- Read: padding style isn't the lever; both cross-attention variants bind colour no better than chance, below step 08.
