@@ -17,7 +17,7 @@ VS Code reload or a dropped ssh doesn't kill it:
 A run folder holds:
     meta.json        commit, uncommitted changes?, package hash, GPU, task, seed, steps
     weights.pt       the trained weights (gitignored)
-    log.json         [step, train loss, val loss, train future loss, val future loss] every 1000 steps
+    log.json         [step, train loss, val loss] every 1000 steps
     sweep_8.json     rollout seed -> [success, failure mode, steps], n_exec 8 (and _16)
     probe.json       T1-wide and T5 (the named cube): rollout seed -> [cube xy, gripper xy at first
                      close or null],
