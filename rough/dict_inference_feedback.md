@@ -1,10 +1,71 @@
-# Using the frozendict fork: notes from writing act_dict.ipynb (Claude, 2026-11-05)
+# Using the fork: notes from act_dict.ipynb and act_namespace.ipynb (Claude, 2026-11-05, updated 2026-11-14)
+
+## The rule now (2026-11-14): namespaces mostly
+
+[act_namespace.ipynb](act_namespace.ipynb) redid act_dict (steps 0-20) with `SimpleNamespace` in place of
+dict/frozendict. Same results (ChunkNet ensembled 18/20, ACTNet 11/20 = act_dict's 11/20), shorter reads:
+`stats.action.std`, not `stats['action']['std']`; several lines the formatter split over three now fit on one.
+
+```python
+from types import SimpleNamespace as namespace
+```
+
+| Use | When | act_namespace |
+|---|---|---|
+| namespace | a bundle read by name later; the names are known when the code is written | `data`, `stats`, each batch, `train` results |
+| `-> namespace` | on every function returning one; the fork keeps the attributes the body builds | `to_gpu`, `mean_std`, `get_batch`, `train` |
+| Protocol | a namespace crossing into a function parameter, whose attributes the function reads | (example below) |
+| tuple | a few ordered values unpacked on the spot | `load_table`, `make_chunks`, `load_images` |
+| NamedTuple | a small ordered result that is also a parameter type | `Outcome` |
+| dict | the keys are data (seeds, step counts, a `state_dict`) | sweep `results` |
+
+frozendict is dropped: its lock only stops swapping a key, the Tensors inside stay mutable.
+
+**Protocol: names a namespace's shape at a parameter.** It never builds one (`HasName('rahul')` raises
+`TypeError: Protocols cannot be instantiated`); the namespace is the value, the Protocol the parameter type:
+
+```python
+class Batch(Protocol):
+    top: Tensor  # [B, 3, 128, 128]
+    chunks: Tensor  # [B, K, 8]
+    pad: Tensor  # [B, K] bool
+
+
+def batch_loss(b: Batch) -> Tensor:
+    return chunk_l1(net(b.top), b.chunks, b.pad)  # b.pad: Tensor, inside the function
+
+
+b = get_batch('train', i)  # -> namespace: SimpleNamespace[{top: Tensor, chunks: Tensor, pad: Tensor, ...}]
+batch_loss(b)  # fits: extra attributes are fine
+batch_loss(namespace(top=x, chunks=y))  # error: "pad" is not present
+```
+
+Checked with the fork's CLI. Before writing one, check whether a return type on a small helper is enough. In
+act_namespace, the split chosen by a variable needed no Protocol:
+
+```python
+def get_batch(split: Literal['train', 'val'], i: Tensor) -> namespace:
+    def take(x) -> Tensor:  # x: a train/val pair; -> Tensor types every field of the batch
+        return (x.train if split == 'train' else x.val)[i]
+
+    return namespace(top=take(data.top).float() / 255, pad=take(data.pad), ...)
+```
+
+**Where dicts still win:**
+- A name picked by a variable: `data['top'][split]` with `split: Literal['train', 'val']` is typed by the fork
+  (below); `getattr(data.top, split)` is untyped, hence `take`. A fork idea: type `getattr(ns, lit)` for a Literal
+  union as the union of those attributes.
+- Keys that are data, and library edges (`obs.images`, `state_dict()`, JSON, `**kwargs`): convert with `vars(ns)` /
+  `namespace(**d)`.
+- Merging: `a | {'k': v}` has no namespace form; `namespace(**vars(a), k=v)`. Never needed in act_namespace.
+
+## Earlier: act_dict.ipynb (2026-11-05)
 
 How the fork's features held up in [act_dict.ipynb](act_dict.ipynb) (ACT, steps 0-21). I write notebooks through
 scripts, not in the editor, so I saw the fork through the CLI (`reveal_type` on the notebook's code cells, pulled
 out into a `.py` file), not through hover or completion. "Stock" below is basedpyright 1.40.2.
 
-## What worked
+### What worked
 
 **Inferred returns carry the shape, nested** (step 4). No annotations:
 
@@ -89,7 +150,7 @@ for backbone, image, cam_stats, tag in cams:
 
 **Runtime:** the PyPI `frozendict` pickles through `NotebookCache` with no trouble.
 
-## Where it got in the way
+### Where it got in the way
 
 **The typo error prints the whole shape:**
 
@@ -124,7 +185,7 @@ preds = np.stack([chunk[step - made] for made, chunk in plans])
 already types every read correctly. The fork's types differ only for mixed values, such as `train`'s result. On
 the all-Tensor bundles, its value is key completion, the typo error and hover, not the value types.
 
-## What I didn't use
+### What I didn't use
 
 - `|` merging, `.get()`, `match`, narrowing by key, `fromkeys`: these bundles are built once and only read.
 - Hover and completion in VS Code. I only checked them indirectly, through `reveal_type`.
@@ -132,7 +193,7 @@ the all-Tensor bundles, its value is key completion, the typo error and hover, n
   test with every `frozendict(` changed to `dict(` gave the same types at all eight reads checked, losing only the
   typo error.
 
-## Design notes it confirmed
+### Design notes it confirmed
 
 **No shape annotations.** The one place a shape had to cross a parameter wanted a class anyway (step 10):
 
@@ -148,7 +209,7 @@ return Outcome(r.success, str(r.failure_mode), step + 1)   # positional reads li
 ok, mode, steps = rollout(1000, n_exec=10)                  # and unpacks in the same order
 ```
 
-**The working rule:**
+**The working rule then** (superseded by the table at the top):
 
 | Use | When | act_dict |
 |---|---|---|
