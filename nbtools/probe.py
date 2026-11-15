@@ -1,6 +1,6 @@
-# Helpers for probe cells. Copy this file into any project with IPython (it brings `executing`), then
-#     sys.path.insert(0, '..')  # nbs/probe.py
-#     from probe import probe, show
+# Helpers for probe cells. Part of nbtools (copyable alone into any project with IPython, which
+# brings `executing`):
+#     from nbtools import probe, show
 #
 #     show(ins, ins.shape, ins.nonzero())
 #     ins = tensor([[0., 1., 0., 0., 1., 0.]])
