@@ -173,6 +173,14 @@ class NotebookCache:
             return lambda func: self.wrap(func, arg, keep, uses)
         return self.wrap(arg, 1, False)
 
+    # the same decorator as a bound method: `cache = NotebookCache(path).decorate` makes `cache` a
+    # function to the editor, so `@cache(2)` colours like any decorator (an instance doesn't)
+    decorate = __call__
+
+    def split(self):
+        # (decorate, clear) as two functions: `cache, clear_cache = NotebookCache(path).split()`
+        return self.decorate, self.clear
+
     def wrap[**P, R](
         self, func: Callable[P, R], version: int, keep: bool = False, uses=()
     ) -> Callable[P, R]:
