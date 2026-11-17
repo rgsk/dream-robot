@@ -14,13 +14,11 @@
 # So a version above 1 reads: this cell was rerun for changes in other cells, not its own.
 # `f.quiet(...)`: the same result, but a stored one comes back without replaying its prints
 # (a computed one still prints live). For a cached function called inside another.
-# `@cache(uses=[module, ...])`: the listed modules' code (parsed, as cells are) joins the cell's,
-# so editing a module the function relies on recomputes, and editing it back replays.
 # `NotebookCache.here(also=['other_notebook'])`: the cache path from the notebook's own path,
 # <repo>/cache/nbs/verne/00_end_to_end for nbs/verne/00_end_to_end.ipynb (VS Code kernels only).
 # `NotebookCache(path, also=[other_path, ...])`: on a miss, read (never copy or write) a result
-# from another notebook's cache whose function matches: same name, parsed code, uses code,
-# version and arguments. Other code in that cell isn't compared. It says `read from <path>`.
+# from another notebook's cache whose function matches: same name, parsed code, version and
+# arguments. Other code in that cell isn't compared. It says `read from <path>`.
 # Going back below the highest version a cell has run with is refused: it would replay a result
 # computed against the other cells as they were back then. Only for that same cell, though: edit
 # anything else in it and it's a new cell, which starts again at any version, plain `@cache` too.
@@ -46,7 +44,6 @@ import shutil
 import sys
 import textwrap
 import types
-from types import ModuleType
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TextIO, cast, overload
@@ -83,12 +80,6 @@ def normalized(code: str) -> str:
                 if isinstance(first.value.value, str):
                     node.body = node.body[1:] or [ast.Pass()]
     return ast.unparse(tree)
-
-
-def module_code(uses) -> str:
-    # the listed modules' code as Python parses it: formatting, comments and docstrings in
-    # them don't count, the same rule as for cells
-    return ''.join(normalized(inspect.getsource(m)) for m in uses)
 
 
 def digest(text: str) -> str:
@@ -132,12 +123,12 @@ class NotebookCache:
         cache = repo / 'cache' / notebook.relative_to(repo).with_suffix('')
         return cls(cache, also=[cache.with_name(name) for name in also])
 
-    def check_version(self, func: Callable, version: int, uses=()) -> None:
+    def check_version(self, func: Callable, version: int) -> None:
         # refuses a version below the highest one func's cell has run with, and records this one.
         # A cell is its code with the version taken out, so a bump keeps it the same cell
         cell = normalized(
             VERSION.sub(r'\1', without_keep(''.join(linecache.getlines(inspect.getfile(func)))))
-        ) + module_code(uses)
+        )
         name = f'{func.__qualname__} {digest(cell)}'
         seen: dict[str, int] = (
             json.loads(self.versions.read_text()) if self.versions.exists() else {}
@@ -157,20 +148,14 @@ class NotebookCache:
     def __call__[**P, R](self, arg: Callable[P, R], /) -> Callable[P, R]: ...
     @overload
     def __call__[**P, R](
-        self, arg: int = 1, /, *, keep: bool = False, uses: Sequence[ModuleType] = ()
+        self, arg: int = 1, /, *, keep: bool = False
     ) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
     def __call__[**P, R](
-        self,
-        arg: Callable[P, R] | int = 1,
-        /,
-        *,
-        keep: bool = False,
-        uses: Sequence[ModuleType] = (),
+        self, arg: Callable[P, R] | int = 1, /, *, keep: bool = False
     ) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
-        # @cache is version 1, @cache(n) version n; keep=True: replay older code's results;
-        # uses=[module, ...]: those modules' code is part of the cell, so editing it recomputes
+        # @cache is version 1, @cache(n) version n; keep=True: replay older code's results
         if isinstance(arg, int):
-            return lambda func: self.wrap(func, arg, keep, uses)
+            return lambda func: self.wrap(func, arg, keep)
         return self.wrap(arg, 1, False)
 
     # the same decorator as a bound method: `cache = NotebookCache(path).decorate` makes `cache` a
@@ -182,9 +167,9 @@ class NotebookCache:
         return self.decorate, self.clear
 
     def wrap[**P, R](
-        self, func: Callable[P, R], version: int, keep: bool = False, uses=()
+        self, func: Callable[P, R], version: int, keep: bool = False
     ) -> Callable[P, R]:
-        self.check_version(func, version, uses)
+        self.check_version(func, version)
         ran = False
 
         def captured(*args: P.args, **kwargs: P.kwargs) -> tuple[R, str]:
@@ -201,7 +186,7 @@ class NotebookCache:
         # is a new folder). It sits next to the real cell, as joblib reads the folder
         # ipykernel_<pid>/ the same in every session
         file = inspect.getfile(func)
-        cell = normalized(without_keep(''.join(linecache.getlines(file)))) + module_code(uses)
+        cell = normalized(without_keep(''.join(linecache.getlines(file))))
         stand_in = str(Path(file).with_name(f'cell-{digest(cell)}.py'))
         source = normalized(without_keep(textwrap.dedent(inspect.getsource(func)))) + '\n'
         linecache.cache[stand_in] = (
@@ -234,8 +219,6 @@ class NotebookCache:
         # each cell folder records its version, so keep never copies across a bump
         folder.mkdir(parents=True, exist_ok=True)
         (folder / 'cache_version').write_text(str(version))
-        uses_digest = digest(module_code(uses))
-        (folder / 'uses_code').write_text(uses_digest)
         print(
             f'{name}: cached, {stored} call(s) stored'
             if stored
@@ -287,7 +270,7 @@ class NotebookCache:
 
         def borrowed(args: tuple, kwargs: dict) -> tuple[R, str, Path] | None:
             # no result here: the newest result in an `also` cache of a function with this
-            # name, this parsed code, this uses code, this version and these arguments
+            # name, this parsed code, this version and these arguments
             args_id = memorized._get_args_id(*args, **kwargs)
             if (folder / args_id / 'output.pkl').exists():
                 return None
@@ -296,11 +279,10 @@ class NotebookCache:
                 for out in (root / 'joblib').glob(f'*/{folder.name}/{args_id}/output.pkl'):
                     other = out.parent.parent
                     code = (other / 'func_code.py').read_text().split('\n', 1)[-1]
-                    stamp, used = other / 'cache_version', other / 'uses_code'
+                    stamp = other / 'cache_version'
                     if (
                         normalized(code) == normalized(source)
                         and (int(stamp.read_text()) if stamp.exists() else 1) == version
-                        and (used.read_text() if used.exists() else digest('')) == uses_digest
                     ):
                         found.append((out, root))
             if not found:
