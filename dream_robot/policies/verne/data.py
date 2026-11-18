@@ -1,5 +1,6 @@
 """Demos (T1, T1-wide, T5) on the GPU, and random training samples from them."""
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,9 +11,13 @@ from torch import Tensor
 
 REPO = Path(__file__).resolve().parents[3]
 CHUNK = 16  # actions per sample
-# the instruction as a one-hot: T5's colour words, then its side words. T1's prompt ('put the cube
-# in the bin') has none of them, so every T1 frame reads all zeros
-WORDS = ('red', 'green', 'blue', 'yellow', 'left', 'right')
+# the instruction as a one-hot: the cube's place (step 13: near = slot 0, x -0.07, nearer the robot
+# base at x -0.56; far = slot 1, x +0.07), T5's colour words, then its side words. T1's prompt ('put
+# the cube in the bin') has none of them, so every T1 frame reads all zeros
+WORDS = ('near', 'far', 'red', 'green', 'blue', 'yellow', 'left', 'right')
+PLACES, COLOURS = slice(0, 2), slice(2, 6)  # PLACES[slot] = the slot's word
+# how a T5 prompt names its cube (step 13): by colour (the recorded prompt), by place, or both
+KINDS = ('colour', 'position', 'both')
 
 
 def open_demos(name: str):
@@ -43,6 +48,37 @@ def load_instructions(name: str) -> NDArray[np.float32]:
     prompts = {i: t for t, i in ds.meta.tasks['task_index'].items()}
     table = np.stack([one_hot(prompts[i]) for i in range(len(prompts))])
     return table[np.asarray(ds.hf_dataset['task_index'], dtype=np.int64)]
+
+
+def load_slots(name: str) -> NDArray[np.int64]:
+    # out: [N] by table row, the named cube's slot (0 near, 1 far) from the recorder's
+    # instructions.json (its kept attempts, in episode order); -1 for datasets without one (T1)
+    ds = open_demos(name)
+    episode = np.asarray(ds.hf_dataset['episode_index'], dtype=np.int64)
+    path = REPO / 'data/robosuite' / name / 'instructions.json'
+    if not path.exists():
+        return np.full(len(episode), -1)
+    kept = [a for a in json.loads(path.read_text())['attempts'] if a['kept']]
+    return np.array([a['target_slot'] for a in kept])[episode]
+
+
+def reword(ins, slot, kind):
+    # one-hot [..., 8] of the recorded prompt, slot [...] (0 near, 1 far), kind (KINDS index, [...])
+    # -> the one-hot of the same instruction named by colour (unchanged), place (colour words off,
+    # the slot's word on) or both. Numpy or torch; rows with slot -1 (T1) stay as they are
+    lib = torch if isinstance(ins, Tensor) else np
+    out = ins.clone() if lib is torch else ins.copy()
+    t5 = slot >= 0
+    pos, both = t5 & (kind == 1), t5 & (kind == 2)
+    out[..., COLOURS] = out[..., COLOURS] * ~pos[..., None]
+    named = pos | both
+    place = lib.zeros_like(out[..., PLACES])
+    if lib is torch:
+        place.scatter_(-1, slot.clamp(min=0)[..., None], 1.0)
+    else:
+        np.put_along_axis(place, np.maximum(slot, 0)[..., None], 1.0, -1)
+    out[..., PLACES] = place * named[..., None]
+    return out
 
 
 def load_cameras(name: str) -> tuple[NDArray[np.uint8], NDArray[np.uint8]]:
@@ -80,7 +116,8 @@ def canvas(top, wrist):
 class Demos:
     latent: Tensor  # [N, Z, 16, 32] float16, the [top | wrist] canvas through the VAE
     state: Tensor  # [N, 8] joints + gripper, raw
-    instruction: Tensor  # [N, 6] one-hot (WORDS)
+    instruction: Tensor  # [N, 8] one-hot (WORDS), the recorded prompt
+    slot: Tensor  # [N] the named cube's slot (0 near, 1 far), -1 without one (T1)
     action: Tensor  # [N, 8] raw
     episode: NDArray[np.int64]  # [N]
     s_mean: Tensor  # [8], stats from the training demos only
@@ -89,13 +126,16 @@ class Demos:
     a_std: Tensor
 
 
-def to_gpu(latent, state, instruction, action, episode, train_ids, dev: str = 'cuda') -> Demos:
+def to_gpu(
+    latent, state, instruction, slot, action, episode, train_ids, dev: str = 'cuda'
+) -> Demos:
     s, a = torch.tensor(state, device=dev), torch.tensor(action, device=dev)
     lab = torch.tensor(np.isin(episode, train_ids), device=dev)
     return Demos(
         latent=torch.tensor(latent, device=dev),
         state=s,
         instruction=torch.tensor(instruction, device=dev),
+        slot=torch.tensor(slot, device=dev),
         action=a,
         episode=episode,
         s_mean=s[lab].mean(0),
@@ -109,13 +149,14 @@ def to_gpu(latent, state, instruction, action, episode, train_ids, dev: str = 'c
 class Batch:
     frame: Tensor  # [B, Z, 16, 32], the canvas's latent now
     state: Tensor  # [B, 16] std units: [previous step, now] (a demo's first step: previous = now)
-    instruction: Tensor  # [B, 6]
+    instruction: Tensor  # [B, 8]
     acts: Tensor  # [B, CHUNK, 8] std units, the next CHUNK actions
 
 
-def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch:
+def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator, mix: bool = True) -> Batch:
     # B samples: a random demo from `ids`, a random step of it; actions past the demo's end
-    # repeat its last one, so the end of every demo is trained on too
+    # repeat its last one, so the end of every demo is trained on too. mix: each T5 sample's prompt
+    # names the cube by colour, place or both (KINDS, uniform); False: the recorded prompt
     first = np.searchsorted(d.episode, ids)
     lens = np.searchsorted(d.episode, ids, side='right') - first
     pick = rng.integers(0, len(ids), B)
@@ -127,7 +168,11 @@ def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch
         frame=d.latent[now].float(),
         state=(torch.cat([d.state[prev], d.state[now]], 1) - d.s_mean.repeat(2))
         / d.s_std.repeat(2),
-        instruction=d.instruction[now],
+        instruction=reword(
+            d.instruction[now],
+            d.slot[now],
+            torch.tensor(rng.integers(0, 3 if mix else 1, B), device=d.slot.device),
+        ),
         acts=(d.action[rows.to(d.action.device)] - d.a_mean) / d.a_std,
     )
 

@@ -1,4 +1,6 @@
-"""Step 12 (roadmap box 09): the state as one more cross-attention row on both sides, next to the word
+"""Step 13: near / far join the words (the cube's place: slot 0 is nearer the robot); training prompts
+name the T5 cube by colour, place or both (data.reword), and T5 is scored with each.
+Step 12 (roadmap box 09): the state as one more cross-attention row on both sides, next to the word
 rows, holding the previous control step and now (16 numbers: a sense of velocity); the state token is
 gone, so the action side reads the state directly, not through the video layers' keys and values.
 Step 11: the instruction's words as cross-attention rows, read by every video and action block
@@ -11,7 +13,7 @@ Verne's shape (wam.py, mot.py), everything else as simple as possible for now:
 the two cameras side by side as one wide image, as Verne's canvas (no head crop),
 the canvas through a small frozen VAE (vae.py, not Wan's), its latent grid cut into 2x2
 squares, one frame (no memory), joints (no poses), the state as a cross-attention row, the instruction as
-word rows (each side its own 7-row table: 'no word', then WORDS; no text encoder), masked to the
+word rows (each side its own 9-row table: 'no word', then WORDS; no text encoder), masked to the
 prompt's words plus 'no word', so a prompt without words (T1) reads 'no word' alone,
 the flow time added to the action tokens (no adaptive norm), and Verne's sampler: 4 Euler
 steps on a grid shifted by 1.5.
@@ -52,7 +54,7 @@ class Block(nn.Module):
     def finish(
         self, x: Tensor, q: Tensor, k: Tensor, v: Tensor, rows: Tensor, rmask: Tensor
     ) -> Tensor:
-        # rows [B, 8, dim] the word rows + the state row, rmask [B, 8] bool, True = may attend
+        # rows [B, 10, dim] the word rows + the state row, rmask [B, 10] bool, True = may attend
         a = F.scaled_dot_product_attention(q, k, v)
         x = x + self.out(rearrange(a, 'b h s d -> b s (h d)'))
         cq = rearrange(self.cq(self.norm3(x)), 'b s (h d) -> b h s d', h=HEADS)
@@ -65,8 +67,8 @@ class Block(nn.Module):
 def rows_of(
     table: nn.Embedding, state_row: nn.Module, ins: Tensor, state: Tensor
 ) -> tuple[Tensor, Tensor]:
-    # instruction one-hot [B, 6], state [B, 16] -> 8 rows [B, 8, dim] (7 word rows, then the state row)
-    # and the mask [B, 8]: 'no word' + the prompt's words + the state
+    # instruction one-hot [B, 8], state [B, 16] -> 10 rows [B, 10, dim] (9 word rows, then the state row)
+    # and the mask [B, 10]: 'no word' + the prompt's words + the state
     # (step 11b tried Verne's way, 6 rows with absent words zero and no mask: 13/13, wrong cube 29/26)
     rows = torch.cat([table.weight.expand(len(ins), -1, -1), state_row(state)[:, None]], 1)
     one = torch.ones_like(ins[:, :1])
@@ -97,7 +99,7 @@ class Verne(nn.Module):
         self.action_out = nn.Linear(D_ACTION, 8)
 
     def see(self, frame: Tensor, state: Tensor, ins: Tensor) -> list[tuple[Tensor, Tensor]]:
-        # latent [B, Z, 16, 32] (normalised), state [B, 16] (previous, now), instruction [B, 6] -> each
+        # latent [B, Z, 16, 32] (normalised), state [B, 16] (previous, now), instruction [B, 8] -> each
         # video layer's keys and values. Tokens: the 128 patches; words and state enter by cross-attention
         patches = rearrange(frame, 'b c (h p) (w q) -> b (h w) (p q c)', p=P, q=P)
         x = self.patch_in(patches) + self.video_pos
@@ -112,7 +114,7 @@ class Verne(nn.Module):
     def velocity(
         self, kvs: list[tuple[Tensor, Tensor]], x: Tensor, tau: Tensor, ins: Tensor, state: Tensor
     ) -> Tensor:
-        # noisy chunk x [B, CHUNK, 8] at flow time tau [B], instruction [B, 6], state [B, 16] ->
+        # noisy chunk x [B, CHUNK, 8] at flow time tau [B], instruction [B, 8], state [B, 16] ->
         # velocity [B, CHUNK, 8]; the action tokens attend to the video tokens of the same layer and
         # to each other, then to the words and the state
         y = self.action_in(x) + self.action_pos + self.time_in(tau[:, None])[:, None]

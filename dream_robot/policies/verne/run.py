@@ -19,6 +19,7 @@ A run folder holds:
     weights.pt       the trained weights (gitignored)
     log.json         [step, train loss, val loss] every 1000 steps
     sweep_8.json     rollout seed -> [success, failure mode, steps], n_exec 8 (and _16)
+    sweep_8_position.json, sweep_8_both.json   T5 only: the prompt names the cube by place / both
     probe.json       T1-wide and T5 (the named cube): rollout seed -> [cube xy, gripper xy at first
                      close or null],
                      plus the fit (slopes, miss)
@@ -39,7 +40,16 @@ import numpy as np
 import torch
 
 from . import rollouts, vae
-from .data import REPO, canvas, load_cameras, load_instructions, load_table, to_gpu
+from .data import (
+    KINDS,
+    REPO,
+    canvas,
+    load_cameras,
+    load_instructions,
+    load_slots,
+    load_table,
+    to_gpu,
+)
 from .train import train
 
 RUNS = REPO / 'experiments/verne/runs'
@@ -78,30 +88,32 @@ def split(task: str, n: int = 100) -> tuple[np.ndarray, np.ndarray]:
 def load_task(task: str):
     # 'base' or 'base+extra1+extra2' (extra = dataset names under data/robosuite, e.g. DAgger rounds;
     # 'extra:fail' keeps only that dataset's failed episodes, per its recording_summary.json)
-    # -> state, action, episode, latent, instruction, train ids, val ids, scene. Extra datasets'
+    # -> state, action, episode, latent, instruction, slot, train ids, val ids, scene. Extra datasets'
     # episodes are renumbered after the base's (1000 * k + i) and all go to training; validation
     # stays the base's held-out demos, so losses and scores compare with the base task's runs.
     base, *extra = task.split('+')
     name, scene = TASKS[base]
     s, a, e = load_table(name)
     train_ids, val_ids = split(base, int(e.max()) + 1)
-    parts = [(s, a, e, vae.load_latents(name, vae.WEIGHTS), load_instructions(name))]
+    parts = [
+        (s, a, e, vae.load_latents(name, vae.WEIGHTS), load_instructions(name), load_slots(name))
+    ]
     for k, extra_name in enumerate(extra, 1):
         extra_name, _, only = extra_name.partition(':')
         s, a, e = load_table(extra_name)
         z = vae.load_latents(extra_name, vae.WEIGHTS)
-        ins = load_instructions(extra_name)
+        ins, slot = load_instructions(extra_name), load_slots(extra_name)
         if only == 'fail':
             summary = json.loads(
                 (REPO / 'data/robosuite' / extra_name / 'recording_summary.json').read_text()
             )
             failed = [i for i, ep in enumerate(summary['episodes']) if not ep['success']]
             keep = np.isin(e, failed)
-            s, a, e, z, ins = s[keep], a[keep], e[keep], z[keep], ins[keep]
-        parts.append((s, a, e + 1000 * k, z, ins))
+            s, a, e, z, ins, slot = s[keep], a[keep], e[keep], z[keep], ins[keep], slot[keep]
+        parts.append((s, a, e + 1000 * k, z, ins, slot))
         train_ids = np.concatenate([train_ids, np.unique(e) + 1000 * k])
-    state, action, episode, latent, instruction = (np.concatenate(x) for x in zip(*parts))
-    return state, action, episode, latent, instruction, train_ids, val_ids, scene
+    state, action, episode, latent, instruction, slot = (np.concatenate(x) for x in zip(*parts))
+    return state, action, episode, latent, instruction, slot, train_ids, val_ids, scene
 
 
 def package_hash() -> str:
@@ -158,8 +170,8 @@ def job(step: str, task: str, seed: int, workers: int) -> None:
     else:
         write_json(out / 'meta.json', meta | {'started': time.strftime('%Y-%m-%d %H:%M:%S')})
 
-    state, action, episode, latent, instruction, train_ids, val_ids, scene = load_task(task)
-    d = to_gpu(latent, state, instruction, action, episode, train_ids)
+    state, action, episode, latent, instruction, slot, train_ids, val_ids, scene = load_task(task)
+    d = to_gpu(latent, state, instruction, slot, action, episode, train_ids)
 
     if (out / 'weights.pt').exists():
         weights = torch.load(out / 'weights.pt')
@@ -169,11 +181,17 @@ def job(step: str, task: str, seed: int, workers: int) -> None:
         write_json(out / 'log.json', run['log'])
         torch.save(weights, out / 'weights.pt')
 
-    for n_exec in N_EXECS:
-        path = out / f'sweep_{n_exec}.json'
-        if not path.exists():
-            res = rollouts.sweep(weights, d, scene, n_exec, workers)
-            write_json(path, {str(s): list(r) for s, r in res.items()})
+    # T5 is scored three ways (the prompt names the cube by colour / place / both); colour keeps the
+    # old file name, sweep_<n>.json, so it compares with earlier steps
+    for kind in KINDS if scene == 't5' else KINDS[:1]:
+        for n_exec in N_EXECS:
+            path = out / (
+                f'sweep_{n_exec}.json' if kind == 'colour' else f'sweep_{n_exec}_{kind}.json'
+            )
+            if not path.exists():
+                print(f'prompts by {kind}')
+                res = rollouts.sweep(weights, d, scene, n_exec, workers, kind=kind)
+                write_json(path, {str(s): list(r) for s, r in res.items()})
 
     if scene != 't1' and not (out / 'probe.json').exists():  # T1's cube barely moves
         points = rollouts.close_points(weights, d, scene, 8, workers)
@@ -215,7 +233,11 @@ def vae_frames(every: int = 2) -> tuple[np.ndarray, np.ndarray]:
 
 
 def train_vae(
-    step: str, seed: int = 0, every: int = 2, steps: int = 10000, name: str = 'vae',
+    step: str,
+    seed: int = 0,
+    every: int = 2,
+    steps: int = 10000,
+    name: str = 'vae',
     extend_from: str | None = None,
 ) -> None:
     # the canvas VAE on VAE_DATA's train demos, every `every`-th frame (30 Hz neighbours are near
@@ -231,15 +253,24 @@ def train_vae(
         out / 'meta.json',
         source()
         | {
-            'package_hash': package_hash(), 'gpu': torch.cuda.get_device_name(), 'seed': seed,
-            'data': VAE_DATA, 'every': every, 'steps': steps, 'extend_from': extend_from,
+            'package_hash': package_hash(),
+            'gpu': torch.cuda.get_device_name(),
+            'seed': seed,
+            'data': VAE_DATA,
+            'every': every,
+            'steps': steps,
+            'extend_from': extend_from,
             'started': time.strftime('%Y-%m-%d %H:%M:%S'),
         },
     )
     frames, val = vae_frames(every)
     print(f'{len(frames)} training frames, {len(val)} val frames', flush=True)
     run = vae.train(
-        frames, val, steps=steps, seed=seed, ckpt=out / 'ckpt',
+        frames,
+        val,
+        steps=steps,
+        seed=seed,
+        ckpt=out / 'ckpt',
         extend_from=RUNS / extend_from / 'ckpt' if extend_from else None,
     )
     write_json(out / 'log.json', run['log'])

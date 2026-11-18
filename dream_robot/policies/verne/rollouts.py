@@ -21,7 +21,7 @@ import numpy as np
 import torch
 
 from . import vae as vae_mod
-from .data import Demos, frame_of, one_hot
+from .data import KINDS, Demos, frame_of, one_hot, reword
 from .model import Verne, sample
 
 SEEDS = range(1000, 1050)  # rollout seeds, the same for every model
@@ -82,14 +82,23 @@ def act(
     return chunk
 
 
+def prompt_of(env, kind: str = 'colour') -> np.ndarray:
+    # the episode's instruction one-hot [8], drawn at reset (T5; T1's reads all zeros), the named
+    # cube given by colour (the env's prompt), place (near / far) or both (data.KINDS)
+    ins = one_hot(env.prompt)
+    if not hasattr(env, 'instruction'):
+        return ins
+    return reword(ins, np.array(env.instruction.target_slot), np.array(KINDS.index(kind)))
+
+
 def rollout(
-    net: Verne, vae, d: Demos, env, seed: int, n_exec: int, sampler=(4, 1.5)
+    net: Verne, vae, d: Demos, env, seed: int, n_exec: int, sampler=(4, 1.5), kind='colour'
 ) -> tuple[bool, str, int]:
     # one episode, replanning after n_exec actions -> success, failure mode, steps
     torch.manual_seed(seed * 100 + n_exec)  # this episode's sampling noise
     obs, plan = env.reset(seed=seed), []
     prev = obs.state  # the state one control step back; at reset, the state itself
-    ins = one_hot(env.prompt)  # drawn at reset (T5); T1's reads all zeros
+    ins = prompt_of(env, kind)
     for step in range(env._cfg.horizon_steps):
         if not plan:
             plan = list(act(net, vae, d, obs, prev, ins, sampler)[:n_exec])
@@ -100,13 +109,15 @@ def rollout(
     return r.success, 'none' if r.success else failure_of(env, r), step + 1
 
 
-def close_point(net: Verne, vae, d: Demos, env, seed: int, n_exec: int, sampler=(4, 1.5)):
+def close_point(
+    net: Verne, vae, d: Demos, env, seed: int, n_exec: int, sampler=(4, 1.5), kind='colour'
+):
     # -> cube xy at spawn, gripper xy at the first commanded close (None if it never closes)
     torch.manual_seed(seed * 100 + n_exec)  # the same noise as rollout's episode
     obs, plan = env.reset(seed=seed), []
     prev = obs.state
     cube = env.cube_pos[:2]  # T5: the named cube
-    ins = one_hot(env.prompt)
+    ins = prompt_of(env, kind)
     for _ in range(env._cfg.horizon_steps):
         if not plan:
             plan = list(act(net, vae, d, obs, prev, ins, sampler)[:n_exec])
@@ -134,25 +145,32 @@ def _start(scene: str, weights: dict, stats: dict, sampler: tuple[int, float]) -
     )
 
 
-def _episode(job: tuple[str, int, int]):
-    what, seed, n_exec = job
+def _episode(job: tuple[str, int, int, str]):
+    what, seed, n_exec, kind = job
     w = _worker
     # a worker episode stuck > 30 s (a healthy one takes ~2 s) writes its stack to stderr
     faulthandler.dump_traceback_later(30)
     try:
         fn = rollout if what == 'rollout' else close_point
-        return fn(w['net'], w['vae'], w['d'], w['env'], seed, n_exec, w['sampler'])
+        return fn(w['net'], w['vae'], w['d'], w['env'], seed, n_exec, w['sampler'], kind)
     finally:
         faulthandler.cancel_dump_traceback_later()
 
 
 def _run(
-    what: str, weights: dict, d: Demos, scene: str, n_exec: int, workers: int, sampler
+    what: str,
+    weights: dict,
+    d: Demos,
+    scene: str,
+    n_exec: int,
+    workers: int,
+    sampler,
+    kind: str = 'colour',
 ) -> dict:
     # every eval seed, in `workers` processes; episodes they haven't finished after 90 s (a
     # worker got stuck, ~1 in 1000) run here, one by one: each episode has its own torch seed,
     # so the result is the same wherever it runs
-    jobs = [(what, seed, n_exec) for seed in SEEDS]
+    jobs = [(what, seed, n_exec, kind) for seed in SEEDS]
     res = {}
     if workers:
         stats = {k: getattr(d, k).cpu() for k in STATS}
@@ -177,15 +195,21 @@ def _run(
         env, net = make_env(scene), load(weights)
         fn = rollout if what == 'rollout' else close_point
         vae = vae_mod.load(vae_mod.WEIGHTS)
-        res |= {seed: fn(net, vae, d, env, seed, n_exec, sampler) for seed in left}
+        res |= {seed: fn(net, vae, d, env, seed, n_exec, sampler, kind) for seed in left}
     return {seed: res[seed] for seed in SEEDS}
 
 
 def sweep(
-    weights: dict, d: Demos, scene: str, n_exec: int, workers: int = 8, sampler=(4, 1.5)
+    weights: dict,
+    d: Demos,
+    scene: str,
+    n_exec: int,
+    workers: int = 8,
+    sampler=(4, 1.5),
+    kind: str = 'colour',
 ) -> dict:
     # seed -> (success, failure mode, steps) for every eval seed; prints the score
-    res = _run('rollout', weights, d, scene, n_exec, workers, sampler)
+    res = _run('rollout', weights, d, scene, n_exec, workers, sampler, kind)
     fails = Counter(mode for ok, mode, _ in res.values() if not ok)
     n_ok = sum(ok for ok, _, _ in res.values())
     print(f'n_exec {n_exec:2d}: {n_ok:2d}/{len(res)}   failures {dict(fails)}')

@@ -270,3 +270,17 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   dropped 1/1. Probe (gripper at first close vs named cube): miss 7.0 cm (11: 8.7), slopes x 0.10 y 0.28 -> still ~blind.
 - Read: the direct state read fixes the grasp step 11 lost (no_grasp 16 -> 6) and gets back to step 08's level;
   colour-to-cube binding is untouched (wrong cube still ~chance). One seed.
+
+## Step 13 · near / far words, prompts by colour / place / both, T5 seed 0 (2026-11-18), runs/13_prompt_kinds/t5
+- Package = step 12 + WORDS = near far | red green blue yellow | left right (near = slot 0, x -0.07, nearer the
+  robot base at x -0.56). Each T5 training sample's prompt is drawn uniformly: colour ('red left', as recorded),
+  place ('near left'), both ('near red left'); slots from instructions.json (43% near). Val loss colour-only.
+  T5 swept with each kind (sweep_<n>.json = colour, _position, _both). Check: scripts/prompt_kinds_check.py.
+- Losses: train 0.029, val 0.093 (12: 0.094).
+- **Rollouts (n_exec 8 / 16, of 50):** colour 16/19 (12: 23/20), wrong cube 27/23 (~chance); **place 40/39,
+  wrong cube 0/0**; both 39/40, wrong cube 1/0. Place failures are grasps: no_grasp 8/5, dropped 2/6.
+  Probe (colour prompts): miss 8.6 cm, slopes ~0.
+- Read: told where the cube is, the arm goes there every time; ~40/50 is the grasp ceiling of this policy.
+  The whole colour gap is the colour -> place lookup. With both words the model uses near/far. One seed.
+- Next: step 14 = near/far head pretraining on 1000 demo-less scenes (colour-only prompts), head on the video
+  side's last-layer input, then fine-tune on demos (13a); target ~40/50 on colour prompts.
