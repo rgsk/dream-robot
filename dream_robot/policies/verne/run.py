@@ -186,6 +186,21 @@ def job(step: str, task: str, seed: int, workers: int, init: str = '') -> None:
         write_json(out / 'log.json', run['log'])
         torch.save(weights, out / 'weights.pt')
 
+    if scene == 't5' and not (out / 'patch_binding_probe.json').exists():
+        # does the binding survive (or appear in) the demo training? as pretrain_job's probe; before the
+        # sweeps, whose rollout workers leave the GPU too full for it (steps 15, 16 ran out of memory)
+        from . import pretrain as pt
+        from .data import load_scenes
+
+        net = Verne().cuda()
+        net.load_state_dict(weights)
+        sc, val = load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS)
+        write_json(
+            out / 'patch_binding_probe.json', pt.binding_probe(net, sc, val, d.s_mean, d.s_std)
+        )
+        del net, sc, val
+        torch.cuda.empty_cache()
+
     # the recorded prompts only (step 16: training never sees near/far, so place / both sweeps of steps
     # 13-15 would mean nothing)
     for n_exec in N_EXECS:
@@ -207,17 +222,6 @@ def job(step: str, task: str, seed: int, workers: int, init: str = '') -> None:
                     for s, (c, g) in points.items()
                 },
             },
-        )
-    if scene == 't5' and not (out / 'patch_binding_probe.json').exists():
-        # does the binding survive (or appear in) the demo training? as pretrain_job's probe
-        from . import pretrain as pt
-        from .data import load_scenes
-
-        net = Verne().cuda()
-        net.load_state_dict(weights)
-        sc, val = load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS)
-        write_json(
-            out / 'patch_binding_probe.json', pt.binding_probe(net, sc, val, d.s_mean, d.s_std)
         )
     print(f'done: {out}')
 

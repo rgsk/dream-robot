@@ -1,0 +1,12 @@
+{
+ "commit": "2cec91a",
+ "dirty": true,
+ "package_hash": "58004ae6e6b8",
+ "gpu": "NVIDIA A100-SXM4-40GB",
+ "task": "t5",
+ "seed": 2,
+ "steps": 20000,
+ "vae": "experiments/verne/runs/07_instruction/vae_wsd/weights.pt",
+ "init": "15_erase_pretrain/pretrain/seed0",
+ "started": "2026-11-18 19:37:57"
+}

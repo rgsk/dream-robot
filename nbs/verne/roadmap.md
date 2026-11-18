@@ -79,7 +79,7 @@ frames: canvas 3 × 128 × 256 → latent 4 × 16 × 32, val reconstruction 0.00
 
 ---
 
-### 04 · Time embedding + adaptive norm (action side)
+### 04 · Time embedding + adaptive norm (action side) — **DONE** (step 17e: T5 36/43/38, step 16 42/36; no gain, no regression)
 
 - step 0: raw τ (one number, 0..1) → MLP (1 → 128 → 128), added to every action token.
 - Verne (`action_dit.py`): τ → sinusoid features (cos/sin at many frequencies) → MLP → 6 vectors
@@ -88,6 +88,11 @@ frames: canvas 3 × 128 × 256 → latent 4 × 16 × 32, val reconstruction 0.00
   differently at each; raw τ through one SiLU only gives smooth, gentle functions of τ. Step 0
   gets away with it because it samples just 10 evenly spaced levels.
 - test: swap in sinusoids (+ adaptive norm), compare held-out loss and success.
+- result (steps 17-17f, notes.md): Wan's gate start (small, cross-attention ungated) sends runs frame-blind
+  (close-point slopes ~0.15, ~20/50, same val loss); the frame's path (self-attention) must start at least as
+  open as the words + state path (cross-attention). Kept: gate 3 on cross-attention, attention gated 1 + gate
+  (starts open), MLP and cross-attention Wan-small. Val loss doesn't see the failure: judge boxes by rollouts
+  + close-point slopes, 3 seeds.
 
 ---
 

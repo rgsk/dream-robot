@@ -1,0 +1,27 @@
+step      0   train 2.007   val 2.005
+step   1000   train 0.156   val 0.128
+step   2000   train 0.105   val 0.106
+step   3000   train 0.117   val 0.108
+step   4000   train 0.077   val 0.097
+step   5000   train 0.076   val 0.091
+step   6000   train 0.095   val 0.099
+step   7000   train 0.064   val 0.085
+step   8000   train 0.072   val 0.087
+step   9000   train 0.044   val 0.093
+step  10000   train 0.071   val 0.091
+step  11000   train 0.070   val 0.102
+step  12000   train 0.041   val 0.088
+step  13000   train 0.045   val 0.099
+step  14000   train 0.065   val 0.094
+step  15000   train 0.061   val 0.086
+step  16000   train 0.047   val 0.094
+step  17000   train 0.036   val 0.098
+step  18000   train 0.038   val 0.096
+step  19000   train 0.064   val 0.100
+step  20000   train 0.026   val 0.102
+probe, prompt colour: train 1.000   val 0.840
+probe, prompt both  : train 1.000   val 1.000
+n_exec  8: 19/50   failures {'no_grasp': 12, 'wrong_cube': 17, 'dropped': 2}
+n_exec 16: 22/50   failures {'no_grasp': 12, 'wrong_cube': 16}
+closes 50/50, miss  6.7 cm, x slope +0.16 (corr +0.17, intercept +0.3 cm), y slope +0.20 (corr +0.25, intercept -0.0 cm)
+done: /home/rahul/Documents/codes/ml/dream-robot/experiments/verne/runs/17_adaln/t5/seed0

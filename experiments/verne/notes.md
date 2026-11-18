@@ -332,3 +332,77 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   place-prompt ceiling. One seed.
 - Bug: the binding probe OOMs right after the sweeps (rollout workers still releasing GPU memory), twice;
   reran the job to finish it. Fix: probe before the sweeps.
+
+## Step 17 · roadmap box 04: sinusoid noise level + adaptive norm (action side), T5 seed 0 (2026-11-18), runs/17_adaln/t5
+- Package = step 16 + Wan's action time path: 1000·σ -> 256 sinusoids -> MLP -> per action layer shift/scale/gate
+  (attention, MLP); video side unchanged. Init: video side of 15_erase_pretrain/pretrain/seed0, action side fresh.
+  Also: binding probe now runs before the sweeps (no OOM).
+- Losses: train 0.026, val 0.102 (min 0.086) (16: 0.114, min 0.089): lower.
+- **Rollouts 19/22 of 50** (16: 42/42). wrong_cube 17/16 (16: 4/4), no_grasp 12/12 (16: 1/3).
+- Close-point: miss 6.7 cm, slopes 0.16 / 0.20 (16: 2.0 cm, 0.82 / 0.52): the arm barely follows the cube.
+  Binding probe after demos 84% (16: 94.5%).
+- Read: a regression, and not in the loss (val is lower): closed loop the arm stops tracking where the cube is.
+  One seed.
+- Seeds (local 17 s1; Modal 16 s1 with step 16's own code, 2cec91a): 16 = 42/42, 36/36; 17 = 19/22, 25/25.
+  Slopes 16: 0.82/0.52, 0.58/0.42; 17: 0.16/0.20, 0.18/0.15. Val loss 0.098-0.114 for all four: val doesn't see it.
+- scripts/time_use_check.py (val loss at fixed τ with another sample's frame / state): 17 uses the frame 35-50%
+  less at τ 0-0.4 (both seeds), state about the same there, more at τ 0.9. Suspect: Wan's gate init (±0.1-0.3)
+  starts the frame's path (self-attention, gated) nearly shut while words + state (cross-attention) are ungated.
+
+## Step 17b · box 04 with gates starting at 1 (gate = 1 + learned, modulation and time_out's last layer zero), runs/17b_gate1/t5
+- At init the action side computes exactly step 16's.
+- Seed 0: **40/39 of 50** (16: 42/42, 36/36; 17: 19/22, 25/25). wrong_cube 6/9, no_grasp 4/2. Miss 2.9 cm, slopes
+  0.67 / 0.44. Probe 94.5%. Val 0.112.
+- Read: the regression was the gate init; with gates at 1, box 04 is inside step 16's band. One seed.
+- Seed 1: **20/21**, wrong_cube 21/22, miss 6.9 cm, slopes 0.17 / 0.17, probe 89%. So seed 0 was the lucky one.
+- time_use_check, frame gap at τ 0 / 0.18 / 0.40: 16 s0 .046/.063/.088 (42), 16 s1 .057/.080/.120 (36),
+  17b s0 .046/.063/.085 (40), 17b s1 .024/.034/.044 (20); 17 s0/s1 .030/.043/.061, .029/.041/.055 (19-25).
+  The frame gap at high noise sorts all 6 runs into the two modes (>= ~.045: tracks the cube, ~40; <= ~.03:
+  ignores it, ~20). State gap at τ 0.9 is ~2x step 16's in every adaptive-norm run, either mode: adaptive
+  norm's signature, not the failure.
+- Read: two outcomes per training run, same val loss; the demo loss doesn't force the frame read at high noise.
+  Adaptive norm lands in the bad one more often (3 of 4 vs 0 of 2). The gate start alone isn't the cause.
+
+## Step 17c · gate 3: cross-attention (words + state) gets shift/scale/gate too, all start at 0 (gate = 1 + learned), runs/17c_gate3/t5
+- Seed 0: **34/38 of 50**, wrong_cube 7/4, no_grasp 9/7. Miss 3.5 cm, slopes 0.59 / 0.47 (tracking mode). Probe 91.5%.
+  Val 0.117.
+- First sweep was 0/50: bogus. The rollout workers imported model.py after I edited it to 17d mid-job; restored
+  17c (same package hash), reran the sweeps only.
+
+## Step 17d · gate 3 with Wan's small start on all three gates (modulation randn/√dim, gates as is), runs/17d_gate3_small/t5
+- Seed 0: **19/23 of 50**, wrong_cube 23/24, no_grasp 8/3. Miss 8.3 cm, slopes -0.08 / 0.11 (frame-blind mode).
+  Probe 84%. Val 0.098.
+- Read: starting every path shut (frame included) didn't let the frame earn its way in; same as step 17. One seed.
+
+## Step 17e · frame's path opens first: attention gated by 1 + gate (starts ~1), MLP + cross-attention gates Wan-small, runs/17e_attn_open/t5
+- Seed 0: **36/36 of 50**, wrong_cube 4/4, no_grasp 8/9. Miss 2.8 cm, slopes 0.71 / 0.53 (tracking mode). Probe 94%.
+  Val 0.121.
+- Read: tracking, with wrong cube as low as step 16's (4/4); no_grasp a bit higher. One seed.
+- Seed 1: **43/42 of 50**, wrong_cube 4/6, no_grasp 2/2. Miss 2.2 cm, slopes 0.85 / 0.63 (best tracking yet).
+  Probe 95%. (17b broke on seed 1; 17e didn't.) Seed 2 on Modal.
+- Seed 2 (Modal, A100-40GB): **38/38 of 50**, wrong_cube 6/5, no_grasp 5/4. Miss 3.1 cm, slopes 0.69 / 0.46. Probe 94.5%.
+  17e: 3 of 3 seeds track the cube (36, 43, 38; step 16: 42, 36).
+
+## Step 17f · attention + MLP start open (1 + gate), cross-attention Wan-small, runs/17f_mlp_open/t5
+- Seed 0: **38/36 of 50**, wrong_cube 9/8, no_grasp 1/4. Miss 3.3 cm, slopes 0.64 / 0.60 (tracking). Probe 91.5%.
+- Seed 1: **37/31 of 50**, wrong_cube 9/9, no_grasp 4/8. Miss 3.5 cm, slopes 0.60 / 0.52 (tracking). Probe 92%.
+- Seed 2: **36/36 of 50**, wrong_cube 7/9, no_grasp 7/5. Miss 3.1 cm, slopes 0.68 / 0.58 (tracking). Probe 93.5%.
+- Read: 3 of 3 track (seeds 0-1 at first: 2 of 2), where 17b (everything open, cross-attention too) went frame-blind on seed 1: what tipped
+  runs was the words + state path starting open. 17e vs 17f: equal within seed noise (wrong cube 4-6 vs 8-9 is
+  inside step 16's own seed spread, 4 vs 7-8). Keep 17e: the smaller departure from Wan (one gate changed, not two).
+
+## Box 04 summary (frame-blind = close-point slopes ~0.1-0.2, ~20/50)
+| start of gates                                   | runs (n_exec 8)  | frame-blind |
+| no gates (16)                                    | 42, 36           | 0 / 2       |
+| all small, cross-attn ungated (17)               | 19, 25           | 2 / 2       |
+| all at 1 (17b)                                   | 40, 20           | 1 / 2       |
+| all at 1, gate 3 (17c)                           | 34               | 0 / 1       |
+| all small, gate 3 (17d)                          | 19               | 1 / 1       |
+| attention at 1, MLP + cross small (17e)          | 36, 43, 38       | 0 / 3       |
+| attention + MLP at 1, cross small (17f)          | 38, 37, 36       | 0 / 3       |
+Rule: the frame's path (self-attention) must start at least as open as the words + state path (cross-attention).
+
+## Open: Modal speed
+- 17e seed 2 on Modal got an A100-40GB (L40S out of capacity; fallback list): ~40 s per 1000 steps vs ~12 s on
+  the local 4060. User: earlier L40S runs on Modal were much faster. Settle later: time an L40S vs A100 run
+  (per-1000-step wall time from the dashboard), and check CPU count / workers on each.

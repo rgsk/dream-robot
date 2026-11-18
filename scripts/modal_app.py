@@ -41,13 +41,15 @@ image = (
     .add_local_dir('dream_robot', f'{R}/dream_robot', ignore=['**/__pycache__'])
     .add_local_file('scratch/modal_synced_from.json', f'{R}/synced_from.json')
 )
+# the first free one, in order (L40S ran out once, 2026-11-19); all are plenty for a 4.5M-param Verne
+GPUS = ['L40S', 'A100-40GB', 'A10', 'L4']
 data = modal.Volume.from_name('dream-robot-data', create_if_missing=True)
 runs = modal.Volume.from_name('dream-robot-runs', create_if_missing=True)
 app = modal.App('dream-robot', image=image)
 VOLUMES = {f'{R}/data': data, f'{R}/experiments/verne/runs': runs}
 
 
-@app.function(gpu='L40S', timeout=600)
+@app.function(gpu=GPUS, timeout=600)
 def check():
     # the GPU, torch on it, and one headless render of the T5 scene
     import os
@@ -81,7 +83,7 @@ def check():
     env.close()
 
 
-@app.function(gpu='L40S', volumes=VOLUMES, timeout=4 * 3600)
+@app.function(gpu=GPUS, volumes=VOLUMES, timeout=4 * 3600)
 def job(step: str, task: str, seed: int, workers: int = 8, vae: str = '', init: str = ''):
     # run.py's job (train, sweeps at n_exec 8 and 16, probe) into the runs Volume; vae: another VAE's
     # weights under the runs Volume for this run only, e.g. '03_vae_latents/vae/weights.pt'; init: a run
@@ -102,7 +104,7 @@ def job(step: str, task: str, seed: int, workers: int = 8, vae: str = '', init: 
         runs.commit()  # whatever finished, even if a later part failed
 
 
-@app.function(gpu='L40S', volumes=VOLUMES, timeout=4 * 3600)
+@app.function(gpu=GPUS, volumes=VOLUMES, timeout=4 * 3600)
 def pretrain(step: str, seed: int = 0):
     # run.py's pretrain_job (step 15 stage 1: erase the cube a colour word names, on T5 reset scenes;
     # binding probe, edit.png) into the runs Volume
