@@ -1,4 +1,6 @@
-"""Step 15: the video side also edits (pretraining, pretrain.py): given a scene and a colour word, edit_out
+"""Step 16: demos train with their recorded prompts only (colour + side); near / far stay in WORDS for the
+pretraining's sake but no demo prompt uses them.
+Step 15: the video side also edits (pretraining, pretrain.py): given a scene and a colour word, edit_out
 reads the patches entering the last video layer (what the last action layer reads) and gives the change
 that erases the named cube. The last video layer's own output is never computed (nothing reads it).
 Step 14 (captioned denoising: paints right, probe 53%) is gone.

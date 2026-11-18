@@ -42,7 +42,6 @@ import torch
 
 from . import rollouts, vae
 from .data import (
-    KINDS,
     REPO,
     canvas,
     load_cameras,
@@ -187,17 +186,13 @@ def job(step: str, task: str, seed: int, workers: int, init: str = '') -> None:
         write_json(out / 'log.json', run['log'])
         torch.save(weights, out / 'weights.pt')
 
-    # T5 is scored three ways (the prompt names the cube by colour / place / both); colour keeps the
-    # old file name, sweep_<n>.json, so it compares with earlier steps
-    for kind in KINDS if scene == 't5' else KINDS[:1]:
-        for n_exec in N_EXECS:
-            path = out / (
-                f'sweep_{n_exec}.json' if kind == 'colour' else f'sweep_{n_exec}_{kind}.json'
-            )
-            if not path.exists():
-                print(f'prompts by {kind}')
-                res = rollouts.sweep(weights, d, scene, n_exec, workers, kind=kind)
-                write_json(path, {str(s): list(r) for s, r in res.items()})
+    # the recorded prompts only (step 16: training never sees near/far, so place / both sweeps of steps
+    # 13-15 would mean nothing)
+    for n_exec in N_EXECS:
+        path = out / f'sweep_{n_exec}.json'
+        if not path.exists():
+            res = rollouts.sweep(weights, d, scene, n_exec, workers)
+            write_json(path, {str(s): list(r) for s, r in res.items()})
 
     if scene != 't1' and not (out / 'probe.json').exists():  # T1's cube barely moves
         points = rollouts.close_points(weights, d, scene, 8, workers)

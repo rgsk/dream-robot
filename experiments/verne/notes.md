@@ -316,3 +316,19 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
 - Read: erasing (colour -> place) builds the binding where the arm reads; the arm uses some of it (+6/+5,
   wrong cube -10/-5), and demo fine-tuning erodes it (99.5 -> 87.5%). One seed.
 - Next: keep the erase loss on during stage 2 (co-train, as 09b's head: 44/43), or freeze the video side.
+
+## Step 16 · erase pretraining + colour-only demo prompts, T5 seed 0 (2026-11-18), runs/16_colour_only/t5
+- Package = step 15 with the prompt mix removed: demos train (and val) with their recorded prompt ('red left');
+  sweeps colour-only. Note: steps 13-15 val batches also mixed prompts (get_batch's mix defaulted on), so their
+  val losses were not colour-only; rollouts unaffected. Stage 2 only, init = step 15's stage 1
+  (15_erase_pretrain/pretrain/seed0, probe 99.5%), local 4060.
+- Losses: train 0.020, val 0.114 (min 0.089).
+- **Rollouts 42/42 of 50** (12 colour-only, no pretraining: 23/20; 15 mixed: 22/24; place-prompt ceiling ~40;
+  09b sim-label head: 44/43). wrong_cube 4/4, no_grasp 1/3, dropped 3/1.
+- Close-point: miss 2.0 cm, slopes x 0.82 / y 0.52 (12: 7.0 cm, ~0.1-0.3). **Binding probe after demos 94.5%**
+  (15: 87.5%).
+- Read: with near/far prompts in the demo mix the arm took the place-word route and the binding eroded; with
+  colour-only prompts the action loss needs the binding, so it is kept and used. Colour now reaches the
+  place-prompt ceiling. One seed.
+- Bug: the binding probe OOMs right after the sweeps (rollout workers still releasing GPU memory), twice;
+  reran the job to finish it. Fix: probe before the sweeps.

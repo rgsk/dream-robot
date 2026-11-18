@@ -153,10 +153,10 @@ class Batch:
     acts: Tensor  # [B, CHUNK, 8] std units, the next CHUNK actions
 
 
-def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator, mix: bool = True) -> Batch:
+def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch:
     # B samples: a random demo from `ids`, a random step of it; actions past the demo's end
-    # repeat its last one, so the end of every demo is trained on too. mix: each T5 sample's prompt
-    # names the cube by colour, place or both (KINDS, uniform); False: the recorded prompt
+    # repeat its last one, so the end of every demo is trained on too. The prompt is the recorded one
+    # (step 16: colour + side only; steps 13-15 mixed in near/far prompts, train and val alike)
     first = np.searchsorted(d.episode, ids)
     lens = np.searchsorted(d.episode, ids, side='right') - first
     pick = rng.integers(0, len(ids), B)
@@ -168,11 +168,7 @@ def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator, mix: boo
         frame=d.latent[now].float(),
         state=(torch.cat([d.state[prev], d.state[now]], 1) - d.s_mean.repeat(2))
         / d.s_std.repeat(2),
-        instruction=reword(
-            d.instruction[now],
-            d.slot[now],
-            torch.tensor(rng.integers(0, 3 if mix else 1, B), device=d.slot.device),
-        ),
+        instruction=d.instruction[now],
         acts=(d.action[rows.to(d.action.device)] - d.a_mean) / d.a_std,
     )
 
@@ -239,7 +235,8 @@ def load_erased(part: str, vae_weights, dev: str = 'cuda') -> Tensor:
         print(f'rendering {len(SCENE_SEEDS[part])} T5 scenes x 2 erased -> {path}', flush=True)
         for seed in SCENE_SEEDS[part]:
             env.reset(seed=seed)
-            model = env._env.sim.model._model  # after reset: robosuite rebuilds the model each reset
+            # after reset: robosuite rebuilds the model each reset
+            model = env._env.sim.model._model
             pair = []
             for slot in (0, 1):
                 model.geom_rgba[model.geom_bodyid == env._env.cube_body_ids[slot], 3] = 0.0
