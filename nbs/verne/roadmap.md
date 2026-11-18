@@ -142,7 +142,7 @@ Successes out of 150 (3 training seeds × 50 episodes), and episodes won / lost 
 
 ---
 
-### 08 · RoPE positions (both transformers)
+### 08 · RoPE positions (both transformers) — **DONE** (step 18: stage 1 probe 100%, T5 41/42/39 on 3 seeds; 17e 36/43/38)
 
 - step 0/01: learned absolute positions, one vector per token added to its input
   (`video_pos` over state + canvas patches, `action_pos` over the chunk).
@@ -152,6 +152,8 @@ Successes out of 150 (3 training seeds × 50 episodes), and episodes won / lost 
 - why: attention then sees relative offsets (this patch is 2 to the right of that one) rather
   than learning every absolute slot; it carries over to grids of other sizes and to more frames.
 - test: 3-axis RoPE on the video side, 1-axis on the action side, drop the learned positions.
+- result (step 18): video (frame, row, column) on 12/10/10 of a head's 32 channels, present = frame 0; action
+  chunk step on all 32. Erase pretraining redone: probe 100% (15: 99.5%). T5 41/42/39 (n_exec 8, 3 seeds): no regression vs 17e (36/43/38).
 
 ---
 

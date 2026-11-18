@@ -1,4 +1,9 @@
-"""Box 04 kept as step 17e. Tried and dropped (experiments/verne/notes.md, step 17-17f): Wan's small start
+"""Step 18 (roadmap box 08): positions by RoPE, as Verne's (wan_dit.py rope_cos_sin / frame_rope, action_dit.py
+chunk_rope): each head's queries and keys are rotated by their token's place, video patches by (frame, row,
+column) of the canvas grid (the present frame is frame 0; channels 12 / 10 / 10 of the 32), action tokens by
+their step in the chunk (all 32 channels). The learned position vectors (video_pos, action_pos) are gone.
+Cross-attention rows (words, state) have no place and stay unrotated.
+Box 04 kept as step 17e. Tried and dropped (experiments/verne/notes.md, step 17-17f): Wan's small start
 on every gate with cross-attention ungated (17: frame-blind 2 of 2), all gates at 1 (17b: 1 of 2), gate 3 on
 cross-attention all small (17d: 1 of 1) or all at 1 (17c), the MLP open too (17f: tracks 3 of 3, wrong cube
 7-9 vs 17e's 4-6). Rule: the frame's path must start at least as open as the words + state path.
@@ -59,6 +64,11 @@ from .vae import Z
 P = 2  # patch side in latent cells: latent 16 x 32 -> 8 x 16 = 128 patches (16 x 16 px each)
 N_PATCH = (16 // P) * (32 // P)
 HEADS, HEAD_DIM = 4, 32  # shared by both transformers, so their keys and values can mix
+ROPE_PARTS = (
+    12,
+    10,
+    10,
+)  # a head's channels for frame, row, column (Wan's rope_parts: d − 2⌊d/3⌋, ⌊d/3⌋, ⌊d/3⌋)
 D_VIDEO, D_ACTION, LAYERS = 256, 128, 4  # the action transformer is the narrow one
 FREQ = 256  # sinusoid features of the noise level (Wan's freq_dim)
 
@@ -87,6 +97,40 @@ three, starting at 0)
 so the noise level reaches every layer and can turn whole branches up or down, not just add one
 vector at the input.
 """
+
+
+"""
+RoPE (Su et al.; Wan's rope_cos_sin, rope_apply). A head's channels in pairs (2i, 2i+1), each pair a point
+in the plane, turned by angle p·ω_i, p the token's place on one axis, ω_i = 10000^(−2i/d) over that axis's d
+channels:
+
+    (x, y) -> (x·cos − y·sin,  x·sin + y·cos)
+
+Turning a query by p and a key by p' leaves q·k depending on p − p' only (cos(a − b) = cos a cos b + sin a sin
+b): attention sees how far apart two tokens are, not where each is. The video side splits its channels
+(frame, row, column) and turns each part by that axis's place. The action side turns all channels by the
+chunk step; an action query against a video key then compares chunk step with the patch's places, as Verne.
+"""
+
+
+def rope_angles(dim: int, positions: Tensor) -> Tensor:
+    # [S] places on one axis -> [S, dim / 2] angles p·ω_i
+    w = 10000.0 ** (-torch.arange(0, dim, 2, dtype=torch.float64) / dim)
+    return torch.outer(positions.double(), w).float()
+
+
+def video_angles() -> Tensor:
+    # [N_PATCH, HEAD_DIM / 2]: patch (row r, column c) of frame 0, in the patches' order (rows, then columns)
+    r, c = torch.meshgrid(torch.arange(16 // P), torch.arange(32 // P), indexing='ij')
+    places = (torch.zeros(N_PATCH), r.flatten(), c.flatten())
+    return torch.cat([rope_angles(d, pl) for d, pl in zip(ROPE_PARTS, places)], 1)
+
+
+def rope(x: Tensor, angles: Tensor) -> Tensor:
+    # x [B, H, S, D], angles [S, D / 2] -> x with each channel pair turned by its angle (in float32)
+    a, b = x.float()[..., 0::2], x.float()[..., 1::2]
+    cos, sin = angles.cos(), angles.sin()
+    return torch.stack([a * cos - b * sin, a * sin + b * cos], -1).flatten(-2).to(x.dtype)
 
 
 def sinusoid(t: Tensor) -> Tensor:
@@ -121,14 +165,16 @@ class Block(nn.Module):
         # e [B, 9, dim] -> shift, scale, gate for attention, MLP, cross-attention, each [B, 1, dim]
         return (self.modulation + e).chunk(9, 1)
 
-    def qkv_of(self, x: Tensor, e: Tensor | None = None) -> tuple[Tensor, Tensor, Tensor]:
-        # [B, S, dim] -> q, k, v, each [B, HEADS, S, HEAD_DIM]
+    def qkv_of(
+        self, x: Tensor, angles: Tensor, e: Tensor | None = None
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        # [B, S, dim], the tokens' RoPE angles [S, HEAD_DIM / 2] -> q, k (turned), v, each [B, HEADS, S, HEAD_DIM]
         h = self.norm1(x)
         if e is not None:
             shift, scale = self.terms(e)[:2]
             h = h * (1 + scale) + shift
         qkv = rearrange(self.qkv(h), 'b s (n h d) -> n b h s d', n=3, h=HEADS)
-        return qkv[0], qkv[1], qkv[2]
+        return rope(qkv[0], angles), rope(qkv[1], angles), qkv[2]
 
     def finish(
         self,
@@ -175,7 +221,11 @@ class Verne(nn.Module):
     def __init__(self):
         super().__init__()
         self.patch_in = nn.Linear(Z * P * P, D_VIDEO)
-        self.video_pos = nn.Parameter(torch.randn(1, N_PATCH, D_VIDEO) * 0.02)
+        # RoPE angles: buffers (move with the model), not weights, not saved
+        self.register_buffer('video_angles', video_angles(), persistent=False)
+        self.register_buffer(
+            'action_angles', rope_angles(HEAD_DIM, torch.arange(CHUNK)), persistent=False
+        )
         self.video_words = nn.Embedding(1 + len(WORDS), D_VIDEO)  # row 0 'no word', then WORDS
         self.video_state = embedding_mlp(D_VIDEO)
         self.edit_out = nn.Linear(D_VIDEO, Z * P * P)  # pretraining only: tokens -> latent change
@@ -185,7 +235,6 @@ class Verne(nn.Module):
             nn.Linear(FREQ, D_ACTION), nn.SiLU(), nn.Linear(D_ACTION, D_ACTION)
         )
         self.time_out = nn.Sequential(nn.SiLU(), nn.Linear(D_ACTION, 9 * D_ACTION))  # -> e
-        self.action_pos = nn.Parameter(torch.randn(1, CHUNK, D_ACTION) * 0.02)
         self.action_words = nn.Embedding(1 + len(WORDS), D_ACTION)
         self.action_state = embedding_mlp(D_ACTION)
         self.action = nn.ModuleList([Block(D_ACTION, adaln=True) for _ in range(LAYERS)])
@@ -198,11 +247,11 @@ class Verne(nn.Module):
         # video layer's keys and values. Tokens: the 128 patches; words and state enter by cross-attention
         patches = rearrange(frame, 'b c (h p) (w q) -> b (h w) (p q c)', p=P, q=P)
         # -> each layer's keys and values, and the tokens entering the last layer [B, 128, D_VIDEO]
-        x = self.patch_in(patches) + self.video_pos
+        x = self.patch_in(patches)
         rows, rmask = rows_of(self.video_words, self.video_state, ins, state)
         kvs = []
         for i, block in enumerate(self.video):
-            q, k, v = block.qkv_of(x)
+            q, k, v = block.qkv_of(x, self.video_angles)
             kvs.append((k, v))
             if i < LAYERS - 1:  # the last layer's output is never read
                 x = block.finish(x, q, k, v, rows, rmask)
@@ -224,11 +273,11 @@ class Verne(nn.Module):
         # noisy chunk x [B, CHUNK, 8] at flow time tau [B], instruction [B, 8], state [B, 16] ->
         # velocity [B, CHUNK, 8]; the action tokens attend to the video tokens of the same layer and
         # to each other, then to the words and the state
-        y = self.action_in(x) + self.action_pos
+        y = self.action_in(x)
         e = self.time_out(self.time_in(sinusoid(1000 * (1 - tau)))).unflatten(1, (9, D_ACTION))
         rows, rmask = rows_of(self.action_words, self.action_state, ins, state)
         for block, (k_video, v_video) in zip(self.action, kvs):
-            q, k, v = block.qkv_of(y, e)
+            q, k, v = block.qkv_of(y, self.action_angles, e)
             k, v = torch.cat([k_video, k], 2), torch.cat([v_video, v], 2)
             y = block.finish(y, q, k, v, rows, rmask, e)
         return self.action_out(y)

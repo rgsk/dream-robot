@@ -406,3 +406,23 @@ Rule: the frame's path (self-attention) must start at least as open as the words
 - 17e seed 2 on Modal got an A100-40GB (L40S out of capacity; fallback list): ~40 s per 1000 steps vs ~12 s on
   the local 4060. User: earlier L40S runs on Modal were much faster. Settle later: time an L40S vs A100 run
   (per-1000-step wall time from the dashboard), and check CPU count / workers on each.
+
+## Step 18 · roadmap box 08: RoPE on both sides (video (frame, row, column) 12/10/10 channels; action chunk step), learned positions gone, runs/18_rope
+- Stage 1 (erase pretraining redone, step 15's used learned positions): erase acc 100% from step 1000, val right
+  0.0035 (15: 0.0039), **probe 100%** (15: 99.5%; untrained 69.5%).
+- Stage 2 seed 0: **41/40 of 50**, wrong_cube 5/5, no_grasp 4/5. Miss 2.7 cm, slopes 0.72 / 0.58 (tracking).
+  Probe 93.5%. Val 0.110. (17e: 36/43/38.)
+- Close-point probe: one rollout worker hung in EGL render (GPU 7.7/8 GB); killed by hand, the job finished it.
+- Seeds 1-2 (Modal, A100): **42/40, 39/39**, wrong_cube 5/4, 6/4; slopes 0.76/0.39, 0.70/0.48. RoPE: 3 of 3 track,
+  41/42/39 vs 17e 36/43/38: no regression (slightly up).
+
+## Step 19 · video pretraining by clips (image-to-video, Wan I2V-style), no actions / labels / erase
+- 19a clips (data.clip_rows): present at a random step + 7 future frames 32 steps apart (224 steps; T5 episodes
+  192-324, median 251), held at the episode's end. scripts/clip_film_check.py on the T5 demos: from the reset a
+  clip shows the whole task (named cube -> named box); from a random step most clips start after the grasp, so
+  only ~1/3 of clips need the colour -> cube lookup. Knob if the probe doesn't rise: bias the present early.
+- 19b model.clip_velocity: present (frame 0) attends to itself only, future (1-7) to all; noise level = an
+  embedding added to the future tokens (no adaptive norm on the video side yet); gen_out after the last layer;
+  RoPE frame axis. Checked: the present's tokens are identical with any future and equal the policy path's.
+  scripts/clip_overfit_check.py (8 clips, 1500 steps): loss 2.50 -> 0.11, dream mse 0.048 (copying the present:
+  1.35); dreams match the real clips (scratch/clip_overfit.png).
