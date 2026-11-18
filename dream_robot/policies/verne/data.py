@@ -177,7 +177,7 @@ def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator, mix: boo
     )
 
 
-# step 14: T5 reset scenes (no demo, home pose) for the video side's pretraining and the binding probe
+# T5 reset scenes (no demo, home pose) for the video side's pretraining (steps 14-15) and the binding probe
 SCENE_SEEDS = {'train': range(5000, 6000), 'val': range(9000, 9200)}
 
 
@@ -223,11 +223,40 @@ def load_scenes(part: str, vae_weights, dev: str = 'cuda') -> Scenes:
     return Scenes(**{k: torch.tensor(z[k], device=dev) for k in z.files})
 
 
-def captions(sc: Scenes, ids: Tensor, which: Tensor) -> Tensor:
-    # one-cube captions [B, 8] for scenes `ids`: slot `which` [B] (0/1) by place and colour, e.g.
-    # 'near red' -> near and red on; no side words (a scene has no target bin)
+def load_erased(part: str, vae_weights, dev: str = 'cuda') -> Tensor:
+    # [N, 2, Z, 16, 32] float16: each SCENE_SEEDS[part] scene's first frame with its near (0) / far (1)
+    # cube hidden (alpha 0, both cameras re-rendered), through the VAE; rows as load_scenes. Rendered
+    # once into data/robosuite/t5_scenes/<part>_<VAE tag>_erased.npy
+    import hashlib
+
+    tag = hashlib.sha256(Path(vae_weights).read_bytes()).hexdigest()[:8]
+    path = REPO / 'data/robosuite/t5_scenes' / f'{part}_{tag}_erased.npy'
+    if not path.exists():
+        from . import vae as vae_mod
+        from .rollouts import make_env
+
+        enc, env, out = vae_mod.load(vae_weights), make_env('t5'), []
+        print(f'rendering {len(SCENE_SEEDS[part])} T5 scenes x 2 erased -> {path}', flush=True)
+        for seed in SCENE_SEEDS[part]:
+            env.reset(seed=seed)
+            model = env._env.sim.model._model  # after reset: robosuite rebuilds the model each reset
+            pair = []
+            for slot in (0, 1):
+                model.geom_rgba[model.geom_bodyid == env._env.cube_body_ids[slot], 3] = 0.0
+                env._raw = env._env._get_observations(force_update=True)
+                pair.append(frame_of(env._observe(), enc)[0].half().cpu().numpy())
+                env._paint()  # both cubes back, as reset painted them
+            assert np.abs(pair[0] - pair[1]).max() > 0.5, f'seed {seed}: erasing changed nothing'
+            out.append(np.stack(pair))
+        env.close()
+        np.save(path.with_suffix('.partial.npy'), np.stack(out))
+        path.with_suffix('.partial.npy').rename(path)  # never a half-written file
+    return torch.tensor(np.load(path), device=dev)
+
+
+def colour_prompts(sc: Scenes, ids: Tensor, which: Tensor) -> Tensor:
+    # [B, 8]: the colour word of slot `which` [B] (0 near, 1 far) in scenes `ids`, nothing else ('red')
     out = torch.zeros(len(ids), len(WORDS), device=ids.device)
-    out[torch.arange(len(ids)), which] = 1.0  # PLACES[which]
     out[torch.arange(len(ids)), COLOURS.start + sc.colours[ids, which]] = 1.0
     return out
 

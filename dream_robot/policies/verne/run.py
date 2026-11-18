@@ -6,7 +6,7 @@ only read those files.
     python -m dream_robot.policies.verne.run queue 02_cosine_lr --tasks t1 t1-wide --seeds 0 1 2
 
     python -m dream_robot.policies.verne.run vae 07_instruction   (the canvas VAE on VAE_DATA)
-    python -m dream_robot.policies.verne.run pretrain 14_caption_pretrain 0   (step 14 stage 1, pretrain.py)
+    python -m dream_robot.policies.verne.run pretrain 15_erase_pretrain 0   (step 15 stage 1, pretrain.py)
 
 `queue` runs its jobs one after another, each in its own process (so each holds only its own
 task's frames on the GPU), and writes each job's output to <run dir>/job.log. Detached, so a
@@ -152,7 +152,9 @@ def write_json(path: Path, obj) -> None:
     path.with_suffix('.partial').rename(path)  # never a half-written file
 
 
-def job(step: str, task: str, seed: int, workers: int) -> None:
+def job(step: str, task: str, seed: int, workers: int, init: str = '') -> None:
+    # init: a run folder under RUNS whose weights.pt training starts from (step 15: the stage 1 run,
+    # '15_erase_pretrain/pretrain/seed0'), else a fresh Verne
     out = RUNS / step / task / f'seed{seed}'
     out.mkdir(parents=True, exist_ok=True)
     meta = source() | {
@@ -162,6 +164,7 @@ def job(step: str, task: str, seed: int, workers: int) -> None:
         'seed': seed,
         'steps': STEPS,
         'vae': str(vae.WEIGHTS.relative_to(REPO)),
+        'init': init,
     }
     if (out / 'meta.json').exists():
         old = json.loads((out / 'meta.json').read_text())
@@ -178,7 +181,8 @@ def job(step: str, task: str, seed: int, workers: int) -> None:
     if (out / 'weights.pt').exists():
         weights = torch.load(out / 'weights.pt')
     else:
-        run = train(d, train_ids, val_ids, STEPS, seed=seed, ckpt=out / 'ckpt')
+        start = torch.load(RUNS / init / 'weights.pt') if init else None
+        run = train(d, train_ids, val_ids, STEPS, seed=seed, ckpt=out / 'ckpt', init=start)
         weights = run['weights']
         write_json(out / 'log.json', run['log'])
         torch.save(weights, out / 'weights.pt')
@@ -208,6 +212,17 @@ def job(step: str, task: str, seed: int, workers: int) -> None:
                     for s, (c, g) in points.items()
                 },
             },
+        )
+    if scene == 't5' and not (out / 'patch_binding_probe.json').exists():
+        # does the binding survive (or appear in) the demo training? as pretrain_job's probe
+        from . import pretrain as pt
+        from .data import load_scenes
+
+        net = Verne().cuda()
+        net.load_state_dict(weights)
+        sc, val = load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS)
+        write_json(
+            out / 'patch_binding_probe.json', pt.binding_probe(net, sc, val, d.s_mean, d.s_std)
         )
     print(f'done: {out}')
 
@@ -288,14 +303,15 @@ def train_vae(
     print(f'done: {out}')
 
 
-PRETRAIN_STEPS = 20000
+PRETRAIN_STEPS = 5000  # step 15: the probe passes after 300; step 14 overfit past ~6k
 
 
 def pretrain_job(step: str, seed: int) -> None:
-    # step 14 stage 1 -> RUNS/<step>/pretrain/seed<k>/: meta.json, log.json, weights.pt (a whole Verne, its
-    # action side untrained), patch_binding_probe.json (this model and an untrained one), denoise.png
+    # step 15 stage 1 (erase the named cube) -> RUNS/<step>/pretrain/seed<k>/: meta.json, log.json,
+    # weights.pt (a whole Verne, its action side untrained), patch_binding_probe.json (this model and an
+    # untrained one), edit.png
     from . import pretrain as pt
-    from .data import load_scenes
+    from .data import load_erased, load_scenes
 
     out = RUNS / step / 'pretrain' / f'seed{seed}'
     out.mkdir(parents=True, exist_ok=True)
@@ -315,6 +331,7 @@ def pretrain_job(step: str, seed: int) -> None:
     else:
         write_json(out / 'meta.json', meta | {'started': time.strftime('%Y-%m-%d %H:%M:%S')})
     sc, val = load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS)
+    erased, val_erased = load_erased('train', vae.WEIGHTS), load_erased('val', vae.WEIGHTS)
     # the T5 demos' state stats, which stage 2 will use too
     state, _, episode = load_table(TASKS['t5'][0])
     train_ids, _ = split('t5', int(episode.max()) + 1)
@@ -324,7 +341,9 @@ def pretrain_job(step: str, seed: int) -> None:
     if (out / 'weights.pt').exists():
         weights = torch.load(out / 'weights.pt')
     else:
-        run = pt.pretrain(sc, val, s_mean, s_std, PRETRAIN_STEPS, seed=seed, ckpt=out / 'ckpt')
+        run = pt.pretrain(
+            sc, erased, val, val_erased, s_mean, s_std, PRETRAIN_STEPS, seed=seed, ckpt=out / 'ckpt'
+        )
         weights = run['weights']
         write_json(out / 'log.json', run['log'])
         torch.save(weights, out / 'weights.pt')
@@ -339,11 +358,11 @@ def pretrain_job(step: str, seed: int) -> None:
             out / 'patch_binding_probe.json',
             {'pretrained': pt.binding_probe(net, sc, val, s_mean, s_std), 'untrained': floor},
         )
-    if not (out / 'denoise.png').exists():
+    if not (out / 'edit.png').exists():
         import imageio.v3 as iio
 
-        grid = pt.denoise_picture(net, vae.load(vae.WEIGHTS), val, s_mean, s_std)
-        iio.imwrite(out / 'denoise.png', grid.transpose(1, 2, 0))
+        grid = pt.edit_picture(net, vae.load(vae.WEIGHTS), val, val_erased, s_mean, s_std)
+        iio.imwrite(out / 'edit.png', grid.transpose(1, 2, 0))
     print(f'done: {out}')
 
 
@@ -373,6 +392,11 @@ if __name__ == '__main__':
     j.add_argument('step')
     j.add_argument('task', help="a TASKS name, or 'base+extra[:fail]+...' (see load_task)")
     j.add_argument('seed', type=int)
+    j.add_argument(
+        '--init',
+        default='',
+        help='a run folder under RUNS to start from, e.g. 15_erase_pretrain/pretrain/seed0',
+    )
     pre = sub.add_parser('pretrain')
     pre.add_argument('step')
     pre.add_argument('seed', type=int)
@@ -407,7 +431,7 @@ if __name__ == '__main__':
     elif a.cmd == 'synced-from':
         print(json.dumps(source()))
     elif a.cmd == 'job':
-        job(a.step, a.task, a.seed, a.workers)
+        job(a.step, a.task, a.seed, a.workers, a.init)
     elif a.cmd == 'pretrain':
         pretrain_job(a.step, a.seed)
     else:

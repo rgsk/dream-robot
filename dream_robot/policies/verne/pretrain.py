@@ -1,17 +1,17 @@
-"""Step 14, stage 1: the video side learns to paint the words, as Wan learned from captioned video.
+"""Step 15, stage 1: the video side learns to erase the cube a colour word names.
 
-A T5 reset scene's frame (no demo), noised to a random noise time tau, and a one-cube caption
-('near red': that slot's place and colour) -> the clean frame (x-prediction). At low noise the
-frame shows its colours; at high noise only the caption says which cube is which colour, so the
-words must reach the right place.
+A T5 reset scene's first frame (no demo) and one colour word ('red') -> the change that erases that
+cube: latent(scene with the cube hidden) − latent(scene). Every scene comes twice, the same picture
+with each cube's colour, so only the word says which cube goes: the model must find the named colour's
+place (colour -> place), the lookup the arm needs. The change is read from the patches entering the
+last video layer, the tokens whose keys and values the last action layer reads, so the lookup has to
+happen where the arm can see it. (Step 14 painted from captions instead: place -> colour, probe 53%.)
 
-Then binding_probe asks whether that also built the policy's lookup (colour -> place): frozen
-weights, a clean frame and a colour prompt ('red left'), a linear probe on the patches entering
-the last video layer (what the last action layer reads) -> near / far. An untrained model scores
-~73% (32,768 features from 1000 scenes), step 13 71%.
+Then binding_probe, frozen weights: a clean frame and the reset's colour prompt ('red left'), a linear
+probe on those patches -> near / far. Untrained ~68-73% (32,768 features from 1000 scenes), step 13
+71%, step 14 53%. Rule: >= 85% stage 2, <= 76% stop.
 
-    noisy = (1 − τ)·ε + τ·x,   ε ~ N(0, 1),  τ ~ U(0, 1)          (τ = 1 clean, as the action side's flow)
-    loss  = ‖denoise(noisy, caption, τ) − x‖²
+    loss = ‖edit(scene, colour) − (erased − scene)‖²
 """
 
 from pathlib import Path
@@ -24,10 +24,8 @@ from frozendict import frozendict
 from torch import Tensor
 
 from . import lr as lr_mod
-from .data import PLACES, Scenes, captions
+from .data import PLACES, Scenes, colour_prompts
 from .model import Verne
-
-VAL_TAUS = (0.1, 0.5)  # high noise (colours gone: only the caption tells) and middle
 
 
 def scene_state(sc: Scenes, ids: Tensor, s_mean: Tensor, s_std: Tensor) -> Tensor:
@@ -35,38 +33,41 @@ def scene_state(sc: Scenes, ids: Tensor, s_mean: Tensor, s_std: Tensor) -> Tenso
     return (sc.state[ids].repeat(1, 2) - s_mean.repeat(2)) / s_std.repeat(2)
 
 
-def pretrain_loss(
-    net: Verne, frame: Tensor, state: Tensor, cap: Tensor, tau: Tensor, noise: Tensor
-) -> Tensor:
-    t = tau[:, None, None, None]
-    return F.mse_loss(net.denoise((1 - t) * noise + t * frame, state, cap, tau), frame)
+def target(sc: Scenes, erased: Tensor, ids: Tensor, which: Tensor) -> Tensor:
+    # [B, Z, 16, 32] the change that hides slot `which` in scenes `ids`
+    return erased[ids, which].float() - sc.latent[ids].float()
 
 
 @torch.no_grad()
-def val_losses(net: Verne, sc: Scenes, s_mean: Tensor, s_std: Tensor) -> dict[str, float]:
-    # each val scene at each VAL_TAUS with fixed noise, captioned right ('near red' where near is
-    # red) and
-    # wrong (the same place with the other cube's colour); wrong - right = how much the caption is
-    # used
-    g = torch.Generator(device=sc.latent.device).manual_seed(0)
-    ids = torch.arange(len(sc.slot), device=sc.latent.device)
-    which = torch.randint(0, 2, (len(ids),), device=ids.device, generator=g)
-    right = captions(sc, ids, which)
-    wrong = right.clone()
-    wrong[:, 2:6] = captions(sc, ids, 1 - which)[:, 2:6]  # the other cube's colour word, same place
-    frame, state = sc.latent.float(), scene_state(sc, ids, s_mean, s_std)
-    noise = torch.randn(frame.shape, device=frame.device, generator=g)
-    out = {}
-    for tau in VAL_TAUS:
-        t = torch.full((len(ids),), tau, device=ids.device)
-        for name, cap in (('right', right), ('wrong', wrong)):
-            out[f'{name}_{tau}'] = pretrain_loss(net, frame, state, cap, t, noise).item()
-    return out
+def val_numbers(net: Verne, sc: Scenes, erased: Tensor, s_mean: Tensor, s_std: Tensor) -> dict:
+    # every val scene x both cubes: loss with the right colour word and with the other cube's
+    # (wrong - right = how much the word is used), and erase accuracy: the predicted change is larger
+    # on the named cube's cells than on the other cube's (cells weighted by each cube's true change)
+    net.eval()
+    n = len(sc.slot)
+    ids = torch.arange(n, device=sc.latent.device).repeat(2)
+    which = torch.arange(2, device=ids.device).repeat_interleave(n)
+    state = scene_state(sc, ids, s_mean, s_std)
+    true = target(sc, erased, ids, which)
+    other = target(sc, erased, ids, 1 - which)
+    pred = net.edit(sc.latent[ids].float(), state, colour_prompts(sc, ids, which))
+    wrong = net.edit(sc.latent[ids].float(), state, colour_prompts(sc, ids, 1 - which))
+    size = lambda c: c.abs().sum(1)  # [B, 16, 32] per cell, over channels
+    on_named = (size(pred) * size(true)).sum((1, 2))
+    on_other = (size(pred) * size(other)).sum((1, 2))
+    net.train()
+    return {
+        'right': F.mse_loss(pred, true).item(),
+        'wrong': F.mse_loss(wrong, true).item(),
+        'erase_acc': (on_named > on_other).float().mean().item(),
+    }
 
 
 def pretrain(
     sc: Scenes,
+    erased: Tensor,
     val: Scenes,
+    val_erased: Tensor,
     s_mean: Tensor,
     s_std: Tensor,
     steps: int,
@@ -75,9 +76,8 @@ def pretrain(
     seed: int = 0,
     ckpt: Path | None = None,
 ) -> frozendict[str, Any]:
-    # out: {'weights': state dict on the cpu (the whole Verne: its action side untouched), 'log':
-    # per 1000
-    # steps {step, train, right_0.1, wrong_0.1, right_0.5, wrong_0.5}}
+    # out: {'weights': state dict on the cpu (the whole Verne: its action side untouched), 'log': per
+    # 1000 steps {step, train, right, wrong, erase_acc}}
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     dev = sc.latent.device
@@ -88,27 +88,24 @@ def pretrain(
         lr_mod.checkpoint(ckpt, step, steps, 0.2, 2000, net, opt, step, rng, log)
         lr_mod.set_lr(opt, lr * lr_mod.cosine(step, steps))
         ids = torch.tensor(rng.integers(0, len(sc.slot), B), device=dev)
-        which = torch.tensor(rng.integers(0, 2, B), device=dev)  # which cube the caption names
-        frame = sc.latent[ids].float()
+        which = torch.tensor(rng.integers(0, 2, B), device=dev)  # which cube the word names
         with torch.autocast('cuda', dtype=torch.bfloat16):
-            l = pretrain_loss(
-                net,
-                frame,
+            pred = net.edit(
+                sc.latent[ids].float(),
                 scene_state(sc, ids, s_mean, s_std),
-                captions(sc, ids, which),
-                torch.rand(B, device=dev),
-                torch.randn_like(frame),
+                colour_prompts(sc, ids, which),
             )
+            loss = F.mse_loss(pred.float(), target(sc, erased, ids, which))
         opt.zero_grad()
-        l.backward()
+        loss.backward()
         torch.nn.utils.clip_grad_norm_(net.parameters(), lr_mod.CLIP)
         opt.step()
         if step % 1000 == 0:
-            v = val_losses(net, val, s_mean, s_std)
-            log.append({'step': step, 'train': l.item()} | v)
+            v = val_numbers(net, val, val_erased, s_mean, s_std)
+            log.append({'step': step, 'train': loss.item()} | v)
             print(
-                f'step {step:6d}   train {l.item():.3f}   tau 0.1 right {v["right_0.1"]:.3f} wrong '
-                f'{v["wrong_0.1"]:.3f}   tau 0.5 right {v["right_0.5"]:.3f} wrong {v["wrong_0.5"]:.3f}',
+                f'step {step:6d}   train {loss.item():.4f}   val right {v["right"]:.4f}   '
+                f'wrong {v["wrong"]:.4f}   erase acc {v["erase_acc"]:.3f}',
                 flush=True,
             )
     return frozendict(weights={k: v.cpu() for k, v in net.state_dict().items()}, log=log)
@@ -161,24 +158,19 @@ def binding_probe(
 
 
 @torch.no_grad()
-def denoise_picture(
-    net: Verne, vae, val: Scenes, s_mean: Tensor, s_std: Tensor, n: int = 4
+def edit_picture(
+    net: Verne, vae, val: Scenes, val_erased: Tensor, s_mean: Tensor, s_std: Tensor, n: int = 4
 ) -> np.ndarray:
-    # uint8 [3, H, W]: per val scene (column) the clean canvas, the noised one at tau 0.1, and
-    # one-shot
-    # predictions captioned 'near <its colour>' and 'far <its colour>' (each true, about a
-    # different cube)
+    # uint8 [3, H, W]: per val scene (column) the scene, then scene + predicted change for the near
+    # cube's colour and for the far cube's colour (the right cube should vanish in each)
     net.eval()
     dev = val.latent.device
     ids = torch.arange(n, device=dev)
     frame, state = val.latent[ids].float(), scene_state(val, ids, s_mean, s_std)
-    g = torch.Generator(device=dev).manual_seed(0)
-    tau = torch.full((n,), 0.1, device=dev)
-    noisy = 0.9 * torch.randn(frame.shape, device=dev, generator=g) + 0.1 * frame
-    rows = [frame, noisy]
+    rows = [frame]
     for which in (0, 1):
-        cap = captions(val, ids, torch.full((n,), which, device=dev))
-        rows.append(net.denoise(noisy, state, cap, tau))
+        w = torch.full((n,), which, device=dev)
+        rows.append(frame + net.edit(frame, state, colour_prompts(val, ids, w)))
 
     def decode(z: Tensor) -> Tensor:
         x = vae.dec(z * vae.z_std[:, None, None] + vae.z_mean[:, None, None]).clamp(-1, 1)

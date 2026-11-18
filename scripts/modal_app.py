@@ -4,7 +4,7 @@ From the repo root:
 
     uv run modal run scripts/modal_app.py::check                     # GPU, torch, headless MuJoCo
     uv run modal run scripts/modal_app.py::job --step 07_instruction --task t5 --seed 0
-    uv run modal run scripts/modal_app.py::pretrain --step 14_caption_pretrain --seed 0
+    uv run modal run scripts/modal_app.py::pretrain --step 15_erase_pretrain --seed 0
 
 The image is the project's uv.lock (exported without the dev group) plus the EGL loader and ffmpeg that MuJoCo and
 the video decoder need (as scripts/runpod_setup.sh). The package code is copied in at each run, so
@@ -82,9 +82,10 @@ def check():
 
 
 @app.function(gpu='L40S', volumes=VOLUMES, timeout=4 * 3600)
-def job(step: str, task: str, seed: int, workers: int = 8, vae: str = ''):
+def job(step: str, task: str, seed: int, workers: int = 8, vae: str = '', init: str = ''):
     # run.py's job (train, sweeps at n_exec 8 and 16, probe) into the runs Volume; vae: another VAE's
-    # weights under the runs Volume for this run only, e.g. '03_vae_latents/vae/weights.pt'
+    # weights under the runs Volume for this run only, e.g. '03_vae_latents/vae/weights.pt'; init: a run
+    # folder on the runs Volume to start training from, e.g. '15_erase_pretrain/pretrain/seed0'
     import os
     import sys
 
@@ -96,15 +97,15 @@ def job(step: str, task: str, seed: int, workers: int = 8, vae: str = ''):
     from dream_robot.policies.verne import run
 
     try:
-        run.job(step, task, seed, workers)
+        run.job(step, task, seed, workers, init)
     finally:
         runs.commit()  # whatever finished, even if a later part failed
 
 
 @app.function(gpu='L40S', volumes=VOLUMES, timeout=4 * 3600)
 def pretrain(step: str, seed: int = 0):
-    # run.py's pretrain_job (step 14 stage 1: captioned denoising on T5 reset scenes, binding probe,
-    # denoise.png) into the runs Volume
+    # run.py's pretrain_job (step 15 stage 1: erase the cube a colour word names, on T5 reset scenes;
+    # binding probe, edit.png) into the runs Volume
     import os
     import sys
 

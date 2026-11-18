@@ -26,13 +26,17 @@ def train(
     seed: int = 0,
     ckpt: Path | None = None,
     extend_from: Path | None = None,
+    init: dict | None = None,
 ) -> frozendict[str, Any]:
     # ckpt: a folder for step<N>.pt (every 2000) / stable.pt (resumes from the latest); extend_from:
-    # a shorter run's ckpt folder to continue from its stable.pt
+    # a shorter run's ckpt folder to continue from its stable.pt; init: weights to start from (step 15:
+    # the stage 1 pretrained Verne), else a fresh one
     # out: {'weights': state dict on the cpu, 'log': (step, train loss, val loss) every 1000 steps}
     torch.manual_seed(seed)
     rng, val_rng = np.random.default_rng(seed), np.random.default_rng(1000 + seed)
     net = Verne().to(d.latent.device)
+    if init is not None:
+        net.load_state_dict(init)
     opt = torch.optim.AdamW(net.parameters(), lr=lr)
     val = [get_batch(d, val_ids, 64, val_rng) for _ in range(4)]  # fixed held-out batches
     start, log = lr_mod.resume(ckpt, extend_from, steps, decay, net, opt, rng)

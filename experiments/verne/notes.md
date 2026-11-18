@@ -300,3 +300,19 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
 - **Probe: pretrained 53%** (untrained in the same job 68%), ceiling 100% -> stop, no stage 2.
 - Read: captioned painting builds place -> colour ('near? paint red') but not colour -> place, the lookup the
   arm needs; at this scale Verne's route to binding doesn't carry over. Next: near/far head pretraining (13a).
+
+## Step 15 · erase pretraining: a colour word erases its cube, then demos, T5 seed 0 (2026-11-18), runs/15_erase_pretrain
+- Step 14's denoising replaced. Stage 1 (pretrain.py): reset scene + one colour word ('red') -> the change that
+  hides that cube (latent(erased) − latent(scene); data.load_erased, alpha 0 + re-render, both cubes per scene),
+  read by edit_out from the patches entering the last video layer (the last action layer's read point; the last
+  video layer's output no longer computed). 5k steps, local 4060. Bug caught by erase_check.py: the loader first
+  hid cubes in a stale sim model (robosuite rebuilds it each reset) -> erased == scene; now asserted.
+- Stage 1: erase accuracy 100% from step 1000; val right 0.0039, wrong word 0.37; no overfit. edit.png: named
+  cube erased in both cameras, 4/4. **Binding probe 99.5%** (untrained 69%, step 14 53%).
+- Stage 2 (run.py job --init, local 4060): whole model fine-tuned on the 150 demos, three prompt kinds.
+  Val 0.108 (13: 0.093).
+- **Rollouts (n_exec 8 / 16): colour 22/24** (13: 16/19), wrong cube 17/18 (13: 27/23); place 42/40, both 41/43.
+  Close-point: miss 6.2 cm, slopes 0.21 / 0.27 (13: 8.6, ~0). **Binding probe after fine-tune 87.5%** (stage 1 99.5%).
+- Read: erasing (colour -> place) builds the binding where the arm reads; the arm uses some of it (+6/+5,
+  wrong cube -10/-5), and demo fine-tuning erodes it (99.5 -> 87.5%). One seed.
+- Next: keep the erase loss on during stage 2 (co-train, as 09b's head: 44/43), or freeze the video side.

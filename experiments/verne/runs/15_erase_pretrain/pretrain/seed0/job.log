@@ -1,0 +1,14 @@
+step      0   train 0.4357   val right 0.3884   wrong 0.3902   erase acc 0.495
+step   1000   train 0.0071   val right 0.0091   wrong 0.3605   erase acc 1.000
+step   2000   train 0.0034   val right 0.0054   wrong 0.3701   erase acc 1.000
+step   3000   train 0.0025   val right 0.0043   wrong 0.3716   erase acc 1.000
+step   4000   train 0.0024   val right 0.0040   wrong 0.3723   erase acc 1.000
+step   5000   train 0.0022   val right 0.0039   wrong 0.3725   erase acc 1.000
+probe, untrained Verne:
+probe, prompt colour: train 1.000   val 0.690
+probe, prompt both  : train 1.000   val 1.000
+probe, pretrained:
+probe, prompt colour: train 1.000   val 0.995
+probe, prompt both  : train 1.000   val 1.000
+done: /home/rahul/Documents/codes/ml/dream-robot/experiments/verne/runs/15_erase_pretrain/pretrain/seed0
+exit 0
