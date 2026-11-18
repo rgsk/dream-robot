@@ -177,6 +177,61 @@ def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator, mix: boo
     )
 
 
+# step 14: T5 reset scenes (no demo, home pose) for the video side's pretraining and the binding probe
+SCENE_SEEDS = {'train': range(5000, 6000), 'val': range(9000, 9200)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class Scenes:
+    latent: Tensor  # [N, Z, 16, 32] float16, the first frame's canvas through the VAE
+    state: Tensor  # [N, 8] raw, the home pose
+    instruction: Tensor  # [N, 8] the reset's prompt ('red left'), WORDS one-hot
+    slot: Tensor  # [N] its named cube's slot (0 near, 1 far)
+    colours: Tensor  # [N, 2] each slot's colour, an index into the colour words (0 red .. 3 yellow)
+
+
+def load_scenes(part: str, vae_weights, dev: str = 'cuda') -> Scenes:
+    # part 'train' / 'val' (SCENE_SEEDS). Rendered once (a few minutes) into
+    # data/robosuite/t5_scenes/<part>_<first 8 of the VAE weights' sha256>_colours.npz, then read back
+    import hashlib
+
+    tag = hashlib.sha256(Path(vae_weights).read_bytes()).hexdigest()[:8]
+    path = REPO / 'data/robosuite/t5_scenes' / f'{part}_{tag}_colours.npz'
+    if not path.exists():
+        from . import vae as vae_mod
+        from .rollouts import make_env
+
+        enc, env = vae_mod.load(vae_weights), make_env('t5')
+        colour_words = WORDS[COLOURS]
+        out = {k: [] for k in ('latent', 'state', 'instruction', 'slot', 'colours')}
+        print(f'rendering {len(SCENE_SEEDS[part])} T5 scenes -> {path}', flush=True)
+        for seed in SCENE_SEEDS[part]:
+            obs = env.reset(seed=seed)
+            ins = env.instruction
+            colours = [ins.distractor_color, ins.distractor_color]
+            colours[ins.target_slot] = ins.color
+            out['latent'].append(frame_of(obs, enc)[0].half().cpu().numpy())
+            out['state'].append(np.asarray(obs.state, dtype=np.float32))
+            out['instruction'].append(one_hot(env.prompt))
+            out['slot'].append(ins.target_slot)
+            out['colours'].append([colour_words.index(c) for c in colours])
+        env.close()
+        path.parent.mkdir(exist_ok=True)
+        np.savez(path.with_suffix('.partial.npz'), **{k: np.stack(v) for k, v in out.items()})
+        path.with_suffix('.partial.npz').rename(path)  # never a half-written file
+    z = np.load(path)
+    return Scenes(**{k: torch.tensor(z[k], device=dev) for k in z.files})
+
+
+def captions(sc: Scenes, ids: Tensor, which: Tensor) -> Tensor:
+    # one-cube captions [B, 8] for scenes `ids`: slot `which` [B] (0/1) by place and colour, e.g.
+    # 'near red' -> near and red on; no side words (a scene has no target bin)
+    out = torch.zeros(len(ids), len(WORDS), device=ids.device)
+    out[torch.arange(len(ids)), which] = 1.0  # PLACES[which]
+    out[torch.arange(len(ids)), COLOURS.start + sc.colours[ids, which]] = 1.0
+    return out
+
+
 def frame_of(obs, vae) -> Tensor:
     # a sim observation -> the model's frame [1, Z, 16, 32]: the canvas [top | wrist] now through
     # the frozen VAE, as the training latents were made

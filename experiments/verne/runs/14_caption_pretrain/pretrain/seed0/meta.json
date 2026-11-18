@@ -1,0 +1,10 @@
+{
+ "commit": "ff22575",
+ "dirty": true,
+ "package_hash": "b6027180d8b9",
+ "gpu": "NVIDIA L40S",
+ "seed": 0,
+ "steps": 20000,
+ "vae": "experiments/verne/runs/07_instruction/vae_wsd/weights.pt",
+ "started": "2026-11-18 14:01:04"
+}

@@ -1,0 +1,22 @@
+{
+ "pretrained": {
+  "colour": {
+   "train": 1.0,
+   "val": 0.5299999713897705
+  },
+  "both": {
+   "train": 1.0,
+   "val": 1.0
+  }
+ },
+ "untrained": {
+  "colour": {
+   "train": 1.0,
+   "val": 0.6800000071525574
+  },
+  "both": {
+   "train": 1.0,
+   "val": 1.0
+  }
+ }
+}

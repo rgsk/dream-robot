@@ -1,4 +1,7 @@
-"""Step 13: near / far join the words (the cube's place: slot 0 is nearer the robot); training prompts
+"""Step 14: the video side also cleans noised frames (pretraining, pretrain.py): its tokens get the frame's
+noise time (tau 1 = clean: the policy always reads a clean frame) and frame_out turns its last layer's output
+back into a latent. Only the pretraining reads that output; the policy uses the video side as before.
+Step 13: near / far join the words (the cube's place: slot 0 is nearer the robot); training prompts
 name the T5 cube by colour, place or both (data.reword), and T5 is scored with each.
 Step 12 (roadmap box 09): the state as one more cross-attention row on both sides, next to the word
 rows, holding the previous control step and now (16 numbers: a sense of velocity); the state token is
@@ -87,6 +90,10 @@ class Verne(nn.Module):
         self.video_pos = nn.Parameter(torch.randn(1, N_PATCH, D_VIDEO) * 0.02)
         self.video_words = nn.Embedding(1 + len(WORDS), D_VIDEO)  # row 0 'no word', then WORDS
         self.video_state = embedding_mlp(D_VIDEO)
+        self.video_time = nn.Sequential(
+            nn.Linear(1, D_VIDEO), nn.SiLU(), nn.Linear(D_VIDEO, D_VIDEO)
+        )
+        self.frame_out = nn.Linear(D_VIDEO, Z * P * P)  # pretraining only: tokens -> latent patches
         self.video = nn.ModuleList([Block(D_VIDEO) for _ in range(LAYERS)])
         self.action_in = nn.Linear(8, D_ACTION)
         self.time_in = nn.Sequential(
@@ -98,18 +105,33 @@ class Verne(nn.Module):
         self.action = nn.ModuleList([Block(D_ACTION) for _ in range(LAYERS)])
         self.action_out = nn.Linear(D_ACTION, 8)
 
-    def see(self, frame: Tensor, state: Tensor, ins: Tensor) -> list[tuple[Tensor, Tensor]]:
+    def video_side(
+        self, frame: Tensor, state: Tensor, ins: Tensor, tau: Tensor | None = None
+    ) -> tuple[list[tuple[Tensor, Tensor]], Tensor]:
         # latent [B, Z, 16, 32] (normalised), state [B, 16] (previous, now), instruction [B, 8] -> each
         # video layer's keys and values. Tokens: the 128 patches; words and state enter by cross-attention
         patches = rearrange(frame, 'b c (h p) (w q) -> b (h w) (p q c)', p=P, q=P)
-        x = self.patch_in(patches) + self.video_pos
+        # tau [B]: the frame's noise time (1 clean, 0 pure noise; None = clean). -> each layer's keys and
+        # values, and the last layer's output [B, 128, D_VIDEO]
+        if tau is None:
+            tau = torch.ones(len(frame), device=frame.device)
+        x = self.patch_in(patches) + self.video_pos + self.video_time(tau[:, None])[:, None]
         rows, rmask = rows_of(self.video_words, self.video_state, ins, state)
         kvs = []
         for block in self.video:
             q, k, v = block.qkv_of(x)
             kvs.append((k, v))
             x = block.finish(x, q, k, v, rows, rmask)
-        return kvs
+        return kvs, x
+
+    def see(self, frame: Tensor, state: Tensor, ins: Tensor) -> list[tuple[Tensor, Tensor]]:
+        # the policy's read of a clean frame: each video layer's keys and values
+        return self.video_side(frame, state, ins)[0]
+
+    def denoise(self, noisy: Tensor, state: Tensor, ins: Tensor, tau: Tensor) -> Tensor:
+        # pretraining: a noised latent [B, Z, 16, 32] at noise time tau [B] + words -> the clean latent
+        out = self.frame_out(self.video_side(noisy, state, ins, tau)[1])
+        return rearrange(out, 'b (h w) (p q c) -> b c (h p) (w q)', h=16 // P, p=P, q=P)
 
     def velocity(
         self, kvs: list[tuple[Tensor, Tensor]], x: Tensor, tau: Tensor, ins: Tensor, state: Tensor

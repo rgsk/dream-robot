@@ -6,6 +6,7 @@ only read those files.
     python -m dream_robot.policies.verne.run queue 02_cosine_lr --tasks t1 t1-wide --seeds 0 1 2
 
     python -m dream_robot.policies.verne.run vae 07_instruction   (the canvas VAE on VAE_DATA)
+    python -m dream_robot.policies.verne.run pretrain 14_caption_pretrain 0   (step 14 stage 1, pretrain.py)
 
 `queue` runs its jobs one after another, each in its own process (so each holds only its own
 task's frames on the GPU), and writes each job's output to <run dir>/job.log. Detached, so a
@@ -50,6 +51,7 @@ from .data import (
     load_table,
     to_gpu,
 )
+from .model import Verne
 from .train import train
 
 RUNS = REPO / 'experiments/verne/runs'
@@ -286,6 +288,65 @@ def train_vae(
     print(f'done: {out}')
 
 
+PRETRAIN_STEPS = 20000
+
+
+def pretrain_job(step: str, seed: int) -> None:
+    # step 14 stage 1 -> RUNS/<step>/pretrain/seed<k>/: meta.json, log.json, weights.pt (a whole Verne, its
+    # action side untrained), patch_binding_probe.json (this model and an untrained one), denoise.png
+    from . import pretrain as pt
+    from .data import load_scenes
+
+    out = RUNS / step / 'pretrain' / f'seed{seed}'
+    out.mkdir(parents=True, exist_ok=True)
+    meta = source() | {
+        'package_hash': package_hash(),
+        'gpu': torch.cuda.get_device_name(),
+        'seed': seed,
+        'steps': PRETRAIN_STEPS,
+        'vae': str(vae.WEIGHTS.relative_to(REPO)),
+    }
+    if (out / 'meta.json').exists():
+        old = json.loads((out / 'meta.json').read_text())
+        if old['package_hash'] != meta['package_hash']:
+            sys.exit(
+                f'{out} was made with package {old["package_hash"]}, now {meta["package_hash"]}'
+            )
+    else:
+        write_json(out / 'meta.json', meta | {'started': time.strftime('%Y-%m-%d %H:%M:%S')})
+    sc, val = load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS)
+    # the T5 demos' state stats, which stage 2 will use too
+    state, _, episode = load_table(TASKS['t5'][0])
+    train_ids, _ = split('t5', int(episode.max()) + 1)
+    s = torch.tensor(state[np.isin(episode, train_ids)], device='cuda')
+    s_mean, s_std = s.mean(0), s.std(0)
+
+    if (out / 'weights.pt').exists():
+        weights = torch.load(out / 'weights.pt')
+    else:
+        run = pt.pretrain(sc, val, s_mean, s_std, PRETRAIN_STEPS, seed=seed, ckpt=out / 'ckpt')
+        weights = run['weights']
+        write_json(out / 'log.json', run['log'])
+        torch.save(weights, out / 'weights.pt')
+    net = Verne().cuda()
+    net.load_state_dict(weights)
+    if not (out / 'patch_binding_probe.json').exists():
+        torch.manual_seed(0)
+        print('probe, untrained Verne:', flush=True)
+        floor = pt.binding_probe(Verne().cuda(), sc, val, s_mean, s_std)
+        print('probe, pretrained:', flush=True)
+        write_json(
+            out / 'patch_binding_probe.json',
+            {'pretrained': pt.binding_probe(net, sc, val, s_mean, s_std), 'untrained': floor},
+        )
+    if not (out / 'denoise.png').exists():
+        import imageio.v3 as iio
+
+        grid = pt.denoise_picture(net, vae.load(vae.WEIGHTS), val, s_mean, s_std)
+        iio.imwrite(out / 'denoise.png', grid.transpose(1, 2, 0))
+    print(f'done: {out}')
+
+
 def queue(step: str, tasks: list[str], seeds: list[int], workers: int) -> None:
     # every (task, seed), one at a time, each a fresh process; a failed job doesn't stop the rest
     for task in tasks:
@@ -312,6 +373,9 @@ if __name__ == '__main__':
     j.add_argument('step')
     j.add_argument('task', help="a TASKS name, or 'base+extra[:fail]+...' (see load_task)")
     j.add_argument('seed', type=int)
+    pre = sub.add_parser('pretrain')
+    pre.add_argument('step')
+    pre.add_argument('seed', type=int)
     q = sub.add_parser('queue')
     q.add_argument('step')
     q.add_argument('--tasks', nargs='+', choices=TASKS, default=list(TASKS))
@@ -344,5 +408,7 @@ if __name__ == '__main__':
         print(json.dumps(source()))
     elif a.cmd == 'job':
         job(a.step, a.task, a.seed, a.workers)
+    elif a.cmd == 'pretrain':
+        pretrain_job(a.step, a.seed)
     else:
         queue(a.step, a.tasks, a.seeds, a.workers)

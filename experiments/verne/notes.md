@@ -284,3 +284,19 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
   The whole colour gap is the colour -> place lookup. With both words the model uses near/far. One seed.
 - Next: step 14 = near/far head pretraining on 1000 demo-less scenes (colour-only prompts), head on the video
   side's last-layer input, then fine-tune on demos (13a); target ~40/50 on colour prompts.
+
+## Step 14 · stage 1: captioned denoising pretraining (Wan-style), seed 0 (2026-11-18), runs/14_caption_pretrain/pretrain
+- Probe first (scripts/patch_binding_probe.py): linear, patches entering the last video layer flattened
+  (128 x 256), colour prompt -> named slot, 1000 reset scenes fit / 200 scored. Untrained 73%, step 13 71%;
+  'near red left' ceiling 100% for both. Floor ~70-73%, not 50% (32,768 features). Rule fixed before: >=85%
+  stage 2, <=76% stop.
+- Stage 1 (pretrain.py): video side gets a noise time + frame_out; T5 reset scenes noised (tau ~ U(0, 1)),
+  one-cube caption ('near red', place + colour), x-prediction; 20k steps, B 64, cosine 3e-4.
+  Scenes re-rendered with both colours (data.load_scenes, *_colours.npz, also on the data volume).
+- Log: wrong-caption gap ~0.09 at tau 0.1 from step 1000 on (caption used). Overfits: tau 0.1 val best at
+  6k (0.248) -> 0.352 at 20k while train 0.075 -> 0.029.
+- denoise.png: top camera paints the named cube's colour in the named place, 4/4 val scenes both captions;
+  wrist blurrier.
+- **Probe: pretrained 53%** (untrained in the same job 68%), ceiling 100% -> stop, no stage 2.
+- Read: captioned painting builds place -> colour ('near? paint red') but not colour -> place, the lookup the
+  arm needs; at this scale Verne's route to binding doesn't carry over. Next: near/far head pretraining (13a).

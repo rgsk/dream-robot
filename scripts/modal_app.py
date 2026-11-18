@@ -4,6 +4,7 @@ From the repo root:
 
     uv run modal run scripts/modal_app.py::check                     # GPU, torch, headless MuJoCo
     uv run modal run scripts/modal_app.py::job --step 07_instruction --task t5 --seed 0
+    uv run modal run scripts/modal_app.py::pretrain --step 14_caption_pretrain --seed 0
 
 The image is the project's uv.lock (exported without the dev group) plus the EGL loader and ffmpeg that MuJoCo and
 the video decoder need (as scripts/runpod_setup.sh). The package code is copied in at each run, so
@@ -98,6 +99,23 @@ def job(step: str, task: str, seed: int, workers: int = 8, vae: str = ''):
         run.job(step, task, seed, workers)
     finally:
         runs.commit()  # whatever finished, even if a later part failed
+
+
+@app.function(gpu='L40S', volumes=VOLUMES, timeout=4 * 3600)
+def pretrain(step: str, seed: int = 0):
+    # run.py's pretrain_job (step 14 stage 1: captioned denoising on T5 reset scenes, binding probe,
+    # denoise.png) into the runs Volume
+    import os
+    import sys
+
+    sys.path.insert(0, R)
+    os.chdir(R)
+    from dream_robot.policies.verne import run
+
+    try:
+        run.pretrain_job(step, seed)
+    finally:
+        runs.commit()
 
 
 @app.local_entrypoint()
