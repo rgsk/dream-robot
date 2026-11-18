@@ -108,7 +108,7 @@ def to_gpu(latent, state, instruction, action, episode, train_ids, dev: str = 'c
 @dataclass(frozen=True, kw_only=True)
 class Batch:
     frame: Tensor  # [B, Z, 16, 32], the canvas's latent now
-    state: Tensor  # [B, 8] std units
+    state: Tensor  # [B, 16] std units: [previous step, now] (a demo's first step: previous = now)
     instruction: Tensor  # [B, 6]
     acts: Tensor  # [B, CHUNK, 8] std units, the next CHUNK actions
 
@@ -120,11 +120,13 @@ def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch
     lens = np.searchsorted(d.episode, ids, side='right') - first
     pick = rng.integers(0, len(ids), B)
     now = first[pick] + rng.integers(0, lens[pick])  # [B]
+    prev = np.maximum(now - 1, first[pick])
     last = first[pick] + lens[pick] - 1
     rows = torch.tensor(np.minimum(now[:, None] + np.arange(CHUNK), last[:, None]))
     return Batch(
         frame=d.latent[now].float(),
-        state=(d.state[now] - d.s_mean) / d.s_std,
+        state=(torch.cat([d.state[prev], d.state[now]], 1) - d.s_mean.repeat(2))
+        / d.s_std.repeat(2),
         instruction=d.instruction[now],
         acts=(d.action[rows.to(d.action.device)] - d.a_mean) / d.a_std,
     )

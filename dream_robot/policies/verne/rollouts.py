@@ -68,10 +68,14 @@ def load(weights: dict) -> Verne:
     return net
 
 
-def act(net: Verne, vae, d: Demos, obs, ins, sampler: tuple[int, float] = (4, 1.5)) -> np.ndarray:
-    # the observation + the episode's instruction one-hot [6] -> [CHUNK, 8] raw actions;
-    # sampler = (Euler steps, shift), see model.sample
-    s = (torch.from_numpy(obs.state)[None].cuda() - d.s_mean) / d.s_std
+def act(
+    net: Verne, vae, d: Demos, obs, prev, ins, sampler: tuple[int, float] = (4, 1.5)
+) -> np.ndarray:
+    # the observation, the previous control step's state [8] (the first step: obs.state) and the
+    # episode's instruction one-hot [6] -> [CHUNK, 8] raw actions; sampler = (Euler steps, shift),
+    # see model.sample
+    s = torch.from_numpy(np.concatenate([prev, obs.state]))[None].cuda()
+    s = (s - d.s_mean.repeat(2)) / d.s_std.repeat(2)
     i = torch.from_numpy(ins)[None].cuda()
     chunk = (sample(net, frame_of(obs, vae), s, i, *sampler) * d.a_std + d.a_mean)[0].cpu().numpy()
     chunk[:, 7] = np.clip(chunk[:, 7], 0.0, 1.0)  # gripper commands stay in [0, 1]
@@ -84,12 +88,13 @@ def rollout(
     # one episode, replanning after n_exec actions -> success, failure mode, steps
     torch.manual_seed(seed * 100 + n_exec)  # this episode's sampling noise
     obs, plan = env.reset(seed=seed), []
+    prev = obs.state  # the state one control step back; at reset, the state itself
     ins = one_hot(env.prompt)  # drawn at reset (T5); T1's reads all zeros
     for step in range(env._cfg.horizon_steps):
         if not plan:
-            plan = list(act(net, vae, d, obs, ins, sampler)[:n_exec])
+            plan = list(act(net, vae, d, obs, prev, ins, sampler)[:n_exec])
         r = env.step(plan.pop(0))
-        obs = r.observation
+        prev, obs = obs.state, r.observation
         if r.terminated or r.truncated:
             break
     return r.success, 'none' if r.success else failure_of(env, r), step + 1
@@ -99,16 +104,17 @@ def close_point(net: Verne, vae, d: Demos, env, seed: int, n_exec: int, sampler=
     # -> cube xy at spawn, gripper xy at the first commanded close (None if it never closes)
     torch.manual_seed(seed * 100 + n_exec)  # the same noise as rollout's episode
     obs, plan = env.reset(seed=seed), []
+    prev = obs.state
     cube = env.cube_pos[:2]  # T5: the named cube
     ins = one_hot(env.prompt)
     for _ in range(env._cfg.horizon_steps):
         if not plan:
-            plan = list(act(net, vae, d, obs, ins, sampler)[:n_exec])
+            plan = list(act(net, vae, d, obs, prev, ins, sampler)[:n_exec])
         a = plan.pop(0)
         if a[7] < 0.5:
             return cube, np.asarray(env._raw['robot0_eef_pos'][:2], dtype=float).copy()
         r = env.step(a)
-        obs = r.observation
+        prev, obs = obs.state, r.observation
         if r.terminated or r.truncated:
             break
     return cube, None

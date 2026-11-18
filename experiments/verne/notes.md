@@ -259,3 +259,14 @@ Notebooks: nbs/verne/. Comparison: dreamzero WAMz, 10 labelled T1 demos, 18 + 16
 - Losses: train 0.021, val 0.101.
 - **Rollouts 13/13 of 50** (11 masked: 14/13; 08: 22/22); wrong_cube 29/26 (11: 20/23), no_grasp 8/11; miss 9.8 cm.
 - Read: padding style isn't the lever; both cross-attention variants bind colour no better than chance, below step 08.
+
+## Step 12 · state as a cross-attention row (roadmap box 09), T5 seed 0 (2026-11-18), runs/12_state_row/t5
+- Package = step 11 with the state token gone: state [previous control step, now] (16 numbers, previous = now at a
+  demo's first step / reset) through a linear-GELU-linear per side, one more cross-attention row next to the word
+  rows on both sides. The action side reads the state directly. 4.37M params (11: 4.28M).
+  Check: scripts/state_row_check.py (shapes, prev clamp, video k,v fixed + state changed -> velocity changes).
+- Losses: train 0.028, val 0.094 (min 0.081; 11: 0.095, min 0.084).
+- **Rollouts 23/20 of 50** (11: 14/13; 08: 22/22). no_grasp 6/6 (11: 16/13), wrong_cube 20/23 (11: 20/23, unchanged),
+  dropped 1/1. Probe (gripper at first close vs named cube): miss 7.0 cm (11: 8.7), slopes x 0.10 y 0.28 -> still ~blind.
+- Read: the direct state read fixes the grasp step 11 lost (no_grasp 16 -> 6) and gets back to step 08's level;
+  colour-to-cube binding is untouched (wrong cube still ~chance). One seed.

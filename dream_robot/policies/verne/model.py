@@ -1,4 +1,7 @@
-"""Step 11: the instruction's words as cross-attention rows, read by every video and action block
+"""Step 12 (roadmap box 09): the state as one more cross-attention row on both sides, next to the word
+rows, holding the previous control step and now (16 numbers: a sense of velocity); the state token is
+gone, so the action side reads the state directly, not through the video layers' keys and values.
+Step 11: the instruction's words as cross-attention rows, read by every video and action block
 (Wan's block: self-attention -> cross-attention -> MLP). Step 10's future branch is gone (named cube
 at chance).
 Step 04, the sampler: a video transformer reads the [top | wrist] canvas once, as a VAE latent
@@ -7,7 +10,7 @@ grid; an action transformer denoises the chunk while reading the video layers' k
 Verne's shape (wam.py, mot.py), everything else as simple as possible for now:
 the two cameras side by side as one wide image, as Verne's canvas (no head crop),
 the canvas through a small frozen VAE (vae.py, not Wan's), its latent grid cut into 2x2
-squares, one frame (no memory), joints (no poses), the state as one more token, the instruction as
+squares, one frame (no memory), joints (no poses), the state as a cross-attention row, the instruction as
 word rows (each side its own 7-row table: 'no word', then WORDS; no text encoder), masked to the
 prompt's words plus 'no word', so a prompt without words (T1) reads 'no word' alone,
 the flow time added to the action tokens (no adaptive norm), and Verne's sampler: 4 Euler
@@ -37,7 +40,7 @@ class Block(nn.Module):
         self.qkv = nn.Linear(dim, 3 * HEADS * HEAD_DIM)
         self.out = nn.Linear(HEADS * HEAD_DIM, dim)
         self.cq = nn.Linear(dim, HEADS * HEAD_DIM)  # cross-attention: queries from the tokens,
-        self.ckv = nn.Linear(dim, 2 * HEADS * HEAD_DIM)  # keys and values from the word rows
+        self.ckv = nn.Linear(dim, 2 * HEADS * HEAD_DIM)  # keys and values from the rows
         self.cout = nn.Linear(HEADS * HEAD_DIM, dim)
         self.mlp = nn.Sequential(nn.Linear(dim, 4 * dim), nn.GELU(), nn.Linear(4 * dim, dim))
 
@@ -49,7 +52,7 @@ class Block(nn.Module):
     def finish(
         self, x: Tensor, q: Tensor, k: Tensor, v: Tensor, rows: Tensor, rmask: Tensor
     ) -> Tensor:
-        # rows [B, 7, dim] the word rows, rmask [B, 7] bool, True = may attend
+        # rows [B, 8, dim] the word rows + the state row, rmask [B, 8] bool, True = may attend
         a = F.scaled_dot_product_attention(q, k, v)
         x = x + self.out(rearrange(a, 'b h s d -> b s (h d)'))
         cq = rearrange(self.cq(self.norm3(x)), 'b s (h d) -> b h s d', h=HEADS)
@@ -59,21 +62,29 @@ class Block(nn.Module):
         return x + self.mlp(self.norm2(x))
 
 
-def words_of(table: nn.Embedding, ins: Tensor) -> tuple[Tensor, Tensor]:
-    # instruction one-hot [B, 6] -> all 7 rows [B, 7, dim] and the mask [B, 7]: 'no word' + the
-    # prompt's words
+def rows_of(
+    table: nn.Embedding, state_row: nn.Module, ins: Tensor, state: Tensor
+) -> tuple[Tensor, Tensor]:
+    # instruction one-hot [B, 6], state [B, 16] -> 8 rows [B, 8, dim] (7 word rows, then the state row)
+    # and the mask [B, 8]: 'no word' + the prompt's words + the state
     # (step 11b tried Verne's way, 6 rows with absent words zero and no mask: 13/13, wrong cube 29/26)
-    rows = table.weight.expand(len(ins), -1, -1)
-    return rows, torch.cat([torch.ones_like(ins[:, :1]), ins], 1).bool()
+    rows = torch.cat([table.weight.expand(len(ins), -1, -1), state_row(state)[:, None]], 1)
+    one = torch.ones_like(ins[:, :1])
+    return rows, torch.cat([one, ins, one], 1).bool()
+
+
+def embedding_mlp(dim: int) -> nn.Module:
+    # the state [previous, now] [B, 16] -> one row [B, dim] (Verne's embedding_mlp: linear, GELU, linear)
+    return nn.Sequential(nn.Linear(16, dim), nn.GELU(), nn.Linear(dim, dim))
 
 
 class Verne(nn.Module):
     def __init__(self):
         super().__init__()
         self.patch_in = nn.Linear(Z * P * P, D_VIDEO)
-        self.state_in = nn.Linear(8, D_VIDEO)
-        self.video_pos = nn.Parameter(torch.randn(1, 1 + N_PATCH, D_VIDEO) * 0.02)
+        self.video_pos = nn.Parameter(torch.randn(1, N_PATCH, D_VIDEO) * 0.02)
         self.video_words = nn.Embedding(1 + len(WORDS), D_VIDEO)  # row 0 'no word', then WORDS
+        self.video_state = embedding_mlp(D_VIDEO)
         self.video = nn.ModuleList([Block(D_VIDEO) for _ in range(LAYERS)])
         self.action_in = nn.Linear(8, D_ACTION)
         self.time_in = nn.Sequential(
@@ -81,15 +92,16 @@ class Verne(nn.Module):
         )
         self.action_pos = nn.Parameter(torch.randn(1, CHUNK, D_ACTION) * 0.02)
         self.action_words = nn.Embedding(1 + len(WORDS), D_ACTION)
+        self.action_state = embedding_mlp(D_ACTION)
         self.action = nn.ModuleList([Block(D_ACTION) for _ in range(LAYERS)])
         self.action_out = nn.Linear(D_ACTION, 8)
 
     def see(self, frame: Tensor, state: Tensor, ins: Tensor) -> list[tuple[Tensor, Tensor]]:
-        # latent [B, Z, 16, 32] (normalised), state [B, 8], instruction [B, 6] -> each video layer's
-        # keys and values. Tokens: [state, 128 patches]; the words enter by cross-attention only
+        # latent [B, Z, 16, 32] (normalised), state [B, 16] (previous, now), instruction [B, 6] -> each
+        # video layer's keys and values. Tokens: the 128 patches; words and state enter by cross-attention
         patches = rearrange(frame, 'b c (h p) (w q) -> b (h w) (p q c)', p=P, q=P)
-        x = torch.cat([self.state_in(state)[:, None], self.patch_in(patches)], 1) + self.video_pos
-        rows, rmask = words_of(self.video_words, ins)
+        x = self.patch_in(patches) + self.video_pos
+        rows, rmask = rows_of(self.video_words, self.video_state, ins, state)
         kvs = []
         for block in self.video:
             q, k, v = block.qkv_of(x)
@@ -98,13 +110,13 @@ class Verne(nn.Module):
         return kvs
 
     def velocity(
-        self, kvs: list[tuple[Tensor, Tensor]], x: Tensor, tau: Tensor, ins: Tensor
+        self, kvs: list[tuple[Tensor, Tensor]], x: Tensor, tau: Tensor, ins: Tensor, state: Tensor
     ) -> Tensor:
-        # noisy chunk x [B, CHUNK, 8] at flow time tau [B], instruction [B, 6] -> velocity
-        # [B, CHUNK, 8]; the action tokens attend to the video tokens of the same layer and to each
-        # other, then to the words
+        # noisy chunk x [B, CHUNK, 8] at flow time tau [B], instruction [B, 6], state [B, 16] ->
+        # velocity [B, CHUNK, 8]; the action tokens attend to the video tokens of the same layer and
+        # to each other, then to the words and the state
         y = self.action_in(x) + self.action_pos + self.time_in(tau[:, None])[:, None]
-        rows, rmask = words_of(self.action_words, ins)
+        rows, rmask = rows_of(self.action_words, self.action_state, ins, state)
         for block, (k_video, v_video) in zip(self.action, kvs):
             q, k, v = block.qkv_of(y)
             k, v = torch.cat([k_video, k], 2), torch.cat([v_video, v], 2)
@@ -117,7 +129,7 @@ def loss(net: Verne, frame: Tensor, state: Tensor, ins: Tensor, acts: Tensor) ->
     noise = torch.randn_like(acts)
     tau = torch.rand(len(acts), device=acts.device)
     x = (1 - tau[:, None, None]) * noise + tau[:, None, None] * acts
-    return F.mse_loss(net.velocity(net.see(frame, state, ins), x, tau, ins), acts - noise)
+    return F.mse_loss(net.velocity(net.see(frame, state, ins), x, tau, ins, state), acts - noise)
 
 
 """
@@ -148,5 +160,5 @@ def sample(
     u = torch.linspace(1.0, 0.0, steps + 1, device=frame.device)
     tau = 1 - shift * u / (1 + (shift - 1) * u)  # [steps + 1], 0 -> 1
     for i in range(steps):
-        x = x + net.velocity(kvs, x, tau[i].expand(len(frame)), ins) * (tau[i + 1] - tau[i])
+        x = x + net.velocity(kvs, x, tau[i].expand(len(frame)), ins, state) * (tau[i + 1] - tau[i])
     return x

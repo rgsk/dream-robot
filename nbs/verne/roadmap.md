@@ -150,7 +150,7 @@ Successes out of 150 (3 training seeds × 50 episodes), and episodes won / lost 
 
 ---
 
-### 09 · State as cross-attention context (both transformers)
+### 09 · State as cross-attention context (both transformers) — **DONE** (step 12: T5 23/20, no_grasp 16 -> 6)
 
 - step 0/01: the joints are one more token in the video self-attention; the action side
   sees them only through the video keys and values.

@@ -31,21 +31,23 @@ class DaggerActor:
     def __init__(self, expert, net, enc, d, n_exec: int = 8, seed_start: int = 0):
         self.expert, self.net, self.enc, self.d, self.n_exec = expert, net, enc, d, n_exec
         self.episode, self.plan, self.executed = seed_start - 1, [], None
+        self.prev = None  # the state one control step back (None at an episode's first step)
 
     def reset(self) -> None:
         self.expert.reset()
         self.episode += 1
         torch.manual_seed(self.episode * 100 + self.n_exec)  # as a sweep episode's noise
-        self.plan, self.executed = [], None
+        self.plan, self.executed, self.prev = [], None, None
 
     def __call__(self, observation) -> np.ndarray:
         label = self.expert(observation)
+        prev = observation.state if self.prev is None else self.prev
         if not self.plan:
             ins = one_hot(self.expert._env.prompt)  # T1: all zeros
             self.plan = list(
-                rollouts.act(self.net, self.enc, self.d, observation, ins)[: self.n_exec]
+                rollouts.act(self.net, self.enc, self.d, observation, prev, ins)[: self.n_exec]
             )
-        self.executed = self.plan.pop(0)
+        self.executed, self.prev = self.plan.pop(0), observation.state.copy()
         return label
 
 
