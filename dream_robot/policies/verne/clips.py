@@ -222,7 +222,6 @@ def change_picture(net: Verne, vae, sc: Scenes, s_mean, s_std, n: int = 3) -> np
     scene = decode(vae, present).astype(np.float32)  # [n, 128, 256, 3]
     cols = [scene]
     for which in (0, 1):
-        w = torch.full((n,), which, device=dev)
         ins = sc.instruction[ids].clone()
         ins[:, COLOURS] = 0
         ins[torch.arange(n), COLOURS.start + sc.colours[ids, which]] = 1

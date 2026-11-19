@@ -1,7 +1,7 @@
 """Demos (T1, T1-wide, T5) on the GPU, and random training samples from them."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +11,9 @@ from torch import Tensor
 
 REPO = Path(__file__).resolve().parents[3]
 CHUNK = 16  # actions per sample
+# step 20 (roadmap box 06): an action = the hand's move relative to the hand at the chunk's start (3 position,
+# 6 rotation; hand.py), the jaw, progress 0..1
+ACTION = 11
 # the instruction as a one-hot: the cube's place (step 13: near = slot 0, x -0.07, nearer the robot
 # base at x -0.56; far = slot 1, x +0.07), T5's colour words, then its side words. T1's prompt ('put
 # the cube in the bin') has none of them, so every T1 frame reads all zeros
@@ -118,31 +121,73 @@ class Demos:
     state: Tensor  # [N, 8] joints + gripper, raw
     instruction: Tensor  # [N, 8] one-hot (WORDS), the recorded prompt
     slot: Tensor  # [N] the named cube's slot (0 near, 1 far), -1 without one (T1)
-    action: Tensor  # [N, 8] raw
+    action: Tensor  # [N, 8] raw, the recorded joint targets + gripper command
     episode: NDArray[np.int64]  # [N]
+    hand_pos: Tensor  # [N, 3], hand_rot [N, 3, 3]: the hand at each state (forward kinematics)
+    hand_rot: Tensor
+    goal_pos: Tensor  # [N, 3], goal_rot [N, 3, 3]: the hand at each recorded joint target
+    goal_rot: Tensor
+    progress: Tensor  # [N] step / (episode length − 1)
     s_mean: Tensor  # [8], stats from the training demos only
     s_std: Tensor
-    a_mean: Tensor
+    a_mean: Tensor  # [ACTION], over the training rows' chunks
     a_std: Tensor
 
 
 def to_gpu(
     latent, state, instruction, slot, action, episode, train_ids, dev: str = 'cuda'
 ) -> Demos:
+    from . import hand
+
     s, a = torch.tensor(state, device=dev), torch.tensor(action, device=dev)
-    lab = torch.tensor(np.isin(episode, train_ids), device=dev)
-    return Demos(
+    lab = np.isin(episode, train_ids)
+    kin = (
+        hand.t5_kinematics()
+    )  # the Panda arm; relative moves don't depend on where its base stands
+    hp, hr = kin.pose(state[:, :7])
+    gp, gr = kin.pose(action[:, :7])
+    first = np.searchsorted(episode, episode)
+    length = np.searchsorted(episode, episode, side='right') - first
+    t = lambda x: torch.tensor(x, device=dev, dtype=torch.float32)  # noqa: E731
+    d = Demos(
         latent=torch.tensor(latent, device=dev),
         state=s,
         instruction=torch.tensor(instruction, device=dev),
         slot=torch.tensor(slot, device=dev),
         action=a,
         episode=episode,
+        hand_pos=t(hp),
+        hand_rot=t(hr),
+        goal_pos=t(gp),
+        goal_rot=t(gr),
+        progress=t((np.arange(len(episode)) - first) / np.maximum(length - 1, 1)),
         s_mean=s[lab].mean(0),
         s_std=s[lab].std(0),
-        a_mean=a[lab].mean(0),
-        a_std=a[lab].std(0),
+        a_mean=torch.zeros(ACTION, device=dev),
+        a_std=torch.ones(ACTION, device=dev),
     )
+    # action stats over every training row's chunk
+    now = np.flatnonzero(lab)
+    raw = targets(d, now, chunk_rows(d, now))
+    return replace(d, a_mean=raw.mean((0, 1)), a_std=raw.std((0, 1)))
+
+
+def chunk_rows(d: Demos, now: NDArray) -> NDArray:
+    # [B] rows -> [B, CHUNK] the next CHUNK rows, held at the episode's last
+    last = np.searchsorted(d.episode, d.episode[now], side='right') - 1
+    return np.minimum(now[:, None] + np.arange(CHUNK), last[:, None])
+
+
+def targets(d: Demos, now: NDArray, rows: NDArray) -> Tensor:
+    # raw action targets [B, CHUNK, ACTION]: the hand at each recorded joint target in rows, relative to the hand
+    # at the chunk's start (state at now), then the recorded gripper command and the progress
+    from . import hand
+
+    n, r = torch.as_tensor(now, device=d.state.device), torch.as_tensor(rows, device=d.state.device)
+    rel = hand.relative_t(
+        d.hand_pos[n][:, None], d.hand_rot[n][:, None], d.goal_pos[r], d.goal_rot[r]
+    )
+    return torch.cat([rel, d.action[r][..., 7:8].float(), d.progress[r][..., None]], -1)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -150,7 +195,7 @@ class Batch:
     frame: Tensor  # [B, Z, 16, 32], the canvas's latent now
     state: Tensor  # [B, 16] std units: [previous step, now] (a demo's first step: previous = now)
     instruction: Tensor  # [B, 8]
-    acts: Tensor  # [B, CHUNK, 8] std units, the next CHUNK actions
+    acts: Tensor  # [B, CHUNK, ACTION] std units, the next CHUNK hand moves (step 20)
     now: NDArray  # [B] the samples' table rows (step 19i: their clips, for paired co-training)
 
 
@@ -174,14 +219,12 @@ def get_batch(
         span = np.where(rng.random(B) < early, decision[pick], span)
     now = first[pick] + rng.integers(0, span)  # [B]
     prev = np.maximum(now - 1, first[pick])
-    last = first[pick] + lens[pick] - 1
-    rows = torch.tensor(np.minimum(now[:, None] + np.arange(CHUNK), last[:, None]))
     return Batch(
         frame=d.latent[now].float(),
         state=(torch.cat([d.state[prev], d.state[now]], 1) - d.s_mean.repeat(2))
         / d.s_std.repeat(2),
         instruction=d.instruction[now],
-        acts=(d.action[rows.to(d.action.device)] - d.a_mean) / d.a_std,
+        acts=(targets(d, now, chunk_rows(d, now)) - d.a_mean) / d.a_std,
         now=now,
     )
 

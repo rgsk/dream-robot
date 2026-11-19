@@ -14,15 +14,14 @@ the expert (labels), and its perturbation hook executes the Verne policy's actio
 episode is kept, failures included: their labels are still right, and they are the states that matter.
 """
 
-from types import SimpleNamespace
 
 import numpy as np
 import torch
 
 from dream_robot.core.record import record_episodes
 
-from . import rollouts, vae
-from .data import REPO, one_hot
+from . import hand, rollouts, vae
+from .data import REPO, one_hot, to_gpu
 from .run import RUNS, load_task
 
 
@@ -32,22 +31,26 @@ class DaggerActor:
         self.expert, self.net, self.enc, self.d, self.n_exec = expert, net, enc, d, n_exec
         self.episode, self.plan, self.executed = seed_start - 1, [], None
         self.prev = None  # the state one control step back (None at an episode's first step)
+        self.drv = (
+            None  # hand.Driver, rebuilt each episode (step 20: the policy predicts hand moves)
+        )
 
     def reset(self) -> None:
         self.expert.reset()
         self.episode += 1
         torch.manual_seed(self.episode * 100 + self.n_exec)  # as a sweep episode's noise
         self.plan, self.executed, self.prev = [], None, None
+        self.drv = hand.Driver(self.expert._env)
 
     def __call__(self, observation) -> np.ndarray:
         label = self.expert(observation)
         prev = observation.state if self.prev is None else self.prev
         if not self.plan:
             ins = one_hot(self.expert._env.prompt)  # T1: all zeros
-            self.plan = list(
-                rollouts.act(self.net, self.enc, self.d, observation, prev, ins)[: self.n_exec]
-            )
-        self.executed, self.prev = self.plan.pop(0), observation.state.copy()
+            chunk = rollouts.act(self.net, self.enc, self.d, observation, prev, ins)[: self.n_exec]
+            self.plan = self.drv.plan(observation.state[:7], chunk)
+        self.executed = self.drv.action(observation.state[:7], self.plan.pop(0))
+        self.prev = observation.state.copy()
         return label
 
 
@@ -70,15 +73,8 @@ def collect(policy_run: str, base_task: str, out_name: str, episodes: int, seed_
     from dream_robot.sims.robosuite.tasks.pick_place_cube.record import REPO_ID
 
     # the stats the policy was trained with: its whole task's training rows (base + any extra data)
-    state, action, episode, _, _, _, train_ids, _, scene = load_task(base_task)
-    lab = np.isin(episode, train_ids)
-    stats = dict(
-        s_mean=state[lab].mean(0),
-        s_std=state[lab].std(0, ddof=1),
-        a_mean=action[lab].mean(0),
-        a_std=action[lab].std(0, ddof=1),
-    )
-    d = SimpleNamespace(**{k: torch.tensor(v, device='cuda') for k, v in stats.items()})
+    state, action, episode, latent, instruction, slot, train_ids, _, scene = load_task(base_task)
+    d = to_gpu(latent, state, instruction, slot, action, episode, train_ids)
     net = rollouts.load(torch.load(RUNS / policy_run / 'weights.pt'))
     env = rollouts.make_env(scene)
     actor = DaggerActor(

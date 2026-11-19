@@ -69,7 +69,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor, nn
 
-from .data import CHUNK, FUTURE, WORDS
+from .data import ACTION, CHUNK, FUTURE, WORDS
 from .vae import Z
 
 P = 2  # patch side in latent cells: latent 16 x 32 -> 8 x 16 = 128 patches (16 x 16 px each)
@@ -306,7 +306,7 @@ class Verne(nn.Module):
         self.video = nn.ModuleList([Block(D_VIDEO) for _ in range(LAYERS)])
         # clip pretraining, step 19d: word-blind future heads reading the present as the arm does
         self.future_heads = nn.ModuleDict({cam: FutureHead(cam) for cam in CAMERAS})
-        self.action_in = nn.Linear(8, D_ACTION)
+        self.action_in = nn.Linear(ACTION, D_ACTION)
         self.time_in = nn.Sequential(
             nn.Linear(FREQ, D_ACTION), nn.SiLU(), nn.Linear(D_ACTION, D_ACTION)
         )
@@ -314,7 +314,7 @@ class Verne(nn.Module):
         self.action_words = nn.Embedding(1 + len(WORDS), D_ACTION)
         self.action_state = embedding_mlp(D_ACTION)
         self.action = nn.ModuleList([Block(D_ACTION, adaln=True) for _ in range(LAYERS)])
-        self.action_out = nn.Linear(D_ACTION, 8)
+        self.action_out = nn.Linear(D_ACTION, ACTION)
 
     def video_side(
         self, frame: Tensor, state: Tensor, ins: Tensor
@@ -454,9 +454,9 @@ Each step is one Euler step of the velocity: x ← x + v(x, τ) · (τ_next − 
 def sample(
     net: Verne, frame: Tensor, state: Tensor, ins: Tensor, steps: int = 4, shift: float = 1.5
 ) -> Tensor:
-    # noise -> a chunk [B, CHUNK, 8] in std units; the video side runs once
+    # noise -> a chunk [B, CHUNK, ACTION] in std units; the video side runs once
     kvs = net.see(frame, state, ins)
-    x = torch.randn(len(frame), CHUNK, 8, device=frame.device)
+    x = torch.randn(len(frame), CHUNK, ACTION, device=frame.device)
     u = torch.linspace(1.0, 0.0, steps + 1, device=frame.device)
     tau = 1 - shift * u / (1 + (shift - 1) * u)  # [steps + 1], 0 -> 1
     for i in range(steps):

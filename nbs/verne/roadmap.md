@@ -122,13 +122,19 @@ Successes out of 150 (3 training seeds × 50 episodes), and episodes won / lost 
 
 ---
 
-### 06 · Action format (output)
+### 06 · Action format (output) — **DONE** (step 20: T5 41/43/48 on 3 seeds; step 18 41/42/39)
 
 - step 0: absolute joint positions + gripper, 16 steps.
 - Verne (§10, §12): gripper pose relative to the current hand (xyz + 6-number rotation + jaw),
   plus progress 0..1; IK outside the model turns poses into joints.
 - why: "move 2 cm down" looks the same anywhere; robot-agnostic; progress says when a step is done.
 - test: relative end-effector targets + IK, progress head; compare success.
+- result (step 20): 11 numbers per chunk step: the hand's move relative to the hand at the chunk's start (3
+  position in its frame + 6 rotation), jaw, progress t/(len-1) (trained, unused at run time yet). Targets from
+  forward kinematics of the recorded joints (hand.py); run time: chunk -> world poses at its start -> 10-step IK
+  per executed step from the current joints (0.00 mm). Erase recipe, 3 seeds: 41/40, 43/42, 48/47 (18: 41/40,
+  42/40, 39/39); closes 0.9-2.1 cm from the cube (18: 2.0-3.4). Note: the demos' joint noise makes open-loop
+  replay of relative labels drift (0/8); world poses replay 8/8.
 
 ---
 

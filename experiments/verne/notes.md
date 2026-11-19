@@ -526,3 +526,31 @@ Rule: the frame's path (self-attention) must start at least as open as the words
   Read: the arm's use of the colour word at decision moments follows the mark (erase > 19k > 19j > none) but even
   19k's arm leans on it ~2.5-3x less than erase's, and on the frame ~2x less. 19k's arm also fits decision moments
   worst (true loss τ 0.67: 0.353 vs erase 0.195): the 40k run overfit (val action loss 0.10 -> 0.12-0.165).
+
+## Step 20 · roadmap box 06: actions as hand moves relative to the hand at the chunk's start (+ progress), IK outside
+- Decisions (user): relative to the chunk start (Verne), keep progress (t / (len − 1)), compare on the erase recipe.
+- 20a (hand.py: forward kinematics of the T5 arm on a private MjData, relative <-> absolute; scripts/hand_check.py):
+  FK vs the sim's grip site 0.11 mm max; hand moves median 6.4 mm per control step (max 25 mm), 7.8 cm median 15
+  steps ahead (max 24 cm); relative -> absolute round trip exact. One IK step (the expert's: damping 0.15, max
+  0.06 rad/joint) toward the recorded target's hand pose undershoots (5.7 mm median, 9.6 mm 95%); iterating
+  closes it: 3 steps 0.5 mm, 10 steps 0.00 mm (or damping 0.05, 3 steps: 0.00 mm). Joints then differ from the
+  recorded ones by 0.2 deg median, 2 deg 95% (the 7-joint arm reaches the same hand pose with other joints).
+  Run time: iterate IK (10 steps, damping 0.15) on a private MjData per executed action.
+- 20b (data.targets / chunk_rows: 11 numbers per chunk step, from cached FK; model action in/out 11; rollouts and
+  dagger: hand.Driver = chunk -> world poses at its start -> 10-step IK per executed step from the current joints).
+  scripts/hand_replay_check.py + a diagnosis: replaying the recorded joints 19/20; world hand poses through the
+  Driver's IK **8/8** (hand within 15 mm of the recorded path); the same moves relative to the ACTUAL hand, open loop,
+  0/8 (drift 8-26 cm): the demos were recorded with joint noise (sigma 0.05), so each relative label holds a
+  correction for that step's nudge, which open loop (no nudge, no anchor) piles up. Closed loop that correction is
+  the recovery signal the noise was for. Conversion OK.
+- 20c seed 0 (step 18 recipe: init 18_rope/pretrain/seed0, colour-only demos, 20k; hand-move actions + IK): **41/40**,
+  wrong_cube 5/3, no_grasp 3/6, dropped 1/1, miss 2.1 cm, slopes **0.76 / 0.80** (18 s0: 0.72 / 0.58); locate after
+  demos 75.5%, whole-frame 94.5%. = step 18 (41/40, 42/40, 39/39). Val loss 0.18 -> 0.26 (different units than
+  joints; rising after ~10k).
+- 20c seed 0, ckpt step10000 (run.py eval; val loss lowest there): **39/40**, wrong_cube 4/4, no_grasp 6/4, miss 2.2 cm,
+  slopes 0.74 / 0.67, locate 76.7%. = the 20k end (41/40): the rising val loss after 10k didn't cost rollouts.
+- 20c seed 1 (local): **43/42**, wrong_cube 4/6, no_grasp 2/1, dropped 1/1, miss 1.6 cm, slopes 0.85 / 0.68, locate 83%.
+  Seed 2 on Modal (L40S, cpu=8) was at step 10k when seed 1 had finished locally: stopped, rerun locally.
+- 20c seed 2 (local): **48/47**, wrong_cube 0/1, no_grasp 1/1, dropped 1/1, miss **0.9 cm**, slopes 0.96 / 0.71, locate 76.5%.
+- Box 06 on 3 seeds: **41/40, 43/42, 48/47** (step 18 joints: 41/40, 42/40, 39/39); miss 2.1 / 1.6 / 0.9 cm (18: 2.0-3.4).
+  Read: hand moves + IK are at least as good, likely better (mean 44 vs 40.7 at n_exec 8; closer closes). Done.
