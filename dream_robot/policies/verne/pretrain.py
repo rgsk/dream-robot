@@ -24,7 +24,7 @@ from frozendict import frozendict
 from torch import Tensor
 
 from . import lr as lr_mod
-from .data import PLACES, Scenes, colour_prompts
+from .data import COLOURS, PLACES, Scenes, colour_prompts
 from .model import Verne
 
 
@@ -154,6 +154,79 @@ def binding_probe(
             f'probe, prompt {kind:6s}: train {out[kind]["train"]:.3f}   val {out[kind]["val"]:.3f}',
             flush=True,
         )
+    return out
+
+
+def locate_probe(
+    net: Verne,
+    sc: Scenes,
+    val: Scenes,
+    erased: Tensor,
+    val_erased: Tensor,
+    s_mean: Tensor,
+    s_std: Tensor,
+) -> dict[str, float]:
+    # step 19: is the NAMED cube marked on its own patches? Each reset scene twice (the near cube's colour
+    # word, then the far one's, plus the scene's side word); a patch shows cube k if hiding k changes it
+    # (summed |latent change| > 0.3 in any of its 2 x 2 cells). One linear head shared by all patches, on the
+    # token entering the last video layer -> 'named cube here'. 'named_gt_other': per val (scene, word), the
+    # mean score on the named cube's patches beats the other cube's (chance 50%; erase pretraining 100%, its
+    # stage 2 ~76%, clips / none ~53-55%). 'auc': named-cube patches vs all others.
+    net.eval()
+
+    def parts(s: Scenes, er: Tensor):
+        change = (er.float() - s.latent.float()[:, None]).abs().sum(2)  # [N, 2, 16, 32]
+        cube = F.max_pool2d((change > 0.3).float(), 2).flatten(2).bool()  # [N, 2, 128]
+        out = []
+        for which in (0, 1):
+            captured = []
+            hook = net.video[-1].norm1.register_forward_pre_hook(
+                lambda m, a: captured.append(a[0].float())
+            )
+            with torch.no_grad():
+                for i in range(0, len(s.slot), 100):
+                    ids = torch.arange(i, min(i + 100, len(s.slot)), device=s.latent.device)
+                    ins = s.instruction[ids].clone()
+                    ins[:, COLOURS] = 0
+                    ins[torch.arange(len(ids)), COLOURS.start + s.colours[ids, which]] = 1
+                    net.see(s.latent[ids].float(), scene_state(s, ids, s_mean, s_std), ins)
+            hook.remove()
+            out.append(torch.cat(captured))
+        named = torch.stack([cube[:, 0], cube[:, 1]], 1)
+        other = torch.stack([cube[:, 1], cube[:, 0]], 1)
+        return torch.stack(out, 1), named, other  # [N, 2, 128, 256], [N, 2, 128] x 2
+
+    (ft, nt, _), (fv, nv, ov) = parts(sc, erased), parts(val, val_erased)
+    mu, sd = ft.flatten(0, 2).mean(0), ft.flatten(0, 2).std(0) + 1e-6
+    x, y = ((ft - mu) / sd).flatten(0, 2), nt.flatten().float()
+    torch.manual_seed(0)
+    head = torch.nn.Linear(ft.shape[-1], 1).to(x.device)
+    opt = torch.optim.AdamW(head.parameters(), lr=1e-2, weight_decay=1e-2)
+    pw = (1 - y).sum() / y.sum()
+    for _ in range(500):
+        opt.zero_grad()
+        F.binary_cross_entropy_with_logits(head(x)[:, 0], y, pos_weight=pw).backward()
+        opt.step()
+    with torch.no_grad():
+        sv = head((fv - mu) / sd)[..., 0]  # [N, 2, 128]
+        n_, o_ = nv.float(), ov.float()
+        on_named = (sv * n_).sum(2) / n_.sum(2).clamp(min=1)
+        on_other = (sv * o_).sum(2) / o_.sum(2).clamp(min=1)
+        ok = (n_.sum(2) > 0) & (o_.sum(2) > 0)
+        score, label = sv.flatten(), nv.flatten()
+        ranks = torch.empty_like(score)
+        ranks[score.argsort()] = torch.arange(
+            1, len(score) + 1, device=score.device, dtype=torch.float
+        )
+        pos = label.sum()
+        out = {
+            'named_gt_other': (on_named > on_other)[ok].float().mean().item(),
+            'auc': ((ranks[label].sum() - pos * (pos + 1) / 2) / (pos * (len(label) - pos))).item(),
+        }
+    print(
+        f'locate probe: named > other {out["named_gt_other"]:.3f}   auc {out["auc"]:.3f}',
+        flush=True,
+    )
     return out
 
 

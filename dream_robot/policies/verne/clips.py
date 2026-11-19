@@ -41,16 +41,25 @@ def clip_batch(
     return z[:, 0], z[:, 1:], state, d.instruction[now]
 
 
+def velocity(net: Verne, present, x, tau, state, ins, future_by: str) -> Tensor:
+    # future_by: 'all' (step 19: future tokens in the video transformer, reading words + state), 'present'
+    # (19b: only the present reads them), 'heads' (19d: word-blind top / wrist heads read the present's keys
+    # and values, as the arm does)
+    if future_by == 'heads':
+        return net.heads_velocity(present, x, tau, state, ins)
+    return net.clip_velocity(present, x, tau, state, ins, future_by)
+
+
 def clip_loss(
-    net: Verne, present, future, state, ins, tau: Tensor, noise: Tensor, rows_to: str = 'all'
+    net: Verne, present, future, state, ins, tau: Tensor, noise: Tensor, future_by: str = 'all'
 ) -> Tensor:
     x = (1 - tau[:, None, None, None, None]) * noise + tau[:, None, None, None, None] * future
-    v = net.clip_velocity(present, x, tau, state, ins, rows_to)
+    v = velocity(net, present, x, tau, state, ins, future_by)
     return F.mse_loss(v.float(), future - noise)
 
 
 @torch.no_grad()
-def val_numbers(net: Verne, val: list, rows_to: str = 'all', seed: int = 0) -> dict:
+def val_numbers(net: Verne, val: list, future_by: str = 'all', seed: int = 0) -> dict:
     # fixed held-out clips, loss at τ 0.2 / 0.5 / 0.8 with the right caption and with another clip's
     # (rolled in the batch): 'shuffled' − 'right' = how much the caption is used
     net.eval()
@@ -61,9 +70,9 @@ def val_numbers(net: Verne, val: list, rows_to: str = 'all', seed: int = 0) -> d
         for present, future, state, ins in val:
             t = torch.full((len(present),), tau, device=present.device)
             noise = torch.randn(future.shape, device=future.device, generator=g)
-            right += clip_loss(net, present, future, state, ins, t, noise, rows_to).item()
+            right += clip_loss(net, present, future, state, ins, t, noise, future_by).item()
             wrong += clip_loss(
-                net, present, future, state, ins.roll(1, 0), t, noise, rows_to
+                net, present, future, state, ins.roll(1, 0), t, noise, future_by
             ).item()
         right, wrong = right / len(val), wrong / len(val)
         out[f'{tau}'] = {'right': right, 'shuffled': wrong}
@@ -83,7 +92,7 @@ def pretrain_clips(
     log_every: int = 1000,
     probe=None,
     probe_every: int = 4000,
-    rows_to: str = 'all',
+    future_by: str = 'all',
 ) -> frozendict[str, Any]:
     # out: {'weights': a whole Verne on the cpu (its action side untouched), 'log': per log_every steps
     # {step, train, val numbers, and every probe_every steps 'probe': probe(net)}}
@@ -100,13 +109,13 @@ def pretrain_clips(
         tau = torch.rand(B, device=present.device)
         with torch.autocast('cuda', dtype=torch.bfloat16):
             noise = torch.randn_like(future)
-            loss = clip_loss(net, present, future, state, ins, tau, noise, rows_to)
+            loss = clip_loss(net, present, future, state, ins, tau, noise, future_by)
         opt.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(net.parameters(), lr_mod.CLIP)
         opt.step()
         if step % log_every == 0:
-            v = val_numbers(net, val, rows_to)
+            v = val_numbers(net, val, future_by)
             entry = {'step': step, 'train': loss.item(), 'val': v}
             if probe is not None and step % probe_every == 0:
                 entry['probe'] = probe(net)  # binding_probe: leaves the net in eval mode
@@ -122,7 +131,7 @@ def pretrain_clips(
 
 @torch.no_grad()
 def dream(
-    net: Verne, present, state, ins, steps: int = 8, seed: int = 0, rows_to: str = 'all'
+    net: Verne, present, state, ins, steps: int = 8, seed: int = 0, future_by: str = 'all'
 ) -> Tensor:
     # the future [B, FUTURE, Z, 16, 32] from noise, Euler on an even grid
     net.eval()
@@ -131,7 +140,7 @@ def dream(
     taus = torch.linspace(0, 1, steps + 1, device=present.device)
     for i in range(steps):
         t = taus[i].expand(len(present))
-        x = x + net.clip_velocity(present, x, t, state, ins, rows_to) * (taus[i + 1] - taus[i])
+        x = x + velocity(net, present, x, t, state, ins, future_by) * (taus[i + 1] - taus[i])
     return x
 
 
@@ -147,7 +156,7 @@ def decode(vae, z: Tensor) -> np.ndarray:
 
 @torch.no_grad()
 def binding_films(
-    net: Verne, vae, sc: Scenes, s_mean, s_std, n: int = 3, rows_to: str = 'all'
+    net: Verne, vae, sc: Scenes, s_mean, s_std, n: int = 3, future_by: str = 'all'
 ) -> np.ndarray:
     # the test that matters: a reset scene (both cubes still down) with each cube's colour word (the same
     # side word) -> the dreamed future. Per scene two rows, [present | dream] with the near cube's colour,
@@ -159,7 +168,7 @@ def binding_films(
         which = torch.tensor([0, 1], device=dev)
         present = sc.latent[ids].float()
         state, ins = scene_state(sc, ids, s_mean, s_std), colour_prompts(sc, ids, which)
-        fut = dream(net, present, state, ins, rows_to=rows_to)
+        fut = dream(net, present, state, ins, future_by=future_by)
         img = decode(vae, torch.cat([present[:, None], fut], 1))  # [2, 8, 128, 256, 3]
         rows += [np.concatenate(list(r), 1) for r in img]
     return np.concatenate(rows, 0)

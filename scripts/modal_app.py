@@ -135,7 +135,7 @@ def pretrain(step: str, seed: int = 0):
 
 
 @app.function(gpu=FAST_GPUS, volumes=VOLUMES, timeout=4 * 3600)
-def clips(step: str, seed: int = 0, steps: int = 20000, rows_to: str = 'all'):
+def clips(step: str, seed: int = 0, steps: int = 20000, future_by: str = 'all'):
     # run.py's clips_job (step 19 stage 1: clip denoising on the T5 demos' clips; binding probe every 4000
     # steps and at the end, films.png) into the runs Volume
     import os
@@ -146,7 +146,7 @@ def clips(step: str, seed: int = 0, steps: int = 20000, rows_to: str = 'all'):
     from dream_robot.policies.verne import run
 
     try:
-        run.clips_job(step, seed, steps, rows_to)
+        run.clips_job(step, seed, steps, future_by)
     finally:
         runs.commit()
 

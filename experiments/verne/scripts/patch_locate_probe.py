@@ -74,7 +74,7 @@ for arg in sys.argv[1:]:
     net = Verne().cuda().eval()
     if name != 'untrained':
         missing, unexpected = net.load_state_dict(torch.load(path), strict=False)
-        assert not unexpected and all(k.startswith(('time_video', 'gen_out')) for k in missing), missing
+        assert not unexpected and all(k.startswith(('time_video', 'gen_out', 'future_heads')) for k in missing), missing
     feats, labels, others = {}, {}, {}
     for part, (sc, cube) in data.items():
         f = features(net, sc)  # [N, 2, 128, 256]

@@ -462,3 +462,11 @@ Rule: the frame's path (self-attention) must start at least as open as the words
   (79-88% for everyone) doesn't. Clip pretraining binds (films 6/6, whole-frame 81-88%) but NOT on the cube's own
   patches: likely the two-hop route, the present relays the word and the future's queries find the colour.
   Results in runs/19_clips/patch_locate_probe.json.
+- 19d (future_by='heads': video side runs the present only, as the policy; two word- and joint-blind heads, top
+  and wrist cameras, arm-shaped (d 128, 4 layers, layer i reads video layer i's present keys / values) predict the
+  7 future frames; Modal H100, 20k): locate probe (named > other) **51.5%** at 16k-20k (chance; erase 100%);
+  whole-frame probe 88.5-89%. Val loss higher than 19 (τ 0.2 0.78 vs 0.58), caption still used (shuffled 1.06).
+  Read: no mark on the named cube's patches. The heads still use the word (relayed through the present's tokens)
+  and do the matching in their own 4 layers.
+  Trajectory: locate 52.5 (0), 52.5, 51, 51.5, 51.5, 51.5; whole-frame 68.5, 80, 90.5, 91, 89, 88.5. Val right τ 0.2
+  0.60 (4k) -> 0.78 (20k): the heads overfit the 140 episodes after ~4k. films.png 6 of 6 named cube in the gripper.

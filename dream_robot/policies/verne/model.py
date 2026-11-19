@@ -4,7 +4,9 @@ video as Wan I2V. Present patches attend to themselves only (as at run time, whe
 patches attend to everything. Both cross-attend to the words and the state. The noise level is an embedding
 added to the future tokens (time_video; the present has none); gen_out reads the future tokens after the last
 video layer -> velocity. The policy path (see) is unchanged: the present alone. Step 19b: rows_to='present', only
-the present cross-attends to the words and the state; the future reads neither.
+the present cross-attends to the words and the state; the future reads neither. Step 19d (heads_velocity):
+the future isn't in the video transformer at all; two word- and joint-blind heads (top camera, wrist camera),
+narrow like the action side, read the present's keys and values layer by layer, as the arm does.
 Step 18 (roadmap box 08): positions by RoPE, as Verne's (wan_dit.py rope_cos_sin / frame_rope, action_dit.py
 chunk_rope): each head's queries and keys are rotated by their token's place, video patches by (frame, row,
 column) of the canvas grid (the present frame is frame 0; channels 12 / 10 / 10 of the 32), action tokens by
@@ -206,6 +208,8 @@ class Block(nn.Module):
         )
         a = F.scaled_dot_product_attention(q, k, v, attn_mask=amask)
         x = x + (1 + gate) * self.out(rearrange(a, 'b h s d -> b s (h d)'))
+        if rows is None:  # step 19d's future heads: no words, no joints
+            return x + gate2 * self.mlp(self.norm2(x) * (1 + scale2) + shift2)
         n = x.shape[1] if cross_upto is None else cross_upto
         cq = rearrange(
             self.cq(self.norm3(x[:, :n]) * (1 + scale3) + shift3), 'b s (h d) -> b h s d', h=HEADS
@@ -216,6 +220,44 @@ class Block(nn.Module):
             [x[:, :n] + gate3 * self.cout(rearrange(a, 'b h s d -> b s (h d)')), x[:, n:]], 1
         )
         return x + gate2 * self.mlp(self.norm2(x) * (1 + scale2) + shift2)
+
+
+CAMERAS = {'top': slice(0, 8), 'wrist': slice(8, 16)}  # patch columns of each camera in the canvas
+
+
+class FutureHead(nn.Module):
+    # step 19d: one camera's future, predicted the way the arm reads the frame: a narrow transformer (as the
+    # action side, no adaptive norm) whose layer i attends to its own tokens and to video layer i's keys and
+    # values of the present; no words, no joints. Tokens: the camera's noisy future patches, FUTURE frames x
+    # 8 x 8, RoPE'd by (frame 1..FUTURE, row, canvas column) like the video tokens, plus the noise level.
+    def __init__(self, camera: str):
+        super().__init__()
+        cols = torch.arange(32 // P)[CAMERAS[camera]]
+        f, r, c = torch.meshgrid(
+            torch.arange(1, 1 + FUTURE), torch.arange(16 // P), cols, indexing='ij'
+        )
+        index = (f * N_PATCH + r * (32 // P) + c).flatten()  # rows of video_angles(1 + FUTURE)
+        self.register_buffer('angles', video_angles(1 + FUTURE)[index], persistent=False)
+        self.patch_in = nn.Linear(Z * P * P, D_ACTION)
+        self.time_in = nn.Sequential(
+            nn.Linear(FREQ, D_ACTION), nn.SiLU(), nn.Linear(D_ACTION, D_ACTION)
+        )
+        self.blocks = nn.ModuleList([Block(D_ACTION) for _ in range(LAYERS)])
+        self.out = nn.Linear(D_ACTION, Z * P * P)
+
+    def forward(self, kvs: list[tuple[Tensor, Tensor]], x: Tensor, tau: Tensor) -> Tensor:
+        # kvs: the present's video keys / values per layer; x: this camera's noisy future [B, FUTURE, Z, 16,
+        # 16] at flow time tau [B] -> its velocity, same shape
+        y = rearrange(x, 'b f c (h p) (w q) -> b (f h w) (p q c)', p=P, q=P)
+        y = self.patch_in(y) + self.time_in(sinusoid(1000 * (1 - tau)))[:, None]
+        for block, (k_video, v_video) in zip(self.blocks, kvs, strict=True):
+            q, k, v = block.qkv_of(y, self.angles)
+            k, v = torch.cat([k_video, k], 2), torch.cat([v_video, v], 2)
+            y = block.finish(y, q, k, v, None, None)
+        out = self.out(y)
+        return rearrange(
+            out, 'b (f h w) (p q c) -> b f c (h p) (w q)', f=FUTURE, h=16 // P, p=P, q=P
+        )
 
 
 def rows_of(
@@ -258,6 +300,8 @@ class Verne(nn.Module):
         )
         self.gen_out = nn.Linear(D_VIDEO, Z * P * P)  # clip pretraining: future tokens -> velocity
         self.video = nn.ModuleList([Block(D_VIDEO) for _ in range(LAYERS)])
+        # clip pretraining, step 19d: word-blind future heads reading the present as the arm does
+        self.future_heads = nn.ModuleDict({cam: FutureHead(cam) for cam in CAMERAS})
         self.action_in = nn.Linear(8, D_ACTION)
         self.time_in = nn.Sequential(
             nn.Linear(FREQ, D_ACTION), nn.SiLU(), nn.Linear(D_ACTION, D_ACTION)
@@ -325,6 +369,20 @@ class Verne(nn.Module):
             )
         out = self.gen_out(x[:, N_PATCH:]).unflatten(1, (FUTURE, N_PATCH))
         return rearrange(out, 'b f (h w) (p q c) -> b f c (h p) (w q)', h=16 // P, p=P, q=P)
+
+    def heads_velocity(
+        self, frame: Tensor, future: Tensor, tau: Tensor, state: Tensor, ins: Tensor
+    ) -> Tensor:
+        # step 19d: the present through the video side as the policy (see), then each camera's future from
+        # its head, reading only those keys and values -> velocity [B, FUTURE, Z, 16, 32]
+        kvs = self.see(frame, state, ins)
+        return torch.cat(
+            [
+                self.future_heads[cam](kvs, future[..., 16 * i : 16 * (i + 1)], tau)
+                for i, cam in enumerate(CAMERAS)
+            ],
+            -1,
+        )
 
     def see(self, frame: Tensor, state: Tensor, ins: Tensor) -> list[tuple[Tensor, Tensor]]:
         # the policy's read of a clean frame: each video layer's keys and values
