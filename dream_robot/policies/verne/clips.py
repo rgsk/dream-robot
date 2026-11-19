@@ -25,15 +25,36 @@ from .model import Verne
 from .pretrain import scene_state
 
 
+def decision_steps(d: Demos, ids: np.ndarray) -> np.ndarray:
+    # per episode in `ids`: the end of its decision window, grasp // 3, the grasp being the first step the
+    # gripper command closes (action[7]: 1 open, 0 closed; median step 87). Before it the arm has barely left
+    # home and the picture doesn't yet show which cube it's going for (step 19j; checked on films)
+    first = np.searchsorted(d.episode, ids)
+    lens = np.searchsorted(d.episode, ids, side='right') - first
+    closed = (d.action[:, 7] < 0.5).cpu().numpy()
+    grasp = np.array([np.argmax(closed[f : f + n]) for f, n in zip(first, lens, strict=True)])
+    return np.maximum(grasp // 3, 1)
+
+
 def clip_batch(
-    d: Demos, ids: np.ndarray, B: int, rng: np.random.Generator
+    d: Demos,
+    ids: np.ndarray,
+    B: int,
+    rng: np.random.Generator,
+    early: float = 0.0,
+    decision: np.ndarray | None = None,
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     # B clips from episodes `ids`, the present at a random step -> present [B, Z, 16, 32], future
-    # [B, FUTURE, Z, 16, 32], state [B, 16] (previous, now; std units), the recorded prompt [B, 8]
+    # [B, FUTURE, Z, 16, 32], state [B, 16] (previous, now; std units), the recorded prompt [B, 8].
+    # early: the share of clips whose present falls in the decision window (decision = decision_steps(d, ids);
+    # step 19j), the rest anywhere in the episode
     first = np.searchsorted(d.episode, ids)
     lens = np.searchsorted(d.episode, ids, side='right') - first
     pick = rng.integers(0, len(ids), B)
-    now = first[pick] + rng.integers(0, lens[pick])
+    span = lens[pick]
+    if early > 0:
+        span = np.where(rng.random(B) < early, decision[pick], span)
+    now = first[pick] + rng.integers(0, span)
     prev = np.maximum(now - 1, first[pick])
     rows = torch.tensor(clip_rows(d.episode, now), device=d.latent.device)
     z = d.latent[rows].float()  # [B, 1 + FUTURE, Z, 16, 32]
@@ -105,6 +126,7 @@ def pretrain_clips(
     probe=None,
     probe_every: int = 4000,
     future_by: str = 'all',
+    early: float = 0.0,
 ) -> frozendict[str, Any]:
     # out: {'weights': a whole Verne on the cpu (its action side untouched), 'log': per log_every steps
     # {step, train, val numbers, and every probe_every steps 'probe': probe(net)}}
@@ -112,12 +134,14 @@ def pretrain_clips(
     rng, val_rng = np.random.default_rng(seed), np.random.default_rng(1000 + seed)
     net = Verne().to(d.latent.device)
     opt = torch.optim.AdamW(net.parameters(), lr=lr)
+    # val presents: anywhere in the episode, as before
     val = [clip_batch(d, val_ids, B, val_rng) for _ in range(4)]
+    decision = decision_steps(d, train_ids)
     start, log = lr_mod.resume(ckpt, None, steps, 0.2, net, opt, rng)
     for step in range(start, steps + 1):
         lr_mod.checkpoint(ckpt, step, steps, 0.2, 2000, net, opt, step, rng, log)
         lr_mod.set_lr(opt, lr * lr_mod.cosine(step, steps))
-        present, future, state, ins = clip_batch(d, train_ids, B, rng)
+        present, future, state, ins = clip_batch(d, train_ids, B, rng, early, decision)
         tau = torch.rand(B, device=present.device)
         with torch.autocast('cuda', dtype=torch.bfloat16):
             noise = torch.randn_like(future)

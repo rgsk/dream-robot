@@ -501,3 +501,28 @@ Rule: the frame's path (self-attention) must start at least as open as the words
   0.15. = 19g (61.5%, 27/25): pairing makes no difference. One seed.
 - Modal: nvidia-smi in the container (modal container exec <id> -- nvidia-smi): L40S 75% busy, 4 of 46 GB, but
   nproc = 1 CPU for training + 8 rollout workers. Set cpu=8 on job and clips for the next runs.
+- 19j (clip pretraining as 19 ('all', 20k, B 32), but half the clips start in the decision window: first third of
+  the steps before the grasp (cut step 14-47, median 29); ~57% of presents there vs ~12%; job clips --early 0.5;
+  Modal H100, 8 CPUs, GPU 96% busy): locate 50.5 (0), 63.2, 69.7, **73.2** (12k), 72.5, **71.7%** (20k) (19: 55%,
+  change head 68%, erase stage 2 76-77%); whole-frame 92% (19: 81.5%). Caption used more (τ 0.5 right 0.31 /
+  shuffled 0.68). Caveat: the probes test on reset scenes, the frames this mix trains on more. Next: stage 2 /
+  co-training from these weights.
+- 19j plain stage 2 (demos only from 19j's clip weights, local): **29/29**, wrong_cube 14/14, miss 5.3 cm, slopes 0.33 /
+  0.48. After demos: whole-frame 83%, locate **56%** (from 72%): plain demo training wears the mark off (erase too:
+  100 -> 77). Same arm as the other video-only starts (19: 25, 27; 19e 29).
+- 19k paired co-training, 40k steps, early mix 0.5 in both batches, from 19j's weights (Modal), running. run.py eval
+  (new: a checkpoint scored like a run's end, into <run>/at<N>/) on its step20000.pt, local: **21/20**, wrong_cube
+  15/18, dropped 5/5, no_grasp 9/7, miss 6.1 cm, slopes 0.27 / 0.25; whole-frame 92%, locate 67.3%. Mid-schedule
+  (lr not decayed), so noisier than a run ending at 20k. Training log: locate 69.5-69.7% through 32k; val action
+  loss rising after ~30k (0.10 -> 0.155): overfitting the 140 episodes.
+- 19k final (40k): locate **70.5%** (held: 69.5-70.5 from 12k on); whole-frame 93%. Rollouts **23/21**, wrong_cube
+  18/19, no_grasp 8/7, miss 6.8 cm, slopes 0.20 / 0.28. Read: the highest video-only mark kept through action
+  training, yet wrong cube no better than any video-only run (14-19). The mark at ~70% isn't what the arm uses, or
+  isn't enough; erase's arms (77%) pick right 46/50. One seed.
+- scripts/arm_use_check.py (val action loss at fixed τ, true vs another moment's frame vs the colour word changed;
+  decision-window moments and uniform ones). Decision moments, gap at τ 0 / 0.4 / 0.67:
+  frame:  erase 0.075 / 0.188 / 0.419; 19k 0.035 / 0.096 / 0.290; 19j plain 0.033 / 0.087 / 0.215; none 0.020 / 0.045 / 0.078
+  colour: erase 0.047 / 0.126 / 0.267; 19k 0.018 / 0.045 / 0.134; 19j plain 0.013 / 0.029 / 0.077; none 0.002 / 0.005 / 0.004
+  Read: the arm's use of the colour word at decision moments follows the mark (erase > 19k > 19j > none) but even
+  19k's arm leans on it ~2.5-3x less than erase's, and on the frame ~2x less. 19k's arm also fits decision moments
+  worst (true loss τ 0.67: 0.353 vs erase 0.195): the 40k run overfit (val action loss 0.10 -> 0.12-0.165).

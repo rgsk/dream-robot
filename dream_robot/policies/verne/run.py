@@ -151,77 +151,9 @@ def write_json(path: Path, obj) -> None:
     path.with_suffix('.partial').rename(path)  # never a half-written file
 
 
-def job(
-    step: str,
-    task: str,
-    seed: int,
-    workers: int,
-    init: str = '',
-    cotrain: float = 0.0,
-    future_by: str = 'all',
-    paired: bool = False,
-) -> None:
-    # init: a run folder under RUNS whose weights.pt training starts from (step 15: the stage 1 run,
-    # '15_erase_pretrain/pretrain/seed0'), else a fresh Verne; cotrain > 0 (step 19g): the clip loss
-    # (future_by as the clip job's) joins the action loss, weighted cotrain, with both probes every 4k steps
-    out = RUNS / step / task / f'seed{seed}'
-    out.mkdir(parents=True, exist_ok=True)
-    meta = source() | {
-        'package_hash': package_hash(),
-        'gpu': torch.cuda.get_device_name(),
-        'task': task,
-        'seed': seed,
-        'steps': STEPS,
-        'vae': str(vae.WEIGHTS.relative_to(REPO)),
-        'init': init,
-        'cotrain': cotrain,
-        'future_by': future_by,
-        'paired': paired,
-    }
-    if (out / 'meta.json').exists():
-        old = json.loads((out / 'meta.json').read_text())
-        if old['package_hash'] != meta['package_hash']:
-            sys.exit(
-                f'{out} was made with package {old["package_hash"]}, now {meta["package_hash"]}'
-            )
-    else:
-        write_json(out / 'meta.json', meta | {'started': time.strftime('%Y-%m-%d %H:%M:%S')})
-
-    state, action, episode, latent, instruction, slot, train_ids, val_ids, scene = load_task(task)
-    d = to_gpu(latent, state, instruction, slot, action, episode, train_ids)
-
-    if (out / 'weights.pt').exists():
-        weights = torch.load(out / 'weights.pt')
-    else:
-        start = torch.load(RUNS / init / 'weights.pt') if init else None
-        probe = None
-        if cotrain > 0 and scene == 't5':
-            from . import pretrain as pt
-            from .data import load_erased, load_scenes
-
-            sc, sv = load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS)
-            er, ev = load_erased('train', vae.WEIGHTS), load_erased('val', vae.WEIGHTS)
-            probe = lambda net: {  # noqa: E731
-                'binding': pt.binding_probe(net, sc, sv, d.s_mean, d.s_std),
-                'locate': pt.locate_probe(net, sc, sv, er, ev, d.s_mean, d.s_std),
-            }
-        run = train(
-            d,
-            train_ids,
-            val_ids,
-            STEPS,
-            seed=seed,
-            ckpt=out / 'ckpt',
-            init=start,
-            cotrain=cotrain,
-            future_by=future_by,
-            probe=probe,
-            paired=paired,
-        )
-        weights = run['weights']
-        write_json(out / 'log.json', run['log'])
-        torch.save(weights, out / 'weights.pt')
-
+def evaluate(out: Path, weights: dict, d, scene: str, workers: int) -> None:
+    # a trained Verne's results into `out`: T5's binding and locate probes, sweeps at N_EXECS, the
+    # close-point probe; each skipped if its file is there (a rerun finishes what a crash left)
     if scene == 't5' and not (out / 'patch_binding_probe.json').exists():
         # does the binding survive (or appear in) the demo training? as pretrain_job's probe; before the
         # sweeps, whose rollout workers leave the GPU too full for it (steps 15, 16 ran out of memory)
@@ -267,6 +199,100 @@ def job(
                 },
             },
         )
+
+
+def job(
+    step: str,
+    task: str,
+    seed: int,
+    workers: int,
+    init: str = '',
+    cotrain: float = 0.0,
+    future_by: str = 'all',
+    paired: bool = False,
+    steps: int = STEPS,
+    early: float = 0.0,
+) -> None:
+    # init: a run folder under RUNS whose weights.pt training starts from (step 15: the stage 1 run,
+    # '15_erase_pretrain/pretrain/seed0'), else a fresh Verne; cotrain > 0 (step 19g): the clip loss
+    # (future_by as the clip job's) joins the action loss, weighted cotrain, with both probes every 4k steps
+    out = RUNS / step / task / f'seed{seed}'
+    out.mkdir(parents=True, exist_ok=True)
+    meta = source() | {
+        'package_hash': package_hash(),
+        'gpu': torch.cuda.get_device_name(),
+        'task': task,
+        'seed': seed,
+        'steps': steps,
+        'vae': str(vae.WEIGHTS.relative_to(REPO)),
+        'init': init,
+        'cotrain': cotrain,
+        'future_by': future_by,
+        'paired': paired,
+        'early': early,
+    }
+    if (out / 'meta.json').exists():
+        old = json.loads((out / 'meta.json').read_text())
+        if old['package_hash'] != meta['package_hash']:
+            sys.exit(
+                f'{out} was made with package {old["package_hash"]}, now {meta["package_hash"]}'
+            )
+    else:
+        write_json(out / 'meta.json', meta | {'started': time.strftime('%Y-%m-%d %H:%M:%S')})
+
+    state, action, episode, latent, instruction, slot, train_ids, val_ids, scene = load_task(task)
+    d = to_gpu(latent, state, instruction, slot, action, episode, train_ids)
+
+    if (out / 'weights.pt').exists():
+        weights = torch.load(out / 'weights.pt')
+    else:
+        start = torch.load(RUNS / init / 'weights.pt') if init else None
+        probe = None
+        if cotrain > 0 and scene == 't5':
+            from . import pretrain as pt
+            from .data import load_erased, load_scenes
+
+            sc, sv = load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS)
+            er, ev = load_erased('train', vae.WEIGHTS), load_erased('val', vae.WEIGHTS)
+            probe = lambda net: {  # noqa: E731
+                'binding': pt.binding_probe(net, sc, sv, d.s_mean, d.s_std),
+                'locate': pt.locate_probe(net, sc, sv, er, ev, d.s_mean, d.s_std),
+            }
+        run = train(
+            d,
+            train_ids,
+            val_ids,
+            steps,
+            seed=seed,
+            ckpt=out / 'ckpt',
+            init=start,
+            cotrain=cotrain,
+            future_by=future_by,
+            probe=probe,
+            paired=paired,
+            early=early,
+        )
+        weights = run['weights']
+        write_json(out / 'log.json', run['log'])
+        torch.save(weights, out / 'weights.pt')
+
+    evaluate(out, weights, d, scene, workers)
+    print(f'done: {out}')
+
+
+def eval_ckpt(step: str, task: str, seed: int, at: int, workers: int) -> None:
+    # an earlier checkpoint of a run (ckpt/step<at>.pt, saved every 2000 steps) evaluated like the run's end
+    # -> RUNS/<step>/<task>/seed<k>/at<at>/. Mid-run weights sit mid cosine schedule (lr not yet decayed)
+    run_dir = RUNS / step / task / f'seed{seed}'
+    out = run_dir / f'at{at}'
+    out.mkdir(parents=True, exist_ok=True)
+    write_json(
+        out / 'meta.json', source() | {'package_hash': package_hash(), 'ckpt': f'step{at}.pt'}
+    )
+    weights = torch.load(run_dir / 'ckpt' / f'step{at}.pt', weights_only=False)['net']
+    state, action, episode, latent, instruction, slot, train_ids, val_ids, scene = load_task(task)
+    d = to_gpu(latent, state, instruction, slot, action, episode, train_ids)
+    evaluate(out, weights, d, scene, workers)
     print(f'done: {out}')
 
 
@@ -409,7 +435,7 @@ def pretrain_job(step: str, seed: int) -> None:
     print(f'done: {out}')
 
 
-def clips_job(step: str, seed: int, steps: int, future_by: str = 'all') -> None:
+def clips_job(step: str, seed: int, steps: int, future_by: str = 'all', early: float = 0.0) -> None:
     # future_by: how the future is predicted (clips.velocity): 'all' / 'present' (steps 19, 19b), 'heads' (19d),
     # 'change' (19e: each present patch's own change, films.png is then the change picture), 'change_top' (19f: the
     # same, loss on the top camera's patches only)
@@ -428,6 +454,7 @@ def clips_job(step: str, seed: int, steps: int, future_by: str = 'all') -> None:
         'seed': seed,
         'steps': steps,
         'future_by': future_by,
+        'early': early,
         'vae': str(vae.WEIGHTS.relative_to(REPO)),
     }
     if (out / 'meta.json').exists():
@@ -458,6 +485,7 @@ def clips_job(step: str, seed: int, steps: int, future_by: str = 'all') -> None:
                 'locate': pt.locate_probe(net, sc, val, erased, val_erased, d.s_mean, d.s_std),
             },
             future_by=future_by,
+            early=early,
         )
         weights = run['weights']
         write_json(out / 'log.json', run['log'])
@@ -522,9 +550,19 @@ if __name__ == '__main__':
     j.add_argument(
         '--paired', action='store_true', help='clips = the moments of the demo batch (step 19i)'
     )
+    j.add_argument('--steps', type=int, default=STEPS, help='training steps (cosine over them)')
+    j.add_argument(
+        '--early', type=float, default=0.0, help='share of samples from the decision window (19k)'
+    )
     j.add_argument(
         '--future-by', choices=('all', 'present', 'heads', 'change', 'change_top'), default='all'
     )
+    ev = sub.add_parser('eval', help="a run's ckpt/step<N>.pt evaluated like its end")
+    ev.add_argument('step')
+    ev.add_argument('task')
+    ev.add_argument('seed', type=int)
+    ev.add_argument('at', type=int, help='the checkpoint step, a multiple of 2000')
+    ev.add_argument('--workers', type=int, default=8)
     pre = sub.add_parser('pretrain')
     pre.add_argument('step')
     pre.add_argument('seed', type=int)
@@ -532,6 +570,9 @@ if __name__ == '__main__':
     cl.add_argument('step')
     cl.add_argument('seed', type=int)
     cl.add_argument('--steps', type=int, default=20000)
+    cl.add_argument(
+        '--early', type=float, default=0.0, help='share of clips from the decision window (19j)'
+    )
     cl.add_argument(
         '--future-by', choices=('all', 'present', 'heads', 'change', 'change_top'), default='all'
     )
@@ -566,10 +607,23 @@ if __name__ == '__main__':
     elif a.cmd == 'synced-from':
         print(json.dumps(source()))
     elif a.cmd == 'job':
-        job(a.step, a.task, a.seed, a.workers, a.init, a.cotrain, a.future_by, a.paired)
+        job(
+            a.step,
+            a.task,
+            a.seed,
+            a.workers,
+            a.init,
+            a.cotrain,
+            a.future_by,
+            a.paired,
+            a.steps,
+            a.early,
+        )
+    elif a.cmd == 'eval':
+        eval_ckpt(a.step, a.task, a.seed, a.at, a.workers)
     elif a.cmd == 'pretrain':
         pretrain_job(a.step, a.seed)
     elif a.cmd == 'clips':
-        clips_job(a.step, a.seed, a.steps, a.future_by)
+        clips_job(a.step, a.seed, a.steps, a.future_by, a.early)
     else:
         queue(a.step, a.tasks, a.seeds, a.workers)

@@ -154,14 +154,25 @@ class Batch:
     now: NDArray  # [B] the samples' table rows (step 19i: their clips, for paired co-training)
 
 
-def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch:
+def get_batch(
+    d: Demos,
+    ids: NDArray,
+    B: int,
+    rng: np.random.Generator,
+    early: float = 0.0,
+    decision: NDArray | None = None,
+) -> Batch:
     # B samples: a random demo from `ids`, a random step of it; actions past the demo's end
     # repeat its last one, so the end of every demo is trained on too. The prompt is the recorded one
     # (step 16: colour + side only; steps 13-15 mixed in near/far prompts, train and val alike)
     first = np.searchsorted(d.episode, ids)
     lens = np.searchsorted(d.episode, ids, side='right') - first
+    # early (step 19k): the share of samples from the decision window (decision = clips.decision_steps)
     pick = rng.integers(0, len(ids), B)
-    now = first[pick] + rng.integers(0, lens[pick])  # [B]
+    span = lens[pick]
+    if early > 0:
+        span = np.where(rng.random(B) < early, decision[pick], span)
+    now = first[pick] + rng.integers(0, span)  # [B]
     prev = np.maximum(now - 1, first[pick])
     last = first[pick] + lens[pick] - 1
     rows = torch.tensor(np.minimum(now[:, None] + np.arange(CHUNK), last[:, None]))

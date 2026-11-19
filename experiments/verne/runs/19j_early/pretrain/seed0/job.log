@@ -1,0 +1,43 @@
+probe, prompt colour: train 1.000   val 0.700
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.505   auc 0.884
+step      0   train 2.4753   val right / shuffled caption: τ 0.2 2.8060 / 2.8110   τ 0.5 2.8389 / 2.8437   τ 0.8 2.7452 / 2.7508
+step   1000   train 0.7511   val right / shuffled caption: τ 0.2 0.7814 / 0.9297   τ 0.5 0.5766 / 0.6753   τ 0.8 0.5475 / 0.5639
+step   2000   train 0.6278   val right / shuffled caption: τ 0.2 0.6662 / 0.8549   τ 0.5 0.4699 / 0.5917   τ 0.8 0.4425 / 0.4684
+step   3000   train 0.5678   val right / shuffled caption: τ 0.2 0.6263 / 0.8195   τ 0.5 0.4275 / 0.5393   τ 0.8 0.4105 / 0.4398
+probe, prompt colour: train 1.000   val 0.900
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.632   auc 0.943
+step   4000   train 0.5225   val right / shuffled caption: τ 0.2 0.5958 / 0.8095   τ 0.5 0.3998 / 0.5350   τ 0.8 0.3872 / 0.4202
+step   5000   train 0.5054   val right / shuffled caption: τ 0.2 0.5700 / 0.7910   τ 0.5 0.3825 / 0.5313   τ 0.8 0.3779 / 0.4194
+step   6000   train 0.5057   val right / shuffled caption: τ 0.2 0.5643 / 0.8117   τ 0.5 0.3638 / 0.5320   τ 0.8 0.3678 / 0.4174
+step   7000   train 0.5081   val right / shuffled caption: τ 0.2 0.5521 / 0.8105   τ 0.5 0.3522 / 0.5382   τ 0.8 0.3609 / 0.4167
+probe, prompt colour: train 1.000   val 0.915
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.697   auc 0.946
+step   8000   train 0.4519   val right / shuffled caption: τ 0.2 0.5451 / 0.8191   τ 0.5 0.3444 / 0.5635   τ 0.8 0.3569 / 0.4241
+step   9000   train 0.4594   val right / shuffled caption: τ 0.2 0.5564 / 0.8308   τ 0.5 0.3414 / 0.5636   τ 0.8 0.3510 / 0.4208
+step  10000   train 0.4419   val right / shuffled caption: τ 0.2 0.5441 / 0.8289   τ 0.5 0.3315 / 0.5730   τ 0.8 0.3452 / 0.4231
+step  11000   train 0.4424   val right / shuffled caption: τ 0.2 0.5405 / 0.8344   τ 0.5 0.3275 / 0.5866   τ 0.8 0.3423 / 0.4229
+probe, prompt colour: train 1.000   val 0.900
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.732   auc 0.948
+step  12000   train 0.4136   val right / shuffled caption: τ 0.2 0.5384 / 0.8448   τ 0.5 0.3222 / 0.6135   τ 0.8 0.3387 / 0.4375
+step  13000   train 0.4446   val right / shuffled caption: τ 0.2 0.5423 / 0.8529   τ 0.5 0.3201 / 0.6286   τ 0.8 0.3369 / 0.4432
+step  14000   train 0.4139   val right / shuffled caption: τ 0.2 0.5438 / 0.8597   τ 0.5 0.3188 / 0.6497   τ 0.8 0.3344 / 0.4553
+step  15000   train 0.3996   val right / shuffled caption: τ 0.2 0.5393 / 0.8631   τ 0.5 0.3160 / 0.6441   τ 0.8 0.3325 / 0.4521
+probe, prompt colour: train 1.000   val 0.915
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.725   auc 0.948
+step  16000   train 0.3986   val right / shuffled caption: τ 0.2 0.5448 / 0.8745   τ 0.5 0.3146 / 0.6658   τ 0.8 0.3302 / 0.4609
+step  17000   train 0.4142   val right / shuffled caption: τ 0.2 0.5490 / 0.8790   τ 0.5 0.3150 / 0.6743   τ 0.8 0.3306 / 0.4665
+step  18000   train 0.3680   val right / shuffled caption: τ 0.2 0.5503 / 0.8810   τ 0.5 0.3153 / 0.6740   τ 0.8 0.3298 / 0.4656
+step  19000   train 0.4195   val right / shuffled caption: τ 0.2 0.5475 / 0.8817   τ 0.5 0.3143 / 0.6783   τ 0.8 0.3290 / 0.4664
+probe, prompt colour: train 1.000   val 0.920
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.717   auc 0.948
+step  20000   train 0.3867   val right / shuffled caption: τ 0.2 0.5485 / 0.8820   τ 0.5 0.3148 / 0.6778   τ 0.8 0.3293 / 0.4672
+probe, prompt colour: train 1.000   val 0.920
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.717   auc 0.948
+done: /root/dream-robot/experiments/verne/runs/19j_early/pretrain/seed0

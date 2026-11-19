@@ -111,6 +111,8 @@ def job(
     cotrain: float = 0.0,
     future_by: str = 'all',
     paired: bool = False,
+    steps: int = 20000,
+    early: float = 0.0,
 ):
     # run.py's job (train, sweeps at n_exec 8 and 16, probe) into the runs Volume; vae: another VAE's
     # weights under the runs Volume for this run only, e.g. '03_vae_latents/vae/weights.pt'; init: a run
@@ -126,7 +128,7 @@ def job(
     from dream_robot.policies.verne import run
 
     try:
-        run.job(step, task, seed, workers, init, cotrain, future_by, paired)
+        run.job(step, task, seed, workers, init, cotrain, future_by, paired, steps, early)
     finally:
         runs.commit()  # whatever finished, even if a later part failed
 
@@ -150,7 +152,7 @@ def pretrain(step: str, seed: int = 0):
 
 # cpu=8: the default container had 1 CPU (nproc) for the training loop and the rollout workers
 @app.function(gpu=FAST_GPUS, volumes=VOLUMES, timeout=4 * 3600, cpu=8)
-def clips(step: str, seed: int = 0, steps: int = 20000, future_by: str = 'all'):
+def clips(step: str, seed: int = 0, steps: int = 20000, future_by: str = 'all', early: float = 0.0):
     # run.py's clips_job (step 19 stage 1: clip denoising on the T5 demos' clips; binding probe every 4000
     # steps and at the end, films.png) into the runs Volume
     import os
@@ -161,7 +163,7 @@ def clips(step: str, seed: int = 0, steps: int = 20000, future_by: str = 'all'):
     from dream_robot.policies.verne import run
 
     try:
-        run.clips_job(step, seed, steps, future_by)
+        run.clips_job(step, seed, steps, future_by, early)
     finally:
         runs.commit()
 

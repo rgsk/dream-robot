@@ -1,0 +1,56 @@
+step  13000   train 0.091   val 0.101   clip 0.386
+step  14000   train 0.048   val 0.103   clip 0.354
+step  15000   train 0.101   val 0.111   clip 0.374
+probe, prompt colour: train 1.000   val 0.925
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.697   auc 0.932
+step  16000   train 0.044   val 0.095   clip 0.390
+step  17000   train 0.078   val 0.104   clip 0.363
+step  18000   train 0.047   val 0.104   clip 0.317
+step  19000   train 0.077   val 0.111   clip 0.388
+probe, prompt colour: train 1.000   val 0.915
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.675   auc 0.929
+step  20000   train 0.029   val 0.098   clip 0.363
+step  21000   train 0.076   val 0.112   clip 0.337
+step  22000   train 0.047   val 0.116   clip 0.347
+step  23000   train 0.069   val 0.120   clip 0.372
+probe, prompt colour: train 1.000   val 0.925
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.707   auc 0.932
+step  24000   train 0.032   val 0.105   clip 0.375
+step  25000   train 0.082   val 0.119   clip 0.346
+step  26000   train 0.030   val 0.125   clip 0.347
+step  27000   train 0.087   val 0.128   clip 0.305
+probe, prompt colour: train 1.000   val 0.920
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.683   auc 0.930
+step  28000   train 0.035   val 0.113   clip 0.333
+step  29000   train 0.072   val 0.130   clip 0.334
+step  30000   train 0.022   val 0.141   clip 0.345
+step  31000   train 0.073   val 0.139   clip 0.346
+probe, prompt colour: train 1.000   val 0.935
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.697   auc 0.930
+step  32000   train 0.025   val 0.116   clip 0.338
+step  33000   train 0.063   val 0.140   clip 0.329
+step  34000   train 0.025   val 0.155   clip 0.311
+step  35000   train 0.054   val 0.147   clip 0.362
+probe, prompt colour: train 1.000   val 0.930
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.700   auc 0.930
+step  36000   train 0.027   val 0.121   clip 0.350
+step  37000   train 0.071   val 0.153   clip 0.330
+step  38000   train 0.022   val 0.165   clip 0.289
+step  39000   train 0.052   val 0.150   clip 0.311
+probe, prompt colour: train 1.000   val 0.930
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.705   auc 0.930
+step  40000   train 0.024   val 0.122   clip 0.322
+probe, prompt colour: train 1.000   val 0.930
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.705   auc 0.930
+n_exec  8: 23/50   failures {'wrong_cube': 18, 'no_grasp': 8, 'dropped': 1}
+n_exec 16: 21/50   failures {'no_grasp': 7, 'wrong_cube': 19, 'dropped': 3}
+closes 49/50, miss  6.8 cm, x slope +0.20 (corr +0.22, intercept +2.6 cm), y slope +0.28 (corr +0.39, intercept +0.4 cm)
+done: /root/dream-robot/experiments/verne/runs/19k_paired_long/t5/seed0

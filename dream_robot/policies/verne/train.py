@@ -41,6 +41,7 @@ def train(
     probe=None,
     probe_every: int = 4000,
     paired: bool = False,
+    early: float = 0.0,
 ) -> frozendict[str, Any]:
     # ckpt: a folder for step<N>.pt (every 2000) / stable.pt (resumes from the latest); extend_from:
     # a shorter run's ckpt folder to continue from its stable.pt; init: weights to start from (step 15:
@@ -65,11 +66,14 @@ def train(
         )
     opt = torch.optim.AdamW(net.parameters(), lr=lr)
     val = [get_batch(d, val_ids, 64, val_rng) for _ in range(4)]  # fixed held-out batches
+    # early (step 19k): that share of training samples (demo batch and clip batch) from the decision window;
+    # val batches stay uniform
+    decision = clips.decision_steps(d, train_ids) if early > 0 else None
     start, log = lr_mod.resume(ckpt, extend_from, steps, decay, net, opt, rng)
     for step in range(start, steps + 1):
         lr_mod.checkpoint(ckpt, step, steps, decay, 2000, net, opt, step, rng, log)
         lr_mod.set_lr(opt, lr * lr_mod.cosine(step, steps))
-        b = get_batch(d, train_ids, B, rng)
+        b = get_batch(d, train_ids, B, rng, early, decision)
         with torch.autocast('cuda', dtype=torch.bfloat16):
             l = loss(net, b.frame, b.state, b.instruction, b.acts)
             total = l
@@ -80,7 +84,9 @@ def train(
                     present, state, ins = b.frame, b.state, b.instruction
                     future = clips.future_of(d, b.now)
                 else:
-                    present, future, state, ins = clips.clip_batch(d, train_ids, B, rng)
+                    present, future, state, ins = clips.clip_batch(
+                        d, train_ids, B, rng, early, decision
+                    )
                 tau = torch.rand(B, device=present.device)
                 noise = torch.randn_like(future)
                 lc = clips.clip_loss(net, present, future, state, ins, tau, noise, future_by)

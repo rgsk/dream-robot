@@ -1,0 +1,16 @@
+{
+ "commit": "e20cdb9",
+ "dirty": true,
+ "package_hash": "749d1e82a075",
+ "gpu": "NVIDIA GeForce RTX 4060",
+ "task": "t5",
+ "seed": 0,
+ "steps": 20000,
+ "vae": "experiments/verne/runs/07_instruction/vae_wsd/weights.pt",
+ "init": "19j_early/pretrain/seed0",
+ "cotrain": 0.0,
+ "future_by": "all",
+ "paired": false,
+ "early": 0.0,
+ "started": "2026-11-19 16:31:21"
+}
