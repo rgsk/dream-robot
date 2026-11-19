@@ -53,8 +53,12 @@ def velocity(net: Verne, present, x, tau, state, ins, future_by: str) -> Tensor:
 def clip_loss(
     net: Verne, present, future, state, ins, tau: Tensor, noise: Tensor, future_by: str = 'all'
 ) -> Tensor:
-    if future_by == 'change':  # step 19e: plain regression of each patch's change, no noise
-        return F.mse_loss(net.change(present, state, ins).float(), future - present[:, None])
+    # step 19e: plain regression of each patch's change, no noise; 19f: the top camera only
+    if future_by in ('change', 'change_top'):
+        pred, target = net.change(present, state, ins).float(), future - present[:, None]
+        if future_by == 'change_top':
+            pred, target = pred[..., :16], target[..., :16]
+        return F.mse_loss(pred, target)
     x = (1 - tau[:, None, None, None, None]) * noise + tau[:, None, None, None, None] * future
     v = velocity(net, present, x, tau, state, ins, future_by)
     return F.mse_loss(v.float(), future - noise)

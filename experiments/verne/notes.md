@@ -479,3 +479,8 @@ Rule: the frame's path (self-attention) must start at least as open as the words
 - 19e stage 2 seed 0: **29/27**, wrong_cube 16/15, miss 5.5 cm, slopes 0.35 / 0.36 (partial tracking, like 19 seed 1).
   Locate probe after demos 68.5% (kept). Best of the video-only inits (none 20; 19: 25, 27; 19b 14) but far from
   erase (41/42/39, locate 76-77%). One seed.
+- 19f (future_by='change_top': 19e's head, loss on the top camera's patches only; local, 20k): locate 52.7 (0),
+  61.8 (4k), 59, 57, 59.5, **60%** (19e 67.8%); whole-frame 93-95%. Change picture: heat on the arm's path, same for
+  either colour word. Stage 2 seed 0: **27/28**, wrong_cube 14/16, miss 5.1 cm, slopes 0.43 / 0.42; locate after
+  demos 59%. ~ 19e (29/27). Read: top-only didn't sharpen the mark (the probe also scores wrist patches, which got
+  no loss); change targets plateau at 60-68%, arms at ~28 vs erase 41.

@@ -367,7 +367,8 @@ def pretrain_job(step: str, seed: int) -> None:
 
 def clips_job(step: str, seed: int, steps: int, future_by: str = 'all') -> None:
     # future_by: how the future is predicted (clips.velocity): 'all' / 'present' (steps 19, 19b), 'heads' (19d),
-    # 'change' (19e: each present patch's own change, films.png is then the change picture)
+    # 'change' (19e: each present patch's own change, films.png is then the change picture), 'change_top' (19f: the
+    # same, loss on the top camera's patches only)
     # step 19 stage 1 (clip denoising on the T5 demos' clips, video only) -> RUNS/<step>/pretrain/seed<k>/:
     # meta.json, log.json (binding + locate probes every 4000 steps), weights.pt, patch_binding_probe.json,
     # patch_locate_probe.json, films.png (binding_films on val reset scenes)
@@ -433,7 +434,7 @@ def clips_job(step: str, seed: int, steps: int, future_by: str = 'all') -> None:
 
         picture = (
             clips.change_picture(net, vae.load(vae.WEIGHTS), val, d.s_mean, d.s_std)
-            if future_by == 'change'
+            if future_by in ('change', 'change_top')
             else clips.binding_films(
                 net, vae.load(vae.WEIGHTS), val, d.s_mean, d.s_std, future_by=future_by
             )
@@ -480,7 +481,9 @@ if __name__ == '__main__':
     cl.add_argument('step')
     cl.add_argument('seed', type=int)
     cl.add_argument('--steps', type=int, default=20000)
-    cl.add_argument('--future-by', choices=('all', 'present', 'heads', 'change'), default='all')
+    cl.add_argument(
+        '--future-by', choices=('all', 'present', 'heads', 'change', 'change_top'), default='all'
+    )
     q = sub.add_parser('queue')
     q.add_argument('step')
     q.add_argument('--tasks', nargs='+', choices=TASKS, default=list(TASKS))
