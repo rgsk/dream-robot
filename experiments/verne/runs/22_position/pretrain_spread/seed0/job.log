@@ -1,0 +1,15 @@
+step      0   train 6.0943   val err top 0.83 wrist 1.40 patches   right top 0.498 wrist 0.507
+step    500   train 0.2142   val err top 0.51 wrist 0.43 patches   right top 0.972 wrist 0.982
+step   1000   train 0.1115   val err top 0.50 wrist 0.41 patches   right top 0.985 wrist 0.995
+step   1500   train 0.1068   val err top 0.48 wrist 0.40 patches   right top 0.993 wrist 0.998
+step   2000   train 0.0992   val err top 0.47 wrist 0.41 patches   right top 0.995 wrist 0.995
+step   2500   train 0.0939   val err top 0.48 wrist 0.40 patches   right top 0.995 wrist 0.995
+step   3000   train 0.1028   val err top 0.48 wrist 0.40 patches   right top 0.995 wrist 0.995
+step   3500   train 0.1052   val err top 0.48 wrist 0.40 patches   right top 0.995 wrist 0.995
+step   4000   train 0.0943   val err top 0.48 wrist 0.40 patches   right top 0.995 wrist 0.995
+step   4500   train 0.0944   val err top 0.48 wrist 0.40 patches   right top 0.995 wrist 0.995
+step   5000   train 0.1101   val err top 0.48 wrist 0.40 patches   right top 0.995 wrist 0.995
+locate probe: named > other 0.847   auc 0.895
+probe, prompt colour: train 1.000   val 0.990
+probe, prompt both  : train 1.000   val 0.990
+done: /home/rahul/Documents/codes/ml/dream-robot/experiments/verne/runs/22_position/pretrain_spread/seed0

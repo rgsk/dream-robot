@@ -1,0 +1,384 @@
+W1120 01:01:59.523000 159258 .venv/lib/python3.14/site-packages/torch/_inductor/utils.py:1679] [0/0] Not enough SMs to use max_autotune_gemm mode
+probe, prompt colour: train 1.000   val 0.995
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.892   auc 0.897
+step      0   train 2.347   val 2.652   position 0.0002
+step   1000   train 0.314   val 0.284   position 0.0094
+step   2000   train 0.209   val 0.246   position 0.0070
+step   3000   train 0.218   val 0.247   position 0.0039
+probe, prompt colour: train 1.000   val 0.975
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.922   auc 0.892
+step   4000   train 0.193   val 0.258   position 0.0074
+step   5000   train 0.151   val 0.203   position 0.0020
+step   6000   train 0.143   val 0.199   position 0.0027
+step   7000   train 0.145   val 0.209   position 0.0017
+probe, prompt colour: train 1.000   val 0.980
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.877   auc 0.880
+step   8000   train 0.144   val 0.199   position 0.0010
+step   9000   train 0.120   val 0.180   position 0.0008
+step  10000   train 0.126   val 0.186   position 0.0008
+step  11000   train 0.110   val 0.199   position 0.0006
+probe, prompt colour: train 1.000   val 0.990
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.815   auc 0.873
+step  12000   train 0.124   val 0.213   position 0.0004
+step  13000   train 0.098   val 0.188   position 0.0003
+step  14000   train 0.112   val 0.190   position 0.0003
+step  15000   train 0.093   val 0.216   position 0.0002
+probe, prompt colour: train 1.000   val 0.990
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.795   auc 0.872
+step  16000   train 0.112   val 0.228   position 0.0001
+step  17000   train 0.089   val 0.208   position 0.0001
+step  18000   train 0.080   val 0.211   position 0.0001
+step  19000   train 0.101   val 0.231   position 0.0001
+probe, prompt colour: train 1.000   val 0.985
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.795   auc 0.872
+step  20000   train 0.092   val 0.233   position 0.0001
+probe, prompt colour: train 1.000   val 0.985
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.795   auc 0.872
+Exception in initializer:
+Traceback (most recent call last):
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 233, in _process_worker
+    initializer(*initargs)
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 144, in _start
+    vae=vae_mod.load(vae_mod.WEIGHTS),
+        ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/vae.py", line 186, in load
+    vae = VAE().cuda().eval().requires_grad_(False)
+          ~~~~~~~~~~^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in cuda
+    return self._apply(lambda t: t.cuda(device))
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  [Previous line repeated 1 more time]
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 964, in _apply
+    param_applied = fn(param)
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ~~~~~~^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 MiB. GPU 0 has a total capacity of 7.62 GiB of which 20.94 MiB is free. Process 4409 has 660.16 MiB memory in use. Process 125538 has 127.09 MiB memory in use. Process 146051 has 1.61 GiB memory in use. Process 159258 has 822.50 MiB memory in use. Process 160578 has 686.75 MiB memory in use. Process 160581 has 361.75 MiB memory in use. Including non-PyTorch memory, this process has 440.12 MiB memory in use. Process 160583 has 442.12 MiB memory in use. Process 160580 has 434.12 MiB memory in use. Process 160575 has 434.12 MiB memory in use. Process 160584 has 442.12 MiB memory in use. Process 160582 has 434.12 MiB memory in use. Of the allocated memory 32.98 MiB is allocated by PyTorch, and 1.02 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Exception in initializer:
+Traceback (most recent call last):
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 233, in _process_worker
+    initializer(*initargs)
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 144, in _start
+    vae=vae_mod.load(vae_mod.WEIGHTS),
+        ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/vae.py", line 186, in load
+    vae = VAE().cuda().eval().requires_grad_(False)
+          ~~~~~~~~~~^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in cuda
+    return self._apply(lambda t: t.cuda(device))
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  [Previous line repeated 1 more time]
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 964, in _apply
+    param_applied = fn(param)
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ~~~~~~^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 MiB. GPU 0 has a total capacity of 7.62 GiB of which 20.94 MiB is free. Process 4409 has 660.16 MiB memory in use. Process 125538 has 127.09 MiB memory in use. Process 146051 has 1.61 GiB memory in use. Process 159258 has 822.50 MiB memory in use. Process 160578 has 686.75 MiB memory in use. Process 160581 has 357.75 MiB memory in use. Process 160579 has 440.12 MiB memory in use. Process 160583 has 442.12 MiB memory in use. Including non-PyTorch memory, this process has 438.12 MiB memory in use. Process 160575 has 434.12 MiB memory in use. Process 160584 has 442.12 MiB memory in use. Process 160582 has 434.12 MiB memory in use. Of the allocated memory 31.24 MiB is allocated by PyTorch, and 781.00 KiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Exception in initializer:
+Traceback (most recent call last):
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 233, in _process_worker
+    initializer(*initargs)
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 144, in _start
+    vae=vae_mod.load(vae_mod.WEIGHTS),
+        ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/vae.py", line 186, in load
+    vae = VAE().cuda().eval().requires_grad_(False)
+          ~~~~~~~~~~^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in cuda
+    return self._apply(lambda t: t.cuda(device))
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 964, in _apply
+    param_applied = fn(param)
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ~~~~~~^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 MiB. GPU 0 has a total capacity of 7.62 GiB of which 20.94 MiB is free. Process 4409 has 660.16 MiB memory in use. Process 125538 has 127.09 MiB memory in use. Process 146051 has 1.61 GiB memory in use. Process 159258 has 822.50 MiB memory in use. Process 160578 has 686.75 MiB memory in use. Process 160581 has 357.75 MiB memory in use. Process 160579 has 440.12 MiB memory in use. Process 160583 has 442.12 MiB memory in use. Process 160580 has 438.12 MiB memory in use. Including non-PyTorch memory, this process has 434.12 MiB memory in use. Process 160584 has 442.12 MiB memory in use. Process 160582 has 434.12 MiB memory in use. Of the allocated memory 27.97 MiB is allocated by PyTorch, and 35.50 KiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Exception in initializer:
+Traceback (most recent call last):
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 233, in _process_worker
+    initializer(*initargs)
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 144, in _start
+    vae=vae_mod.load(vae_mod.WEIGHTS),
+        ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/vae.py", line 186, in load
+    vae = VAE().cuda().eval().requires_grad_(False)
+          ~~~~~~~~~~^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in cuda
+    return self._apply(lambda t: t.cuda(device))
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 964, in _apply
+    param_applied = fn(param)
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ~~~~~~^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 MiB. GPU 0 has a total capacity of 7.62 GiB of which 20.94 MiB is free. Process 4409 has 660.16 MiB memory in use. Process 125538 has 127.09 MiB memory in use. Process 146051 has 1.61 GiB memory in use. Process 159258 has 822.50 MiB memory in use. Process 160578 has 686.75 MiB memory in use. Process 160581 has 357.75 MiB memory in use. Process 160579 has 440.12 MiB memory in use. Process 160583 has 442.12 MiB memory in use. Process 160580 has 438.12 MiB memory in use. Process 160575 has 434.12 MiB memory in use. Process 160584 has 442.12 MiB memory in use. Including non-PyTorch memory, this process has 434.12 MiB memory in use. Of the allocated memory 27.97 MiB is allocated by PyTorch, and 35.50 KiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+50 episode(s) not finished by the workers, running here: [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020, 1021, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030, 1031, 1032, 1033, 1034, 1035, 1036, 1037, 1038, 1039, 1040, 1041, 1042, 1043, 1044, 1045, 1046, 1047, 1048, 1049]
+n_exec  8: 45/50   failures {'no_grasp': 4, 'dropped': 1}
+Exception in initializer:
+Traceback (most recent call last):
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 233, in _process_worker
+    initializer(*initargs)
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 143, in _start
+    net=load(weights),
+        ~~~~^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 67, in load
+    net = Verne().cuda().eval()
+          ~~~~~~~~~~~~^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in cuda
+    return self._apply(lambda t: t.cuda(device))
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 964, in _apply
+    param_applied = fn(param)
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ~~~~~~^^^^^^^^
+torch.AcceleratorError: CUDA error: out of memory
+Search for `cudaErrorMemoryAllocation' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Exception in initializer:
+Traceback (most recent call last):
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 233, in _process_worker
+    initializer(*initargs)
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 143, in _start
+    net=load(weights),
+        ~~~~^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 67, in load
+    net = Verne().cuda().eval()
+          ~~~~~~~~~~~~^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in cuda
+    return self._apply(lambda t: t.cuda(device))
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 964, in _apply
+    param_applied = fn(param)
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ~~~~~~^^^^^^^^
+torch.AcceleratorError: CUDA error: out of memory
+Search for `cudaErrorMemoryAllocation' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Exception in initializer:
+Traceback (most recent call last):
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 233, in _process_worker
+    initializer(*initargs)
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 143, in _start
+    net=load(weights),
+        ~~~~^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 67, in load
+    net = Verne().cuda().eval()
+          ~~~~~~~~~~~~^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in cuda
+    return self._apply(lambda t: t.cuda(device))
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  [Previous line repeated 2 more times]
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 964, in _apply
+    param_applied = fn(param)
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ~~~~~~^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 MiB. GPU 0 has a total capacity of 7.62 GiB of which 15.00 MiB is free. Process 4409 has 657.34 MiB memory in use. Process 125538 has 127.09 MiB memory in use. Process 146051 has 1.61 GiB memory in use. Process 159258 has 3.89 GiB memory in use. Process 162275 has 92.50 MiB memory in use. Process 162278 has 216.50 MiB memory in use. Including non-PyTorch memory, this process has 140.00 MiB memory in use. Process 162281 has 23.62 MiB memory in use. Process 162282 has 36.62 MiB memory in use. Process 162284 has 25.88 MiB memory in use. Of the allocated memory 17.97 MiB is allocated by PyTorch, and 27.50 KiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Exception in initializer:
+Traceback (most recent call last):
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 233, in _process_worker
+    initializer(*initargs)
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 144, in _start
+    vae=vae_mod.load(vae_mod.WEIGHTS),
+        ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/vae.py", line 186, in load
+    vae = VAE().cuda().eval().requires_grad_(False)
+          ~~~~~~~~~~^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in cuda
+    return self._apply(lambda t: t.cuda(device))
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 964, in _apply
+    param_applied = fn(param)
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ~~~~~~^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 MiB. GPU 0 has a total capacity of 7.62 GiB of which 15.19 MiB is free. Process 4409 has 657.34 MiB memory in use. Process 125538 has 127.09 MiB memory in use. Process 146051 has 1.61 GiB memory in use. Process 159258 has 3.89 GiB memory in use. Process 162275 has 92.50 MiB memory in use. Including non-PyTorch memory, this process has 216.50 MiB memory in use. Process 162283 has 140.00 MiB memory in use. Process 162281 has 21.62 MiB memory in use. Process 162282 has 36.62 MiB memory in use. Process 162284 has 25.88 MiB memory in use. Of the allocated memory 27.97 MiB is allocated by PyTorch, and 35.50 KiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Exception in initializer:
+Traceback (most recent call last):
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 233, in _process_worker
+    initializer(*initargs)
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 143, in _start
+    net=load(weights),
+        ~~~~^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 67, in load
+    net = Verne().cuda().eval()
+          ~~~~~~~~~~~~^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in cuda
+    return self._apply(lambda t: t.cuda(device))
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 964, in _apply
+    param_applied = fn(param)
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ~~~~~~^^^^^^^^
+torch.AcceleratorError: CUDA error: out of memory
+Search for `cudaErrorMemoryAllocation' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Exception in initializer:
+Traceback (most recent call last):
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 233, in _process_worker
+    initializer(*initargs)
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 143, in _start
+    net=load(weights),
+        ~~~~^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 67, in load
+    net = Verne().cuda().eval()
+          ~~~~~~~~~~~~^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in cuda
+    return self._apply(lambda t: t.cuda(device))
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 964, in _apply
+    param_applied = fn(param)
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ~~~~~~^^^^^^^^
+torch.AcceleratorError: CUDA error: out of memory
+Search for `cudaErrorMemoryAllocation' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Exception in initializer:
+Traceback (most recent call last):
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 233, in _process_worker
+    initializer(*initargs)
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 143, in _start
+    net=load(weights),
+        ~~~~^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 67, in load
+    net = Verne().cuda().eval()
+          ~~~~~~~~~~~~^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in cuda
+    return self._apply(lambda t: t.cuda(device))
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 964, in _apply
+    param_applied = fn(param)
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ~~~~~~^^^^^^^^
+torch.AcceleratorError: CUDA error: out of memory
+Search for `cudaErrorMemoryAllocation' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+50 episode(s) not finished by the workers, running here: [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020, 1021, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030, 1031, 1032, 1033, 1034, 1035, 1036, 1037, 1038, 1039, 1040, 1041, 1042, 1043, 1044, 1045, 1046, 1047, 1048, 1049]
+n_exec 16: 45/50   failures {'no_grasp': 4, 'dropped': 1}
+Exception in initializer:
+Traceback (most recent call last):
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 233, in _process_worker
+    initializer(*initargs)
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 143, in _start
+    net=load(weights),
+        ~~~~^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 67, in load
+    net = Verne().cuda().eval()
+          ~~~~~~~~~~~~^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in cuda
+    return self._apply(lambda t: t.cuda(device))
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 933, in _apply
+    module._apply(fn)
+    ~~~~~~~~~~~~~^^^^
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 964, in _apply
+    param_applied = fn(param)
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/torch/nn/modules/module.py", line 1093, in <lambda>
+    return self._apply(lambda t: t.cuda(device))
+                                 ~~~~~~^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 MiB. GPU 0 has a total capacity of 7.62 GiB of which 37.25 MiB is free. Process 4409 has 675.16 MiB memory in use. Process 125538 has 127.09 MiB memory in use. Process 159258 has 2.28 GiB memory in use. Process 163832 has 638.75 MiB memory in use. Process 163834 has 594.00 MiB memory in use. Including non-PyTorch memory, this process has 428.12 MiB memory in use. Process 163837 has 424.12 MiB memory in use. Process 163835 has 424.12 MiB memory in use. Process 163836 has 422.12 MiB memory in use. Process 163833 has 426.12 MiB memory in use. Process 163829 has 422.12 MiB memory in use. Of the allocated memory 21.99 MiB is allocated by PyTorch, and 15.00 KiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+49 episode(s) not finished by the workers, running here: [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020, 1021, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030, 1031, 1032, 1033, 1034, 1035, 1036, 1037, 1038, 1039, 1040, 1041, 1042, 1043, 1044, 1045, 1046, 1047, 1048, 1049]
+closes 50/50, miss  1.1 cm, x slope +0.92 (corr +0.96, intercept -0.3 cm), y slope +0.65 (corr +0.86, intercept +0.1 cm)
+done: /home/rahul/Documents/codes/ml/dream-robot/experiments/verne/runs/22_position/t5/seed0

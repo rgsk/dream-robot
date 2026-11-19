@@ -295,6 +295,11 @@ class Verne(nn.Module):
         self.video_words = nn.Embedding(1 + len(WORDS), D_VIDEO)  # row 0 'no word', then WORDS
         self.video_state = embedding_mlp(D_VIDEO)
         self.edit_out = nn.Linear(D_VIDEO, Z * P * P)  # pretraining only: tokens -> latent change
+        # step 22: the named cube's centre per camera, from the tokens entering the last layer. 'patch': one score
+        # per token, softmax over the camera's 64 patches, the weighted mean of the patch centres (the answer must
+        # sit on the cube's own patches); 'free': one linear layer on the camera's 64 tokens flattened (anywhere)
+        self.pos_score = nn.Linear(D_VIDEO, 1)
+        self.pos_free = nn.ModuleList([nn.Linear(64 * D_VIDEO, 2) for _ in CAMERAS])
         self.time_video = (
             nn.Sequential(  # clip pretraining: a future frame's noise level -> added to it
                 nn.Linear(FREQ, D_VIDEO), nn.SiLU(), nn.Linear(D_VIDEO, D_VIDEO)
@@ -407,6 +412,33 @@ class Verne(nn.Module):
         # erases that cube, read from the tokens entering the last video layer
         out = self.edit_out(self.video_side(frame, state, ins)[1])
         return rearrange(out, 'b (h w) (p q c) -> b c (h p) (w q)', h=16 // P, p=P, q=P)
+
+    def position_weights(self, frame: Tensor, state: Tensor, ins: Tensor) -> Tensor:
+        # step 22: per camera, a softmax over its 64 patches of one score per token [B, 2 (top, wrist), 8, 8]
+        x = self.video_side(frame, state, ins)[1].view(
+            len(frame), 8, 16, D_VIDEO
+        )  # canvas rows, cols
+        w = [
+            self.pos_score(x[:, :, cols])[..., 0].flatten(1).float().softmax(-1)
+            for cols in CAMERAS.values()
+        ]
+        return torch.stack(w, 1).view(len(frame), 2, 8, 8)
+
+    def position(self, frame: Tensor, state: Tensor, ins: Tensor, readout: str) -> Tensor:
+        # step 22: a clean latent [B, Z, 16, 32] + a colour word -> the named cube's centre [B, 4]: top (row, col),
+        # wrist (row, col), in patches of each camera's 8 x 8 grid (patch k spans k..k+1). 'patch' / 'spread': the
+        # weighted mean of patch centres (position_weights); 'free': one linear layer per camera on its tokens
+        if readout != 'free':
+            w = self.position_weights(frame, state, ins)
+            centre = torch.arange(8, device=w.device) + 0.5
+            rows, cols = (w.sum(3) * centre).sum(2), (w.sum(2) * centre).sum(2)  # [B, 2]
+            return torch.stack([rows, cols], 2).flatten(1)
+        x = self.video_side(frame, state, ins)[1].view(len(frame), 8, 16, D_VIDEO)
+        out = [
+            self.pos_free[i](x[:, :, cols].flatten(1)).float()
+            for i, cols in enumerate(CAMERAS.values())
+        ]
+        return torch.cat(out, 1)
 
     def velocity(
         self, kvs: list[tuple[Tensor, Tensor]], x: Tensor, tau: Tensor, ins: Tensor, state: Tensor

@@ -1,0 +1,50 @@
+✓ Initialized. View run at 
+https://modal.com/apps/rahulguptasde/main/ap-8gkJfoUuLs9eB8kcaqyJlc
+✓ Created objects.
+├── ✓ Uploaded /home/rahul/Documents/codes/ml/dream-robot/scripts/modal_app.py
+├── ✓ Uploaded scratch/modal_synced_from.json
+├── ✓ Uploaded /home/rahul/Documents/codes/ml/dream-robot/dream_robot
+├── ✓ Created Function check.
+├── ✓ Created Function job.
+├── ✓ Created Function pretrain.
+├── ✓ Created Function position.
+└── ✓ Created Function clips.
+probe, prompt colour: train 1.000   val 0.980
+probe, prompt both  : train 1.000   val 0.990
+locate probe: named > other 0.830   auc 0.894
+step      0   train 2.622   val 2.074   position 0.1042
+step   1000   train 0.324   val 0.287   position 0.1042
+probe, prompt colour: train 1.000   val 1.000
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.815   auc 0.902
+step   2000   train 0.250   val 0.245   position 0.1036
+step   3000   train 0.195   val 0.224   position 0.1050
+probe, prompt colour: train 1.000   val 0.980
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.870   auc 0.911
+step   4000   train 0.156   val 0.196   position 0.1029
+step   5000   train 0.170   val 0.185   position 0.0994
+probe, prompt colour: train 1.000   val 0.995
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.837   auc 0.906
+step   6000   train 0.155   val 0.186   position 0.0978
+step   7000   train 0.154   val 0.172   position 0.0920
+probe, prompt colour: train 1.000   val 0.995
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.868   auc 0.906
+step   8000   train 0.124   val 0.172   position 0.0983
+step   9000   train 0.145   val 0.160   position 0.0973
+probe, prompt colour: train 1.000   val 0.990
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.868   auc 0.907
+step  10000   train 0.155   val 0.168   position 0.1016
+probe, prompt colour: train 1.000   val 0.990
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.868   auc 0.907
+n_exec  8: 46/50   failures {'no_grasp': 1, 'dropped': 3}
+n_exec 16: 47/50   failures {'dropped': 3}
+closes 50/50, miss  0.6 cm, x slope +0.99 (corr +1.00, intercept -0.0 cm), y slope +0.81 (corr +0.91, intercept +0.1 cm)
+done: /root/dream-robot/experiments/verne/runs/22_position_spread/t5/seed3
+Runner terminated.
+✓ App completed. View run at 
+https://modal.com/apps/rahulguptasde/main/ap-8gkJfoUuLs9eB8kcaqyJlc

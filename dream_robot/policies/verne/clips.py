@@ -137,9 +137,9 @@ def pretrain_clips(
     # val presents: anywhere in the episode, as before
     val = [clip_batch(d, val_ids, B, val_rng) for _ in range(4)]
     decision = decision_steps(d, train_ids)
-    start, log = lr_mod.resume(ckpt, None, steps, 0.2, net, opt, rng)
+    start, log = lr_mod.resume(ckpt, steps, net, opt, rng)
     for step in range(start, steps + 1):
-        lr_mod.checkpoint(ckpt, step, steps, 0.2, 2000, net, opt, step, rng, log)
+        lr_mod.checkpoint(ckpt, step, steps, 5000, net, opt, step, rng, log)
         lr_mod.set_lr(opt, lr * lr_mod.cosine(step, steps))
         present, future, state, ins = clip_batch(d, train_ids, B, rng, early, decision)
         tau = torch.rand(B, device=present.device)

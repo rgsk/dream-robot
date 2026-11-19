@@ -137,12 +137,12 @@ def train(
     rng = np.random.default_rng(seed)
     vae = VAE().cuda()
     opt = torch.optim.AdamW(vae.parameters(), lr=lr)
-    start, log = lr_mod.resume(ckpt, extend_from, steps, decay, vae, opt, rng)
+    start, log = lr_mod.resume(ckpt, steps, vae, opt, rng, extend_from, decay)
     vx = to_float(val)
     # batch 64 at 128x256 needs > 8 GB in one pass: on a small card, halves with gradients summed
     parts = 1 if torch.cuda.get_device_properties(0).total_memory > 20e9 else 2
     for step in range(start, steps + 1):
-        lr_mod.checkpoint(ckpt, step, steps, decay, 1000, vae, opt, step, rng, log)
+        lr_mod.checkpoint(ckpt, step, steps, 1000, vae, opt, step, rng, log, decay=decay)
         lr_mod.set_lr(opt, lr * lr_mod.wsd(step, steps, warmup, decay))
         ids = np.sort(rng.integers(0, len(frames), B))
         opt.zero_grad()

@@ -574,3 +574,60 @@ Rule: the frame's path (self-attention) must start at least as open as the words
   times (alternating values = probe every 4k): local 4060 eager 25-33 -> compiled 15-23 (517 -> 334 s, 1.55x);
   Modal L40S eager 35-38 -> **6-10** (651 -> 142 s, **4.6x**; now ~2x faster than local). Step-0 losses match
   eager (same draws). Modal image + gcc (triton). Modal jobs on L40S only.
+
+## Step 22 · position pretraining: a colour word -> the named cube's centre per camera, runs/22_position
+- position.py: labels = the named cube's centre in top and wrist ((row, col) in patches of each 8 x 8 grid), the
+  change-weighted mean of its erase blob (> 0.3). Verne.position reads the tokens entering the last video layer:
+  'patch' = score per token, softmax over the camera's 64 patches, weighted mean of patch centres; 'free' = one
+  linear layer on the camera's 64 tokens flattened. Stage 1 as erase (1000 reset scenes, 5k steps, B 64, local).
+- patch: err top / wrist **0.07 / 0.09 patches**, right cube 100 / 100% from 1k; **locate 86.0%** (auc 0.92),
+  whole-frame 99.5%.
+- free: err 0.06 / 0.13, right 100 / 100%; **locate 89.2%** (auc 0.90), whole-frame 100%.
+- Read: a 4-number position target marks the named cube's patches 86-89% (untrained 52, clips 55-72, erase 100).
+  The readout didn't matter (prediction was patch >> free): a linear map on flattened tokens is a sum of per-patch
+  linear terms, and the cubes sit in 2 slots, so 'free' also reads the cube's own patches. A truly non-local head
+  needs a nonlinear mixer. One seed.
+- spread (patch's weights, loss Σ w_i ‖patch centre_i − target‖² / 2: a vote split around the cube costs): err top /
+  wrist 0.48 / 0.40 (answer snaps to the nearest patch centre, as expected), right 99.5%; **locate 84.7%** (auc 0.90),
+  whole-frame 99%. = patch (86.0) / free (89.2): the averaging loophole wasn't what held the mark below erase's 100%.
+  All three single-point targets land at 85-89%. Erase's target is dense (every patch of the cube gets its own
+  change); a point says where, one patch at a time. One seed each.
+- Stage 2 seed 0 (step 20 recipe from pretrain_free, position loss kept on, weight 1.0, readout free; local):
+  **45/45 of 50, wrong_cube 0/0**, no_grasp 4/4, dropped 1/1; miss 1.1 cm, slopes 0.92 / 0.65. Locate over training
+  89.2 (0) -> 92.2 (4k) -> 79.5% (12k-20k) despite the loss on (position loss -> 0.0001: the head keeps finding
+  the cube while patches lose some mark); whole-frame not logged here. vs erase co-train (21a) 49/49, 44/48,
+  43/50, 47/49 (wrong 0); step 20 (no aux loss) 41/40 (wrong 5/3). Rollout workers all OOM'd (notebook kernel 1.6 GB
+  on the card), ran in-process. One seed.
+- Read: a 4-number position target, kept on, gives the arm erase's wrong-cube 0 with a locate of only 79.5%. The
+  arm needs the right cube found; the probe's (loose, 28-patch) mask doesn't have to read 100% for that.
+- Stage 2 seed 0, patch and spread readouts (Modal L40S, compiled; step names 22_position_patch / _spread; free's
+  is 22_position):
+  patch:  **36/34**, wrong_cube **5/5**, no_grasp 9/11; miss 2.9 cm, slopes 0.68 / 0.42 (weak tracking). Locate
+          86.5 -> 92 -> 95 -> **97.2% (12k)** -> 96.2%: the mark ROSE during demos; position loss 0.0002.
+  spread: **47/49**, wrong_cube **0/0**, no_grasp 3/1; miss 0.9 cm, slopes 0.95 / 0.69. Locate 84 -> 85 -> 74 ->
+          **75.5%**; its loss stays ~0.10 (the floor: target off the patch centres).
+  free:   45/45, wrong 0/0, miss 1.1 cm, locate 79.5%.
+- Read: the arm runs the OPPOSITE way to the locate probe here: patch keeps the highest mark (96%) and has the worst
+  arm (wrong cube 5/5, no_grasp 9-11); spread / free with 75-80% have wrong cube 0. So the (loose-mask) locate %
+  isn't the arm's predictor across objectives. One seed each; patch could be a bad seed.
+- Seeds 1-2 (Modal L40S; init = each readout's seed-0 stage 1, as 21a):
+  free:   s1 **45/41** (wrong 0/0, no_grasp 2/8), s2 **45/47** (wrong 0/0); miss 1.0 / 0.7 cm; locate 92 / 90.5%.
+  patch:  s1 **32/29** (wrong **11/11**), s2 **35/34** (wrong **6/7**); miss 4.3 / 3.5 cm, slopes 0.53-0.62 / 0.28-0.53;
+          locate 91 / 94%.
+  spread: s1 **46/46** (wrong 0/0), s2 **46/43** (wrong 0/0); miss 0.6 / 0.9 cm; locate 84 / 94%.
+- **3 seeds**: free 45/45, 45/41, 45/47 (wrong 0 of 300); spread 47/49, 46/46, 46/43 (wrong 0 of 300); patch 36/34,
+  32/29, 35/34 (wrong 5/5, 11/11, 6/7 = 45 of 300, worse than no aux loss: step 20 19 of 300). Erase (21a) 43-49,
+  wrong 0 of 400.
+- Read: a position target is as good as erase for picking the cube (free / spread, wrong 0 of 600), but HOW it's read
+  matters: patch (softmax-weighted mean of patch centres, plain squared error) consistently breaks the arm (wrong cube,
+  weak tracking) while keeping the highest locate (91-96%). Its exact-sub-patch fit needs finely balanced weights on
+  neighbouring patches; spread (same weights, each patch charged its distance) doesn't. Locate % (loose mask) does
+  not rank these arms.
+- Stage 2 default now 10k steps (run.STEPS; probes every 2k, none at the last step: evaluate() probes the end).
+  Seeds 3-4 at 10k (Modal):
+  free:   s3 **45/40**, s4 **36/33** (no_grasp 13/16, miss 2.4 cm, slopes 0.77 / 0.29); wrong 0/0 both.
+  spread: s3 **46/47**, s4 **47/48**; wrong 0/0; miss 0.6 cm, slopes 0.99 / 0.81.
+- **5 seeds**: spread 465/500 (93%), every sweep 43-49, wrong cube 0 of 500, miss 0.6-0.9 cm; free 422/500 (84%),
+  sweeps 33-47, wrong 0 of 500, one weak-grasp seed (s4). Erase (21a) 379/400 (95%). 10k = 20k for spread.
+- Read: spread is the pick: as good as erase, from a 4-number label (where the named cube is, per camera). Free picks
+  the right cube just as well but grasps less reliably.

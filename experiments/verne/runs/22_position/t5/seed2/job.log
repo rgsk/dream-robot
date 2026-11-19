@@ -1,0 +1,62 @@
+[modal-client] 2026-11-20T01:26:40+0530 Warning: Received Status.RESOURCE_EXHAUSTED
+App create rate limit exceeded. Please wait and retry.
+for /modal.client.ModalClient/AppCreate (774d5931). Retrying...
+✓ Initialized. View run at 
+https://modal.com/apps/rahulguptasde/main/ap-5Ul61RNsCuGXOFeb0Qaq2D
+✓ Created objects.
+├── ✓ Uploaded /home/rahul/Documents/codes/ml/dream-robot/scripts/modal_app.py
+├── ✓ Uploaded scratch/modal_synced_from.json
+├── ✓ Uploaded /home/rahul/Documents/codes/ml/dream-robot/dream_robot
+├── ✓ Created Function check.
+├── ✓ Created Function job.
+├── ✓ Created Function pretrain.
+├── ✓ Created Function position.
+└── ✓ Created Function clips.
+probe, prompt colour: train 1.000   val 0.995
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.902   auc 0.897
+step      0   train 2.054   val 2.515   position 0.0001
+step   1000   train 0.296   val 0.298   position 0.0058
+step   2000   train 0.236   val 0.253   position 0.0025
+step   3000   train 0.172   val 0.243   position 0.0029
+probe, prompt colour: train 1.000   val 0.995
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.915   auc 0.879
+step   4000   train 0.205   val 0.222   position 0.0030
+step   5000   train 0.239   val 0.215   position 0.0056
+step   6000   train 0.229   val 0.206   position 0.0018
+step   7000   train 0.150   val 0.217   position 0.0011
+probe, prompt colour: train 1.000   val 1.000
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.862   auc 0.866
+step   8000   train 0.141   val 0.207   position 0.0019
+step   9000   train 0.127   val 0.206   position 0.0015
+step  10000   train 0.115   val 0.201   position 0.0007
+step  11000   train 0.118   val 0.205   position 0.0008
+probe, prompt colour: train 1.000   val 0.990
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.865   auc 0.863
+step  12000   train 0.150   val 0.195   position 0.0004
+step  13000   train 0.115   val 0.201   position 0.0003
+step  14000   train 0.095   val 0.218   position 0.0003
+step  15000   train 0.095   val 0.221   position 0.0002
+probe, prompt colour: train 1.000   val 0.995
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.910   auc 0.865
+step  16000   train 0.116   val 0.213   position 0.0001
+step  17000   train 0.083   val 0.214   position 0.0001
+step  18000   train 0.084   val 0.230   position 0.0001
+step  19000   train 0.099   val 0.229   position 0.0001
+probe, prompt colour: train 1.000   val 0.995
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.905   auc 0.865
+step  20000   train 0.108   val 0.216   position 0.0001
+probe, prompt colour: train 1.000   val 0.995
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.905   auc 0.865
+n_exec  8: 45/50   failures {'dropped': 3, 'no_grasp': 2}
+n_exec 16: 47/50   failures {'dropped': 1, 'no_grasp': 2}
+closes 50/50, miss  0.7 cm, x slope +0.95 (corr +0.99, intercept -0.1 cm), y slope +0.70 (corr +0.85, intercept +0.0 cm)
+done: /root/dream-robot/experiments/verne/runs/22_position/t5/seed2
+✓ App completed. View run at 
+https://modal.com/apps/rahulguptasde/main/ap-5Ul61RNsCuGXOFeb0Qaq2D

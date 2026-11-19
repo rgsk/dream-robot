@@ -39,7 +39,9 @@ if modal.is_local():
         )
 image = (
     modal.Image.debian_slim(python_version='3.14')
-    .apt_install('libegl1', 'libgl1', 'libglvnd0', 'ffmpeg', 'gcc')  # gcc: torch.compile's triton builds its launcher
+    .apt_install(
+        'libegl1', 'libgl1', 'libglvnd0', 'ffmpeg', 'gcc'
+    )  # gcc: torch.compile's triton builds its launcher
     .uv_pip_install(requirements=[REQS])
     .env(
         {
@@ -112,9 +114,11 @@ def job(
     cotrain: float = 0.0,
     future_by: str = 'all',
     paired: bool = False,
-    steps: int = 20000,
+    steps: int = 10000,  # = run.STEPS
     early: float = 0.0,
     erase: float = 0.0,
+    position: float = 0.0,
+    readout: str = 'patch',
 ):
     # run.py's job (train, sweeps at n_exec 8 and 16, probe) into the runs Volume; vae: another VAE's
     # weights under the runs Volume for this run only, e.g. '03_vae_latents/vae/weights.pt'; init: a run
@@ -130,7 +134,21 @@ def job(
     from dream_robot.policies.verne import run
 
     try:
-        run.job(step, task, seed, workers, init, cotrain, future_by, paired, steps, early, erase)
+        run.job(
+            step,
+            task,
+            seed,
+            workers,
+            init,
+            cotrain,
+            future_by,
+            paired,
+            steps,
+            early,
+            erase,
+            position,
+            readout,
+        )
     finally:
         runs.commit()  # whatever finished, even if a later part failed
 
@@ -148,6 +166,22 @@ def pretrain(step: str, seed: int = 0):
 
     try:
         run.pretrain_job(step, seed)
+    finally:
+        runs.commit()
+
+
+@app.function(gpu=GPUS, volumes=VOLUMES, timeout=4 * 3600)
+def position(step: str, seed: int = 0, readout: str = 'patch', steps: int = 5000):
+    # run.py's position_job (step 22 stage 1: the named cube's centre per camera; probes, position.png)
+    import os
+    import sys
+
+    sys.path.insert(0, R)
+    os.chdir(R)
+    from dream_robot.policies.verne import run
+
+    try:
+        run.position_job(step, seed, readout, steps)
     finally:
         runs.commit()
 

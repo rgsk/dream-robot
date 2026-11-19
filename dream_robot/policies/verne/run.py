@@ -54,7 +54,7 @@ from .model import Verne
 from .train import train
 
 RUNS = REPO / 'experiments/verne/runs'
-STEPS = 20000
+STEPS = 10000  # stage 2 (2026-11-20; 20000 before): val loss bottoms out ~10k, step 20 s0 scored the same at 10k
 N_EXECS = (8, 16)
 # task -> dataset, scene (rollouts.make_env); the splits are the notebooks' (val = a tenth of the
 # demos, as dreamzero / uwm2; T1 trains on 10 labelled of the other 90, the rest on all of them)
@@ -213,7 +213,11 @@ def job(
     steps: int = STEPS,
     early: float = 0.0,
     erase: float = 0.0,
+    position: float = 0.0,
+    readout: str = 'patch',
 ) -> None:
+    # position > 0 (step 22): position.py's loss on reset scenes joins the action loss, weighted position, B 64,
+    # with readout ('patch' / 'free'; the init's head)
     # erase > 0 (step 21a): step 15's erase loss on reset scenes joins the action loss, weighted erase, B 64
     # init: a run folder under RUNS whose weights.pt training starts from (step 15: the stage 1 run,
     # '15_erase_pretrain/pretrain/seed0'), else a fresh Verne; cotrain > 0 (step 19g): the clip loss
@@ -233,6 +237,8 @@ def job(
         'paired': paired,
         'early': early,
         'erase': erase,
+        'position': position,
+        'readout': readout,
     }
     if (out / 'meta.json').exists():
         old = json.loads((out / 'meta.json').read_text())
@@ -251,7 +257,8 @@ def job(
     else:
         start = torch.load(RUNS / init / 'weights.pt') if init else None
         probe = None
-        if (cotrain > 0 or erase > 0) and scene == 't5':
+        if (cotrain > 0 or erase > 0 or position > 0) and scene == 't5':
+            from . import position as pos
             from . import pretrain as pt
             from .data import load_erased, load_scenes
 
@@ -276,6 +283,8 @@ def job(
             early=early,
             erase=erase,
             erase_data=(sc, er, 64) if erase > 0 else None,
+            position=position,
+            position_data=(sc, pos.centres(sc, er), readout, 64) if position > 0 else None,
         )
         weights = run['weights']
         write_json(out / 'log.json', run['log'])
@@ -286,7 +295,7 @@ def job(
 
 
 def eval_ckpt(step: str, task: str, seed: int, at: int, workers: int) -> None:
-    # an earlier checkpoint of a run (ckpt/step<at>.pt, saved every 2000 steps) evaluated like the run's end
+    # an earlier checkpoint of a run (ckpt/step<at>.pt, saved every 5000 steps) evaluated like the run's end
     # -> RUNS/<step>/<task>/seed<k>/at<at>/. Mid-run weights sit mid cosine schedule (lr not yet decayed)
     run_dir = RUNS / step / task / f'seed{seed}'
     out = run_dir / f'at{at}'
@@ -440,6 +449,65 @@ def pretrain_job(step: str, seed: int) -> None:
     print(f'done: {out}')
 
 
+def position_job(step: str, seed: int, readout: str, steps: int = PRETRAIN_STEPS) -> None:
+    # step 22 stage 1 (the named cube's centre per camera, position.py) -> RUNS/<step>/pretrain_<readout>/seed<k>/:
+    # meta.json, log.json, weights.pt, patch_locate_probe.json, patch_binding_probe.json, position.png
+    from . import position as pos
+    from . import pretrain as pt
+    from .data import load_erased, load_scenes
+
+    out = RUNS / step / f'pretrain_{readout}' / f'seed{seed}'
+    out.mkdir(parents=True, exist_ok=True)
+    meta = source() | {
+        'package_hash': package_hash(),
+        'gpu': torch.cuda.get_device_name(),
+        'seed': seed,
+        'steps': steps,
+        'readout': readout,
+        'vae': str(vae.WEIGHTS.relative_to(REPO)),
+    }
+    if (out / 'meta.json').exists():
+        old = json.loads((out / 'meta.json').read_text())
+        if old['package_hash'] != meta['package_hash']:
+            sys.exit(
+                f'{out} was made with package {old["package_hash"]}, now {meta["package_hash"]}'
+            )
+    else:
+        write_json(out / 'meta.json', meta | {'started': time.strftime('%Y-%m-%d %H:%M:%S')})
+    sc, val = load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS)
+    erased, val_erased = load_erased('train', vae.WEIGHTS), load_erased('val', vae.WEIGHTS)
+    cen, val_cen = pos.centres(sc, erased), pos.centres(val, val_erased)
+    state, _, episode = load_table(TASKS['t5'][0])  # the T5 demos' state stats, as stage 2's
+    train_ids, _ = split('t5', int(episode.max()) + 1)
+    s = torch.tensor(state[np.isin(episode, train_ids)], device='cuda')
+    s_mean, s_std = s.mean(0), s.std(0)
+
+    if (out / 'weights.pt').exists():
+        weights = torch.load(out / 'weights.pt')
+    else:
+        run = pos.pretrain(
+            sc, cen, val, val_cen, s_mean, s_std, steps, readout, seed=seed, ckpt=out / 'ckpt'
+        )
+        weights = run['weights']
+        write_json(out / 'log.json', run['log'])
+        torch.save(weights, out / 'weights.pt')
+    net = Verne().cuda()
+    net.load_state_dict(weights)
+    if not (out / 'patch_locate_probe.json').exists():
+        write_json(
+            out / 'patch_locate_probe.json',
+            pt.locate_probe(net, sc, val, erased, val_erased, s_mean, s_std),
+        )
+    if not (out / 'patch_binding_probe.json').exists():
+        write_json(out / 'patch_binding_probe.json', pt.binding_probe(net, sc, val, s_mean, s_std))
+    if not (out / 'position.png').exists():
+        import imageio.v3 as iio
+
+        img = pos.picture(net, vae.load(vae.WEIGHTS), val, val_cen, s_mean, s_std, readout)
+        iio.imwrite(out / 'position.png', img)
+    print(f'done: {out}')
+
+
 def clips_job(step: str, seed: int, steps: int, future_by: str = 'all', early: float = 0.0) -> None:
     # future_by: how the future is predicted (clips.velocity): 'all' / 'present' (steps 19, 19b), 'heads' (19d),
     # 'change' (19e: each present patch's own change, films.png is then the change picture), 'change_top' (19f: the
@@ -563,15 +631,29 @@ if __name__ == '__main__':
         '--future-by', choices=('all', 'present', 'heads', 'change', 'change_top'), default='all'
     )
     j.add_argument('--erase', type=float, default=0.0, help='weight of the erase loss (step 21a)')
+    j.add_argument(
+        '--position', type=float, default=0.0, help='weight of the position loss (step 22)'
+    )
+    j.add_argument(
+        '--readout',
+        choices=('patch', 'free', 'spread'),
+        default='patch',
+        help='position head (step 22)',
+    )
     ev = sub.add_parser('eval', help="a run's ckpt/step<N>.pt evaluated like its end")
     ev.add_argument('step')
     ev.add_argument('task')
     ev.add_argument('seed', type=int)
-    ev.add_argument('at', type=int, help='the checkpoint step, a multiple of 2000')
+    ev.add_argument('at', type=int, help='the checkpoint step, a multiple of 5000')
     ev.add_argument('--workers', type=int, default=8)
     pre = sub.add_parser('pretrain')
     pre.add_argument('step')
     pre.add_argument('seed', type=int)
+    po = sub.add_parser('position')  # step 22 stage 1
+    po.add_argument('step')
+    po.add_argument('seed', type=int)
+    po.add_argument('--readout', choices=('patch', 'free', 'spread'), default='patch')
+    po.add_argument('--steps', type=int, default=PRETRAIN_STEPS)
     cl = sub.add_parser('clips')
     cl.add_argument('step')
     cl.add_argument('seed', type=int)
@@ -625,11 +707,15 @@ if __name__ == '__main__':
             a.steps,
             a.early,
             a.erase,
+            a.position,
+            a.readout,
         )
     elif a.cmd == 'eval':
         eval_ckpt(a.step, a.task, a.seed, a.at, a.workers)
     elif a.cmd == 'pretrain':
         pretrain_job(a.step, a.seed)
+    elif a.cmd == 'position':
+        position_job(a.step, a.seed, a.readout, a.steps)
     elif a.cmd == 'clips':
         clips_job(a.step, a.seed, a.steps, a.future_by, a.early)
     else:

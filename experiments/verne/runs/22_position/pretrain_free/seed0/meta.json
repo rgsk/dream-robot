@@ -1,0 +1,11 @@
+{
+ "commit": "a47784f",
+ "dirty": true,
+ "package_hash": "0bc6c873b76f",
+ "gpu": "NVIDIA GeForce RTX 4060",
+ "seed": 0,
+ "steps": 5000,
+ "readout": "free",
+ "vae": "experiments/verne/runs/07_instruction/vae_wsd/weights.pt",
+ "started": "2026-11-20 00:17:15"
+}

@@ -12,7 +12,8 @@ WSD VAE spiked 20x at step 3500 at lr 1e-3).
 
 The stable phase doesn't depend on the run's length, so the checkpoint saved where the decay
 starts (stable.pt) can be continued at the same lr into a longer run: a 10k run's stable.pt is
-step 8000, from which a 15k run goes stable to 12000 and decays from there.
+step 8000, from which a 15k run goes stable to 12000 and decays from there. Only the VAE trains with WSD; Verne's
+trainings (stage 2, erase, position, clips) use cosine(), which decays from step 0, so they keep no stable.pt.
 """
 
 import math
@@ -59,8 +60,12 @@ def save(path: Path, net, opt, step: int, rng: np.random.Generator, log: list, s
     # everything a resume needs: the state *before* `step` runs (steps 0 .. step-1 are done)
     path.parent.mkdir(parents=True, exist_ok=True)
     state = {
-        'step': step, 'steps': steps, 'log': log, 'net': net.state_dict(),
-        'opt': opt.state_dict(), 'rng': rng.bit_generator.state,
+        'step': step,
+        'steps': steps,
+        'log': log,
+        'net': net.state_dict(),
+        'opt': opt.state_dict(),
+        'rng': rng.bit_generator.state,
         'torch_rng': torch.get_rng_state(),
         'cuda_rng': torch.cuda.get_rng_state(),
     }
@@ -69,7 +74,13 @@ def save(path: Path, net, opt, step: int, rng: np.random.Generator, log: list, s
 
 
 def resume(
-    ckpt: Path | None, extend_from: Path | None, steps: int, decay: float, net, opt, rng
+    ckpt: Path | None,
+    steps: int,
+    net,
+    opt,
+    rng,
+    extend_from: Path | None = None,
+    decay: float = 0.2,
 ) -> tuple[int, list]:
     # -> (first step to run, log so far). This run's latest ckpt/step<N>.pt if there is one (a
     # crash), else extend_from/stable.pt (a shorter run's state where its decay began; this run
@@ -96,12 +107,15 @@ def resume(
     return state['step'], state['log']
 
 
-def checkpoint(ckpt: Path | None, step: int, steps: int, decay: float, every: int, *state) -> None:
-    # at the top of a step: step<N>.pt every `every` steps, all kept (a run can be rewound to before
-    # a loss spike), and stable.pt where the decay begins
-    if ckpt is None or step == 0:
+def checkpoint(
+    ckpt: Path | None, step: int, steps: int, every: int, *state, decay: float | None = None
+) -> None:
+    # at the top of a step: step<N>.pt every `every` steps, all kept (a run can be rewound to before a loss
+    # spike), never at step 0 or the last step (the caller saves the final weights itself); decay (WSD runs
+    # only, the VAE): also stable.pt where the decay begins. Cosine runs have no stable phase: no stable.pt
+    if ckpt is None or step == 0 or step == steps:
         return
-    if step == decay_start(steps, decay):
+    if decay is not None and step == decay_start(steps, decay):
         save(ckpt / 'stable.pt', *state, steps)
     if step % every == 0:
         save(ckpt / f'step{step}.pt', *state, steps)

@@ -83,9 +83,9 @@ def pretrain(
     dev = sc.latent.device
     net = Verne().to(dev)
     opt = torch.optim.AdamW(net.parameters(), lr=lr)
-    start, log = lr_mod.resume(ckpt, None, steps, 0.2, net, opt, rng)
+    start, log = lr_mod.resume(ckpt, steps, net, opt, rng)
     for step in range(start, steps + 1):
-        lr_mod.checkpoint(ckpt, step, steps, 0.2, 2000, net, opt, step, rng, log)
+        lr_mod.checkpoint(ckpt, step, steps, 5000, net, opt, step, rng, log)
         lr_mod.set_lr(opt, lr * lr_mod.cosine(step, steps))
         ids = torch.tensor(rng.integers(0, len(sc.slot), B), device=dev)
         which = torch.tensor(rng.integers(0, 2, B), device=dev)  # which cube the word names

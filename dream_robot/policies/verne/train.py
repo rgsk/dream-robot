@@ -11,7 +11,8 @@ tokens are the same in both (the clip mask keeps the present from seeing the fut
 pass with the future and the actions masked from each other.
 Step 21a, erase co-training (erase > 0): every step also takes a batch of reset scenes and adds erase x step 15's
 erase loss (pretrain.py: colour word -> the change that hides that cube), so demo training can't wear off the
-mark the erase pretraining put on the named cube's patches."""
+mark the erase pretraining put on the named cube's patches.
+Step 22, position co-training (position > 0): the same, with position.py's loss (the named cube's centre per camera)."""
 
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ from numpy.typing import NDArray
 from . import clips
 from . import lr as lr_mod
 from . import pretrain as pt
+from .position import loss as position_loss
 from .data import Demos, colour_prompts, get_batch
 from .model import Verne, loss
 
@@ -36,27 +38,28 @@ def train(
     steps: int,
     B: int = 32,
     lr: float = 3e-4,
-    decay: float = 0.2,  # only names where stable.pt is saved; the schedule is cosine
     seed: int = 0,
     ckpt: Path | None = None,
-    extend_from: Path | None = None,
     init: dict | None = None,
     cotrain: float = 0.0,
     future_by: str = 'all',
     probe=None,
-    probe_every: int = 4000,
+    probe_every: int = 2000,
     paired: bool = False,
     early: float = 0.0,
     erase: float = 0.0,
     erase_data=None,
+    position: float = 0.0,
+    position_data=None,
 ) -> frozendict[str, Any]:
-    # ckpt: a folder for step<N>.pt (every 2000) / stable.pt (resumes from the latest); extend_from:
-    # a shorter run's ckpt folder to continue from its stable.pt; init: weights to start from (step 15:
+    # ckpt: a folder for step<N>.pt (every 5000, not the last; a rerun resumes from the latest); init: weights to start from (step 15:
     # the stage 1 pretrained Verne; only its video side is loaded, the action side starts fresh: stage 1
     # never trains it, and step 17 changed its shape), else a fresh one
     # out: {'weights': state dict on the cpu, 'log': (step, train loss, val loss) every 1000 steps; with
     # cotrain (or erase), (step, train, val, clip (or erase) loss, probe(net) every probe_every steps or None)}
-    # erase_data: (scenes, erased, B) for erase > 0 (pretrain.py's; the demos' state stats)
+    # erase_data: (scenes, erased, B) for erase > 0 (pretrain.py's; the demos' state stats); position_data:
+    # (scenes, centres, readout, B) for position > 0 (step 22, position.py). At most one of cotrain / erase / position
+    assert (cotrain > 0) + (erase > 0) + (position > 0) <= 1
     torch.manual_seed(seed)
     rng, val_rng = np.random.default_rng(seed), np.random.default_rng(1000 + seed)
     net = Verne().to(d.latent.device)
@@ -67,7 +70,7 @@ def train(
         video = {k: v for k, v in init.items() if not k.startswith(fresh)}
         missing, unexpected = net.load_state_dict(video, strict=False)
         # pretraining-only parts an older checkpoint doesn't have start fresh too
-        newer = ('edit_out', 'time_video', 'gen_out', 'future_heads', 'change_out')
+        newer = ('edit_out', 'time_video', 'gen_out', 'future_heads', 'change_out', 'pos_')
         assert not unexpected and all(k.startswith(fresh + newer) for k in missing), (
             [k for k in missing if not k.startswith(fresh + newer)],
             unexpected,
@@ -77,23 +80,26 @@ def train(
     # early (step 19k): that share of training samples (demo batch and clip batch) from the decision window;
     # val batches stay uniform
     decision = clips.decision_steps(d, train_ids) if early > 0 else None
-    start, log = lr_mod.resume(ckpt, extend_from, steps, decay, net, opt, rng)
+    start, log = lr_mod.resume(ckpt, steps, net, opt, rng)
 
-    def losses(net, frame, state, ins, acts, clip, ers):
-        # the step's loss terms: action, and the clip or erase loss (None when off)
+    def losses(net, frame, state, ins, acts, clip, ers, pos):
+        # the step's loss terms: action, and the clip, erase or position loss (None when off)
         l, lc = loss(net, frame, state, ins, acts), None
         if clip is not None:
             lc = clips.clip_loss(net, *clip, future_by)
         if ers is not None:
             ef, es, ei, target = ers
             lc = F.mse_loss(net.edit(ef, es, ei).float(), target)
+        if pos is not None:
+            pf, ps, pi, target = pos
+            lc = position_loss(net, pf, ps, pi, target, position_data[2])
         return l, lc
 
     # step 21a: one compiled graph per step, replayed as a CUDA graph (the 4.5M-param model is launch-bound:
     # local 4060 26 -> 15 ms per step with the erase loss, then GPU-bound)
     step_losses = torch.compile(losses, mode='reduce-overhead')
     for step in range(start, steps + 1):
-        lr_mod.checkpoint(ckpt, step, steps, decay, 2000, net, opt, step, rng, log)
+        lr_mod.checkpoint(ckpt, step, steps, 5000, net, opt, step, rng, log)
         lr_mod.set_lr(opt, lr * lr_mod.cosine(step, steps))
         b = get_batch(d, train_ids, B, rng, early, decision)
         clip = ers = None
@@ -117,9 +123,21 @@ def train(
                 colour_prompts(sc, ids, which),
                 pt.target(sc, erased, ids, which),
             )
+        pos = None
+        if position > 0:
+            sc, centres, _, pB = position_data
+            ids = torch.tensor(rng.integers(0, len(sc.slot), pB), device=sc.latent.device)
+            which = torch.tensor(rng.integers(0, 2, pB), device=sc.latent.device)
+            pos = (
+                sc.latent[ids].float(),
+                pt.scene_state(sc, ids, d.s_mean, d.s_std),
+                colour_prompts(sc, ids, which),
+                centres[ids, which],
+            )
         with torch.autocast('cuda', dtype=torch.bfloat16):
-            l, lc = step_losses(net, b.frame, b.state, b.instruction, b.acts, clip, ers)
-        total = l + cotrain * lc if cotrain > 0 else l + erase * lc if erase > 0 else l
+            l, lc = step_losses(net, b.frame, b.state, b.instruction, b.acts, clip, ers, pos)
+        aux = cotrain + erase + position  # the one that's on, or 0
+        total = l + aux * lc if aux > 0 else l
         opt.zero_grad()
         total.backward()
         torch.nn.utils.clip_grad_norm_(net.parameters(), lr_mod.CLIP)
@@ -131,13 +149,18 @@ def train(
                         [loss(net, v.frame, v.state, v.instruction, v.acts).item() for v in val]
                     )
                 )
-            if cotrain > 0 or erase > 0:
-                pr = probe(net) if probe is not None and step % probe_every == 0 else None
+            if aux > 0:
+                # the last step is skipped: the run's evaluate() probes the final weights anyway
+                pr = (
+                    probe(net)
+                    if probe is not None and step % probe_every == 0 and step < steps
+                    else None
+                )
                 net.train()
                 log.append((step, l.item(), lv, lc.item(), pr))
+                name = 'erase' if erase > 0 else 'position' if position > 0 else 'clip'
                 print(
-                    f'step {step:6d}   train {l.item():.3f}   val {lv:.3f}   '
-                    f'{"erase" if erase > 0 else "clip"} {lc.item():.4f}',
+                    f'step {step:6d}   train {l.item():.3f}   val {lv:.3f}   {name} {lc.item():.4f}',
                     flush=True,
                 )
             else:
