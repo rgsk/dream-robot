@@ -1,0 +1,252 @@
+{
+ "1000": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1001": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1002": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1003": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1004": [
+  true,
+  "none",
+  239
+ ],
+ "1005": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1006": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1007": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1008": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1009": [
+  true,
+  "none",
+  254
+ ],
+ "1010": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1011": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1012": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1013": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1014": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1015": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1016": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1017": [
+  true,
+  "none",
+  232
+ ],
+ "1018": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1019": [
+  false,
+  "dropped",
+  600
+ ],
+ "1020": [
+  true,
+  "none",
+  234
+ ],
+ "1021": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1022": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1023": [
+  true,
+  "none",
+  295
+ ],
+ "1024": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1025": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1026": [
+  true,
+  "none",
+  247
+ ],
+ "1027": [
+  true,
+  "none",
+  224
+ ],
+ "1028": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1029": [
+  true,
+  "none",
+  267
+ ],
+ "1030": [
+  true,
+  "none",
+  321
+ ],
+ "1031": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1032": [
+  true,
+  "none",
+  265
+ ],
+ "1033": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1034": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1035": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1036": [
+  true,
+  "none",
+  546
+ ],
+ "1037": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1038": [
+  true,
+  "none",
+  247
+ ],
+ "1039": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1040": [
+  true,
+  "none",
+  247
+ ],
+ "1041": [
+  true,
+  "none",
+  215
+ ],
+ "1042": [
+  false,
+  "no_grasp",
+  600
+ ],
+ "1043": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1044": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1045": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1046": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1047": [
+  false,
+  "wrong_cube",
+  600
+ ],
+ "1048": [
+  true,
+  "none",
+  282
+ ],
+ "1049": [
+  true,
+  "none",
+  296
+ ]
+}

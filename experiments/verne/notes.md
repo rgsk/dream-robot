@@ -490,3 +490,8 @@ Rule: the frame's path (self-attention) must start at least as open as the words
   by 8k; whole-frame 87%; clip loss holds ~0.29. Rollouts **27/25**, wrong_cube 18/18, miss 6.2 cm, slopes 0.32 /
   0.12. ~ 19e / 19f (29, 27); erase 41/42/39. Read: co-training moves some binding onto the present (locate +7)
   but stalls around 61%, like the change heads; marks of 60-68% give arms of ~27. One seed.
+- 19h co-training from scratch (fresh Verne, action + 1.0 x clip loss ('all') from step 0; Modal L40S/A100):
+  locate 52.5 (0), 54.2, 56, 54.8, 54.5, **53.7%** (20k); whole-frame 81-82.5%; clip loss 0.37 (19g: 0.29).
+  Rollouts **16/18**, wrong_cube 26/24, miss 8.5 cm, slopes -0.15 / 0.20: frame-blind, like actions alone (B: 20,
+  locate 52.5%). Read: from scratch, the future pressure didn't put the binding on the present at all, nor did it
+  help the arm; 19g's 54 -> 61.5% needed the pretrained clip knowledge first. One seed.

@@ -1,0 +1,46 @@
+probe, prompt colour: train 1.000   val 0.705
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.525   auc 0.883
+step      0   train 2.132   val 2.116   clip 2.505
+step   1000   train 0.184   val 0.144   clip 0.644
+step   2000   train 0.094   val 0.111   clip 0.551
+step   3000   train 0.113   val 0.105   clip 0.543
+probe, prompt colour: train 1.000   val 0.725
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.542   auc 0.927
+step   4000   train 0.089   val 0.089   clip 0.505
+step   5000   train 0.137   val 0.103   clip 0.507
+step   6000   train 0.062   val 0.091   clip 0.483
+step   7000   train 0.107   val 0.092   clip 0.443
+probe, prompt colour: train 1.000   val 0.770
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.560   auc 0.925
+step   8000   train 0.062   val 0.082   clip 0.418
+step   9000   train 0.123   val 0.092   clip 0.404
+step  10000   train 0.071   val 0.081   clip 0.442
+step  11000   train 0.105   val 0.091   clip 0.394
+probe, prompt colour: train 1.000   val 0.785
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.548   auc 0.923
+step  12000   train 0.073   val 0.076   clip 0.429
+step  13000   train 0.099   val 0.090   clip 0.405
+step  14000   train 0.050   val 0.082   clip 0.384
+step  15000   train 0.091   val 0.088   clip 0.380
+probe, prompt colour: train 1.000   val 0.825
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.545   auc 0.923
+step  16000   train 0.043   val 0.079   clip 0.365
+step  17000   train 0.102   val 0.091   clip 0.372
+step  18000   train 0.049   val 0.081   clip 0.347
+step  19000   train 0.084   val 0.090   clip 0.381
+probe, prompt colour: train 1.000   val 0.810
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.537   auc 0.923
+step  20000   train 0.042   val 0.080   clip 0.370
+probe, prompt colour: train 1.000   val 0.810
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.537   auc 0.923
+n_exec  8: 16/50   failures {'wrong_cube': 26, 'no_grasp': 7, 'dropped': 1}
+n_exec 16: 18/50   failures {'wrong_cube': 24, 'no_grasp': 8}
+closes 50/50, miss  8.5 cm, x slope -0.15 (corr -0.15, intercept +0.0 cm), y slope +0.20 (corr +0.33, intercept +0.2 cm)
+done: /root/dream-robot/experiments/verne/runs/19h_cotrain_scratch/t5/seed0
