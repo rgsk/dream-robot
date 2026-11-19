@@ -470,3 +470,12 @@ Rule: the frame's path (self-attention) must start at least as open as the words
   and do the matching in their own 4 layers.
   Trajectory: locate 52.5 (0), 52.5, 51, 51.5, 51.5, 51.5; whole-frame 68.5, 80, 90.5, 91, 89, 88.5. Val right τ 0.2
   0.60 (4k) -> 0.78 (20k): the heads overfit the 140 episodes after ~4k. films.png 6 of 6 named cube in the gripper.
+- 19e (future_by='change': no generation; one linear layer per present token predicts its own patch's change at each
+  of the 7 future frames, read where the arm's last layer reads; local 4060, 20k): locate probe (named > other) 53
+  (0), 56.5, **67, 66.5, 68, 67.8%**: the first video-only objective to mark the named cube above chance (19-19d:
+  51-55%; erase 100%, erase stage 2 76-77%). Whole-frame 87-90.5%. Caption used (val 0.77 right / 0.95 shuffled).
+  films.png = change picture: heat dominated by the arm's area and the moving wrist view; the named cube isn't
+  visibly singled out by eye.
+- 19e stage 2 seed 0: **29/27**, wrong_cube 16/15, miss 5.5 cm, slopes 0.35 / 0.36 (partial tracking, like 19 seed 1).
+  Locate probe after demos 68.5% (kept). Best of the video-only inits (none 20; 19: 25, 27; 19b 14) but far from
+  erase (41/42/39, locate 76-77%). One seed.

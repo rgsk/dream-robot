@@ -7,6 +7,8 @@ video layer -> velocity. The policy path (see) is unchanged: the present alone. 
 the present cross-attends to the words and the state; the future reads neither. Step 19d (heads_velocity):
 the future isn't in the video transformer at all; two word- and joint-blind heads (top camera, wrist camera),
 narrow like the action side, read the present's keys and values layer by layer, as the arm does.
+Step 19e (change): no future generation; one linear layer per present token predicts that patch's own change at
+each future frame.
 Step 18 (roadmap box 08): positions by RoPE, as Verne's (wan_dit.py rope_cos_sin / frame_rope, action_dit.py
 chunk_rope): each head's queries and keys are rotated by their token's place, video patches by (frame, row,
 column) of the canvas grid (the present frame is frame 0; channels 12 / 10 / 10 of the 32), action tokens by
@@ -299,6 +301,8 @@ class Verne(nn.Module):
             )
         )
         self.gen_out = nn.Linear(D_VIDEO, Z * P * P)  # clip pretraining: future tokens -> velocity
+        # step 19e: a present token -> its own patch's change at each future frame (one linear layer)
+        self.change_out = nn.Linear(D_VIDEO, FUTURE * Z * P * P)
         self.video = nn.ModuleList([Block(D_VIDEO) for _ in range(LAYERS)])
         # clip pretraining, step 19d: word-blind future heads reading the present as the arm does
         self.future_heads = nn.ModuleDict({cam: FutureHead(cam) for cam in CAMERAS})
@@ -382,6 +386,16 @@ class Verne(nn.Module):
                 for i, cam in enumerate(CAMERAS)
             ],
             -1,
+        )
+
+    def change(self, frame: Tensor, state: Tensor, ins: Tensor) -> Tensor:
+        # step 19e: present latent [B, Z, 16, 32] -> each patch's predicted change at each future frame,
+        # latent(t + STRIDE·j) − latent(t), [B, FUTURE, Z, 16, 32], read per token from the tokens entering the
+        # last video layer (where the arm's last layer reads) by one linear layer: a token can only report a
+        # change it already knows, it can't work one out from the others
+        out = self.change_out(self.video_side(frame, state, ins)[1])  # [B, 128, FUTURE · Z·P·P]
+        return rearrange(
+            out, 'b (h w) (f p q c) -> b f c (h p) (w q)', h=16 // P, f=FUTURE, p=P, q=P
         )
 
     def see(self, frame: Tensor, state: Tensor, ins: Tensor) -> list[tuple[Tensor, Tensor]]:

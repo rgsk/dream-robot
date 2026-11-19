@@ -44,4 +44,14 @@
         "**/*.log": true,
     },
     "problems.visibility": true,
+    // file watching: the system has 65k inotify watches; data (66 GB), the venv and run checkpoints ran it
+    // out and VS Code stopped noticing edits. Files here still open and list, they just aren't live-tracked
+    // (run job.log files stay watched)
+    "files.watcherExclude": {
+        "**/data/**": true,
+        "**/.venv/**": true,
+        "**/scratch/**": true,
+        "**/experiments/**/ckpt/**": true,
+        "**/experiments/**/*.pt": true,
+    },
 }

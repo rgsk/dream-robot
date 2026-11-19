@@ -20,7 +20,7 @@ from frozendict import frozendict
 from torch import Tensor
 
 from . import lr as lr_mod
-from .data import FUTURE, Demos, Scenes, clip_rows, colour_prompts
+from .data import COLOURS, FUTURE, Demos, Scenes, clip_rows, colour_prompts
 from .model import Verne
 from .pretrain import scene_state
 
@@ -44,7 +44,7 @@ def clip_batch(
 def velocity(net: Verne, present, x, tau, state, ins, future_by: str) -> Tensor:
     # future_by: 'all' (step 19: future tokens in the video transformer, reading words + state), 'present'
     # (19b: only the present reads them), 'heads' (19d: word-blind top / wrist heads read the present's keys
-    # and values, as the arm does)
+    # and values, as the arm does); 'change' (19e) has no velocity, see clip_loss
     if future_by == 'heads':
         return net.heads_velocity(present, x, tau, state, ins)
     return net.clip_velocity(present, x, tau, state, ins, future_by)
@@ -53,6 +53,8 @@ def velocity(net: Verne, present, x, tau, state, ins, future_by: str) -> Tensor:
 def clip_loss(
     net: Verne, present, future, state, ins, tau: Tensor, noise: Tensor, future_by: str = 'all'
 ) -> Tensor:
+    if future_by == 'change':  # step 19e: plain regression of each patch's change, no noise
+        return F.mse_loss(net.change(present, state, ins).float(), future - present[:, None])
     x = (1 - tau[:, None, None, None, None]) * noise + tau[:, None, None, None, None] * future
     v = velocity(net, present, x, tau, state, ins, future_by)
     return F.mse_loss(v.float(), future - noise)
@@ -172,3 +174,27 @@ def binding_films(
         img = decode(vae, torch.cat([present[:, None], fut], 1))  # [2, 8, 128, 256, 3]
         rows += [np.concatenate(list(r), 1) for r in img]
     return np.concatenate(rows, 0)
+
+
+@torch.no_grad()
+def change_picture(net: Verne, vae, sc: Scenes, s_mean, s_std, n: int = 3) -> np.ndarray:
+    # step 19e: per val reset scene (row) the scene, then the predicted change size per patch (summed over
+    # future frames and channels, as a red overlay) with the near cube's colour word, then with the far
+    # cube's. The named cube's patches should light up, the other's not. uint8 [n·128, 3·256, 3]
+    net.eval()
+    dev = sc.latent.device
+    ids = torch.arange(n, device=dev)
+    present = sc.latent[ids].float()
+    scene = decode(vae, present).astype(np.float32)  # [n, 128, 256, 3]
+    cols = [scene]
+    for which in (0, 1):
+        w = torch.full((n,), which, device=dev)
+        ins = sc.instruction[ids].clone()
+        ins[:, COLOURS] = 0
+        ins[torch.arange(n), COLOURS.start + sc.colours[ids, which]] = 1
+        size = net.change(present, scene_state(sc, ids, s_mean, s_std), ins).abs().sum((1, 2))
+        heat = (size / size.amax((1, 2), keepdim=True)).cpu().numpy()  # [n, 16, 32] 0..1
+        heat = heat.repeat(8, 1).repeat(8, 2)[..., None]  # latent cell = 8 x 8 px
+        cols.append(scene * (1 - 0.6 * heat) + np.array([255, 0, 0]) * 0.6 * heat)
+    grid = np.concatenate([np.concatenate(list(c), 0) for c in cols], 1)
+    return grid.clip(0, 255).astype(np.uint8)
