@@ -1,0 +1,33 @@
+[rebuilt from log.json: the Modal app log was gone after the app was stopped]
+step      0   train 2.226   val 2.230   clip 0.337
+probe, prompt colour: val 0.810   locate probe: named > other 0.537
+step   1000   train 0.183   val 0.142   clip 0.376
+step   2000   train 0.086   val 0.102   clip 0.328
+step   3000   train 0.110   val 0.103   clip 0.381
+step   4000   train 0.091   val 0.088   clip 0.367
+probe, prompt colour: val 0.835   locate probe: named > other 0.545
+step   5000   train 0.124   val 0.102   clip 0.373
+step   6000   train 0.062   val 0.096   clip 0.326
+step   7000   train 0.100   val 0.101   clip 0.310
+step   8000   train 0.085   val 0.097   clip 0.310
+probe, prompt colour: val 0.835   locate probe: named > other 0.602
+step   9000   train 0.142   val 0.106   clip 0.316
+step  10000   train 0.071   val 0.092   clip 0.323
+step  11000   train 0.124   val 0.105   clip 0.291
+step  12000   train 0.072   val 0.090   clip 0.320
+probe, prompt colour: val 0.845   locate probe: named > other 0.615
+step  13000   train 0.136   val 0.108   clip 0.307
+step  14000   train 0.063   val 0.129   clip 0.296
+step  15000   train 0.161   val 0.134   clip 0.290
+step  16000   train 0.069   val 0.119   clip 0.279
+probe, prompt colour: val 0.865   locate probe: named > other 0.605
+step  17000   train 0.136   val 0.135   clip 0.297
+step  18000   train 0.075   val 0.125   clip 0.242
+step  19000   train 0.130   val 0.128   clip 0.283
+step  20000   train 0.071   val 0.114   clip 0.289
+probe, prompt colour: val 0.870   locate probe: named > other 0.615
+[Modal H100: training + probes done; rollout workers hit GPU graphics faults (XID 31 / 109, EGL rendering on H100); job stopped, sweeps rerun locally below]
+n_exec  8: 27/50   failures {'wrong_cube': 18, 'no_grasp': 5}
+n_exec 16: 25/50   failures {'wrong_cube': 18, 'no_grasp': 6, 'dropped': 1}
+closes 50/50, miss  6.2 cm, x slope +0.32 (corr +0.32, intercept +1.6 cm), y slope +0.12 (corr +0.16, intercept +0.1 cm)
+done: /home/rahul/Documents/codes/ml/dream-robot/experiments/verne/runs/19g_cotrain/t5/seed0

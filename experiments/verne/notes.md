@@ -484,3 +484,9 @@ Rule: the frame's path (self-attention) must start at least as open as the words
   either colour word. Stage 2 seed 0: **27/28**, wrong_cube 14/16, miss 5.1 cm, slopes 0.43 / 0.42; locate after
   demos 59%. ~ 19e (29/27). Read: top-only didn't sharpen the mark (the probe also scores wrist patches, which got
   no loss); change targets plateau at 60-68%, arms at ~28 vs erase 41.
+- 19g co-training (stage 2 from 19's clip weights; every step action loss + 1.0 x the clip loss ('all'), same
+  train episodes; Modal H100 for training, sweeps local after the H100's rollout workers hit GPU graphics faults):
+  locate 53.7 (0), 54.5, 60.2, 61.5, 60.5, **61.5%** (20k): the arm's pull lifts the mark from 54% and it levels off
+  by 8k; whole-frame 87%; clip loss holds ~0.29. Rollouts **27/25**, wrong_cube 18/18, miss 6.2 cm, slopes 0.32 /
+  0.12. ~ 19e / 19f (29, 27); erase 41/42/39. Read: co-training moves some binding onto the present (locate +7)
+  but stalls around 61%, like the change heads; marks of 60-68% give arms of ~27. One seed.

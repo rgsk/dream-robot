@@ -56,6 +56,9 @@ image = (
 GPUS = ['L40S', 'A100-40GB', 'A10', 'L4']
 # fast cards only, no slow fallback (2026-11-19: the A100 fallback ran ~3x slower than wanted)
 FAST_GPUS = ['H100', 'L40S']
+# jobs that render robosuite scenes (rollouts, EGL): no H100, whose graphics engine faulted (XID 31 / 109,
+# 2026-11-19); L40S renders, the A100 rendered steps 17-18's seeds
+RENDER_GPUS = ['L40S', 'A100-40GB']
 data = modal.Volume.from_name('dream-robot-data', create_if_missing=True)
 runs = modal.Volume.from_name('dream-robot-runs', create_if_missing=True)
 app = modal.App('dream-robot', image=image)
@@ -96,8 +99,17 @@ def check():
     env.close()
 
 
-@app.function(gpu=FAST_GPUS, volumes=VOLUMES, timeout=4 * 3600)
-def job(step: str, task: str, seed: int, workers: int = 8, vae: str = '', init: str = ''):
+@app.function(gpu=RENDER_GPUS, volumes=VOLUMES, timeout=4 * 3600)
+def job(
+    step: str,
+    task: str,
+    seed: int,
+    workers: int = 8,
+    vae: str = '',
+    init: str = '',
+    cotrain: float = 0.0,
+    future_by: str = 'all',
+):
     # run.py's job (train, sweeps at n_exec 8 and 16, probe) into the runs Volume; vae: another VAE's
     # weights under the runs Volume for this run only, e.g. '03_vae_latents/vae/weights.pt'; init: a run
     # folder on the runs Volume to start training from, e.g. '15_erase_pretrain/pretrain/seed0'
@@ -112,7 +124,7 @@ def job(step: str, task: str, seed: int, workers: int = 8, vae: str = '', init: 
     from dream_robot.policies.verne import run
 
     try:
-        run.job(step, task, seed, workers, init)
+        run.job(step, task, seed, workers, init, cotrain, future_by)
     finally:
         runs.commit()  # whatever finished, even if a later part failed
 

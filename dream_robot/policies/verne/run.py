@@ -151,9 +151,18 @@ def write_json(path: Path, obj) -> None:
     path.with_suffix('.partial').rename(path)  # never a half-written file
 
 
-def job(step: str, task: str, seed: int, workers: int, init: str = '') -> None:
+def job(
+    step: str,
+    task: str,
+    seed: int,
+    workers: int,
+    init: str = '',
+    cotrain: float = 0.0,
+    future_by: str = 'all',
+) -> None:
     # init: a run folder under RUNS whose weights.pt training starts from (step 15: the stage 1 run,
-    # '15_erase_pretrain/pretrain/seed0'), else a fresh Verne
+    # '15_erase_pretrain/pretrain/seed0'), else a fresh Verne; cotrain > 0 (step 19g): the clip loss
+    # (future_by as the clip job's) joins the action loss, weighted cotrain, with both probes every 4k steps
     out = RUNS / step / task / f'seed{seed}'
     out.mkdir(parents=True, exist_ok=True)
     meta = source() | {
@@ -164,6 +173,8 @@ def job(step: str, task: str, seed: int, workers: int, init: str = '') -> None:
         'steps': STEPS,
         'vae': str(vae.WEIGHTS.relative_to(REPO)),
         'init': init,
+        'cotrain': cotrain,
+        'future_by': future_by,
     }
     if (out / 'meta.json').exists():
         old = json.loads((out / 'meta.json').read_text())
@@ -181,7 +192,29 @@ def job(step: str, task: str, seed: int, workers: int, init: str = '') -> None:
         weights = torch.load(out / 'weights.pt')
     else:
         start = torch.load(RUNS / init / 'weights.pt') if init else None
-        run = train(d, train_ids, val_ids, STEPS, seed=seed, ckpt=out / 'ckpt', init=start)
+        probe = None
+        if cotrain > 0 and scene == 't5':
+            from . import pretrain as pt
+            from .data import load_erased, load_scenes
+
+            sc, sv = load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS)
+            er, ev = load_erased('train', vae.WEIGHTS), load_erased('val', vae.WEIGHTS)
+            probe = lambda net: {  # noqa: E731
+                'binding': pt.binding_probe(net, sc, sv, d.s_mean, d.s_std),
+                'locate': pt.locate_probe(net, sc, sv, er, ev, d.s_mean, d.s_std),
+            }
+        run = train(
+            d,
+            train_ids,
+            val_ids,
+            STEPS,
+            seed=seed,
+            ckpt=out / 'ckpt',
+            init=start,
+            cotrain=cotrain,
+            future_by=future_by,
+            probe=probe,
+        )
         weights = run['weights']
         write_json(out / 'log.json', run['log'])
         torch.save(weights, out / 'weights.pt')
@@ -198,6 +231,14 @@ def job(step: str, task: str, seed: int, workers: int, init: str = '') -> None:
         write_json(
             out / 'patch_binding_probe.json', pt.binding_probe(net, sc, val, d.s_mean, d.s_std)
         )
+        if not (out / 'patch_locate_probe.json').exists():
+            from .data import load_erased
+
+            er, ev = load_erased('train', vae.WEIGHTS), load_erased('val', vae.WEIGHTS)
+            write_json(
+                out / 'patch_locate_probe.json',
+                pt.locate_probe(net, sc, val, er, ev, d.s_mean, d.s_std),
+            )
         del net, sc, val
         torch.cuda.empty_cache()
 
@@ -474,6 +515,10 @@ if __name__ == '__main__':
         default='',
         help='a run folder under RUNS to start from, e.g. 15_erase_pretrain/pretrain/seed0',
     )
+    j.add_argument('--cotrain', type=float, default=0.0, help='weight of the clip loss (step 19g)')
+    j.add_argument(
+        '--future-by', choices=('all', 'present', 'heads', 'change', 'change_top'), default='all'
+    )
     pre = sub.add_parser('pretrain')
     pre.add_argument('step')
     pre.add_argument('seed', type=int)
@@ -515,7 +560,7 @@ if __name__ == '__main__':
     elif a.cmd == 'synced-from':
         print(json.dumps(source()))
     elif a.cmd == 'job':
-        job(a.step, a.task, a.seed, a.workers, a.init)
+        job(a.step, a.task, a.seed, a.workers, a.init, a.cotrain, a.future_by)
     elif a.cmd == 'pretrain':
         pretrain_job(a.step, a.seed)
     elif a.cmd == 'clips':
