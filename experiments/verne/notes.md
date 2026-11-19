@@ -495,3 +495,9 @@ Rule: the frame's path (self-attention) must start at least as open as the words
   Rollouts **16/18**, wrong_cube 26/24, miss 8.5 cm, slopes -0.15 / 0.20: frame-blind, like actions alone (B: 20,
   locate 52.5%). Read: from scratch, the future pressure didn't put the binding on the present at all, nor did it
   help the arm; 19g's 54 -> 61.5% needed the pretrained clip knowledge first. One seed.
+- 19i paired co-training (= 19g, but the clip batch is the demo batch's own moments: same present, its future;
+  one joint Verne-style pass in effect; Modal L40S, 1 CPU): locate 53.7, 54.2, 56.5, 58.5, 59.2, **61.8%** (20k,
+  slower climb, still rising); whole-frame 87%. Rollouts **26/24**, wrong_cube 15/18, miss 5.7 cm, slopes 0.36 /
+  0.15. = 19g (61.5%, 27/25): pairing makes no difference. One seed.
+- Modal: nvidia-smi in the container (modal container exec <id> -- nvidia-smi): L40S 75% busy, 4 of 46 GB, but
+  nproc = 1 CPU for training + 8 rollout workers. Set cpu=8 on job and clips for the next runs.

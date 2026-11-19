@@ -4,7 +4,11 @@ a held-out loss every 1000 steps.
 
 Step 19g, co-training (cotrain > 0): every step also takes a clip batch from the same training episodes and adds
 cotrain x the clip loss (clips.clip_loss, future_by as the clip job's), so the video side keeps predicting the
-future while the arm learns to read it. Run time is unchanged: the arm reads the present alone."""
+future while the arm learns to read it. Run time is unchanged: the arm reads the present alone.
+Step 19i, paired: the clip batch is the demo batch's own moments (same present, state and prompt; its future
+frames), as one Verne sample holds a present, its future and its action chunk. Two passes, but the present's
+tokens are the same in both (the clip mask keeps the present from seeing the future), so it equals one joint
+pass with the future and the actions masked from each other."""
 
 from pathlib import Path
 from typing import Any
@@ -36,6 +40,7 @@ def train(
     future_by: str = 'all',
     probe=None,
     probe_every: int = 4000,
+    paired: bool = False,
 ) -> frozendict[str, Any]:
     # ckpt: a folder for step<N>.pt (every 2000) / stable.pt (resumes from the latest); extend_from:
     # a shorter run's ckpt folder to continue from its stable.pt; init: weights to start from (step 15:
@@ -69,7 +74,13 @@ def train(
             l = loss(net, b.frame, b.state, b.instruction, b.acts)
             total = l
             if cotrain > 0:
-                present, future, state, ins = clips.clip_batch(d, train_ids, B, rng)
+                if (
+                    paired
+                ):  # step 19i: the demo batch's own moments: same present, its future frames
+                    present, state, ins = b.frame, b.state, b.instruction
+                    future = clips.future_of(d, b.now)
+                else:
+                    present, future, state, ins = clips.clip_batch(d, train_ids, B, rng)
                 tau = torch.rand(B, device=present.device)
                 noise = torch.randn_like(future)
                 lc = clips.clip_loss(net, present, future, state, ins, tau, noise, future_by)

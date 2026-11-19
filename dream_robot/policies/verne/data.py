@@ -151,6 +151,7 @@ class Batch:
     state: Tensor  # [B, 16] std units: [previous step, now] (a demo's first step: previous = now)
     instruction: Tensor  # [B, 8]
     acts: Tensor  # [B, CHUNK, 8] std units, the next CHUNK actions
+    now: NDArray  # [B] the samples' table rows (step 19i: their clips, for paired co-training)
 
 
 def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch:
@@ -170,6 +171,7 @@ def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch
         / d.s_std.repeat(2),
         instruction=d.instruction[now],
         acts=(d.action[rows.to(d.action.device)] - d.a_mean) / d.a_std,
+        now=now,
     )
 
 

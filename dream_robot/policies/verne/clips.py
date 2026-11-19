@@ -41,6 +41,12 @@ def clip_batch(
     return z[:, 0], z[:, 1:], state, d.instruction[now]
 
 
+def future_of(d: Demos, now: np.ndarray) -> Tensor:
+    # the FUTURE frames of present rows `now` [B] -> [B, FUTURE, Z, 16, 32] (step 19i: the clips of a demo batch)
+    rows = torch.tensor(clip_rows(d.episode, now)[:, 1:], device=d.latent.device)
+    return d.latent[rows].float()
+
+
 def velocity(net: Verne, present, x, tau, state, ins, future_by: str) -> Tensor:
     # future_by: 'all' (step 19: future tokens in the video transformer, reading words + state), 'present'
     # (19b: only the present reads them), 'heads' (19d: word-blind top / wrist heads read the present's keys

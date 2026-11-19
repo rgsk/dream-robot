@@ -1,0 +1,15 @@
+{
+ "commit": "a5dfa14",
+ "dirty": true,
+ "package_hash": "94f1db19edb3",
+ "gpu": "NVIDIA L40S",
+ "task": "t5",
+ "seed": 0,
+ "steps": 20000,
+ "vae": "experiments/verne/runs/07_instruction/vae_wsd/weights.pt",
+ "init": "19_clips/pretrain/seed0",
+ "cotrain": 1.0,
+ "future_by": "all",
+ "paired": true,
+ "started": "2026-11-19 10:19:19"
+}

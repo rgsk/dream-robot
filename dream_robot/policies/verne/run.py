@@ -159,6 +159,7 @@ def job(
     init: str = '',
     cotrain: float = 0.0,
     future_by: str = 'all',
+    paired: bool = False,
 ) -> None:
     # init: a run folder under RUNS whose weights.pt training starts from (step 15: the stage 1 run,
     # '15_erase_pretrain/pretrain/seed0'), else a fresh Verne; cotrain > 0 (step 19g): the clip loss
@@ -175,6 +176,7 @@ def job(
         'init': init,
         'cotrain': cotrain,
         'future_by': future_by,
+        'paired': paired,
     }
     if (out / 'meta.json').exists():
         old = json.loads((out / 'meta.json').read_text())
@@ -214,6 +216,7 @@ def job(
             cotrain=cotrain,
             future_by=future_by,
             probe=probe,
+            paired=paired,
         )
         weights = run['weights']
         write_json(out / 'log.json', run['log'])
@@ -517,6 +520,9 @@ if __name__ == '__main__':
     )
     j.add_argument('--cotrain', type=float, default=0.0, help='weight of the clip loss (step 19g)')
     j.add_argument(
+        '--paired', action='store_true', help='clips = the moments of the demo batch (step 19i)'
+    )
+    j.add_argument(
         '--future-by', choices=('all', 'present', 'heads', 'change', 'change_top'), default='all'
     )
     pre = sub.add_parser('pretrain')
@@ -560,7 +566,7 @@ if __name__ == '__main__':
     elif a.cmd == 'synced-from':
         print(json.dumps(source()))
     elif a.cmd == 'job':
-        job(a.step, a.task, a.seed, a.workers, a.init, a.cotrain, a.future_by)
+        job(a.step, a.task, a.seed, a.workers, a.init, a.cotrain, a.future_by, a.paired)
     elif a.cmd == 'pretrain':
         pretrain_job(a.step, a.seed)
     elif a.cmd == 'clips':
