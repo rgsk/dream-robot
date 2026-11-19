@@ -426,3 +426,39 @@ Rule: the frame's path (self-attention) must start at least as open as the words
   RoPE frame axis. Checked: the present's tokens are identical with any future and equal the policy path's.
   scripts/clip_overfit_check.py (8 clips, 1500 steps): loss 2.50 -> 0.11, dream mse 0.048 (copying the present:
   1.35); dreams match the real clips (scratch/clip_overfit.png).
+- 19c (run.py clips, Modal H100, 20k steps, B 32, the 150 demos' clips; train eps for training, val eps for loss):
+  binding probe on the present every 4k steps: 69.5 (step 0), 68, 79, 81, 81.5, **81.5%** (20k): between the
+  stop line (76) and the gate (85); flat from 12k. Caption use (val loss right / shuffled caption) grows all run:
+  τ 0.5 0.35 / 0.81 at 20k; right loss flat from 8k (τ 0.2 slightly up: 0.54 -> 0.58, mild overfit on 140 eps).
+- films.png (val reset scenes, each cube's colour word, same side): **6 of 6 dreams move the named cube** (wrist
+  view shows the named colour in the gripper, the other cube stays), blurry. The model does the lookup when it
+  generates; the present's tokens carry part of it (81.5% vs erase pretraining's 100%).
+- 19 stage 2 (run A: init = the clip-pretrained video side, action side fresh; as step 18 otherwise), seed 0:
+  **25/22 of 50**, wrong_cube 23/19, miss 7.1 cm, slopes 0.07 / 0.29: frame-blind outcome. Binding probe after
+  demos **85.5%** (up from 81.5%). The present carries more of the binding than before, but the arm doesn't
+  follow the cube's position. One seed; no-pretraining control (B) not run yet.
+- 19b (rows_to='present': only the present cross-attends to words + state, the future reads neither; else = 19c,
+  Modal H100): probe 69.5 (0), **86 (4k)**, 87.5, 86.5, 88, **88.5% (20k)**: passes the 85% gate, and fast (19:
+  68% at 4k, 81.5% at 20k). Caption use as 19 (τ 0.5 right 0.33 / shuffled 0.79). films.png 6 of 6 named cube in
+  the gripper, a little messier than 19.
+- 19 stage 2 seed 1: **27/28**, wrong_cube 16/17, miss 5.4 cm, slopes 0.33 / 0.42 (in between: weaker tracking than
+  the erase runs' 0.7, not flat), probe after 79.5%. 19 (rows to all) init: 25, 27 vs erase init (18) 41/42/39.
+- 19b stage 2 seed 0: **14/18**, wrong_cube 30/22, miss 8.7 cm, slopes -0.06 / 0.09: frame-blind. Probe after
+  demos 81.5% (pretrained 88.5%). A higher probe after pretraining did not give a better arm (19: 25, 27; erase: 41,
+  42, 39). Clip-pretrained inits 0 of 3 track well. Missing: the no-pretraining control on this package.
+- Modal speed (open item): stage 2 on an H100 also ~30-40 s / 1000 steps (A100 40 s, local 4060 12 s): the GPU
+  doesn't matter for the 4.5M-param action training, host per-step overhead does. Clip pretraining (1024 tokens) is
+  real GPU work: H100 ~2.7x the 4060. Rule for now: stage 2 local (Modal only for parallel seeds), clips on Modal.
+  To try later: pin torch CPU threads, CUDA graphs / torch.compile for the train step.
+- Run B, no pretraining (fresh Verne, stage 2 only, current package), seed 0: **20/22**, wrong_cube 23/20, miss 7.5
+  cm, slopes 0.10 / 0.14: frame-blind. Probe after demos 79.5%. So clip pretraining is neutral-ish (19: 25, 27;
+  19b: 14), not harmful; erase pretraining (41/42/39) is what made the arm follow the cube. One seed each.
+- scripts/patch_locate_probe.py (per patch: does the token entering the last video layer mark 'I am the NAMED cube'?
+  one linear head shared over patches; labels from the erased renders; val 'named > other' = mean score on the named
+  cube's patches beats the other cube's; chance 50%): untrained 53.5%; erase pretrain **100%**, erase stage 2 s0/s1
+  **77 / 76%**; clips 19 pretrain 55%, 19b 54.5%, their stage 2 54-55%; no pretraining stage 2 52.5%. AUC (named vs
+  all patches) 0.86-0.99 everywhere (finding cubes is easy; telling which one is named is the test).
+  Read: this separates the arms that track (erase) from the frame-blind ones (all others); the whole-frame probe
+  (79-88% for everyone) doesn't. Clip pretraining binds (films 6/6, whole-frame 81-88%) but NOT on the cube's own
+  patches: likely the two-hop route, the present relays the word and the future's queries find the colour.
+  Results in runs/19_clips/patch_locate_probe.json.

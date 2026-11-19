@@ -27,22 +27,35 @@ if modal.is_local():
     # the dev group's ruffgrid is a path dependency on this machine
     subprocess.run(
         ['uv', 'export', '--no-dev', '--frozen', '--no-emit-project', '--no-hashes', '-o', REQS],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     # what run.py's meta.json records as the code version (the image has no .git)
     with open('scratch/modal_synced_from.json', 'w') as f:
-        subprocess.run(['uv', 'run', 'python', '-m', 'dream_robot.policies.verne.run', 'synced-from'],
-                       check=True, stdout=f)
+        subprocess.run(
+            ['uv', 'run', 'python', '-m', 'dream_robot.policies.verne.run', 'synced-from'],
+            check=True,
+            stdout=f,
+        )
 image = (
     modal.Image.debian_slim(python_version='3.14')
     .apt_install('libegl1', 'libgl1', 'libglvnd0', 'ffmpeg')
     .uv_pip_install(requirements=[REQS])
-    .env({'MUJOCO_GL': 'egl', 'PYOPENGL_PLATFORM': 'egl', 'PYTHONUNBUFFERED': '1', 'HF_HUB_OFFLINE': '1'})
+    .env(
+        {
+            'MUJOCO_GL': 'egl',
+            'PYOPENGL_PLATFORM': 'egl',
+            'PYTHONUNBUFFERED': '1',
+            'HF_HUB_OFFLINE': '1',
+        }
+    )
     .add_local_dir('dream_robot', f'{R}/dream_robot', ignore=['**/__pycache__'])
     .add_local_file('scratch/modal_synced_from.json', f'{R}/synced_from.json')
 )
 # the first free one, in order (L40S ran out once, 2026-11-19); all are plenty for a 4.5M-param Verne
 GPUS = ['L40S', 'A100-40GB', 'A10', 'L4']
+# fast cards only, no slow fallback (2026-11-19: the A100 fallback ran ~3x slower than wanted)
+FAST_GPUS = ['H100', 'L40S']
 data = modal.Volume.from_name('dream-robot-data', create_if_missing=True)
 runs = modal.Volume.from_name('dream-robot-runs', create_if_missing=True)
 app = modal.App('dream-robot', image=image)
@@ -83,7 +96,7 @@ def check():
     env.close()
 
 
-@app.function(gpu=GPUS, volumes=VOLUMES, timeout=4 * 3600)
+@app.function(gpu=FAST_GPUS, volumes=VOLUMES, timeout=4 * 3600)
 def job(step: str, task: str, seed: int, workers: int = 8, vae: str = '', init: str = ''):
     # run.py's job (train, sweeps at n_exec 8 and 16, probe) into the runs Volume; vae: another VAE's
     # weights under the runs Volume for this run only, e.g. '03_vae_latents/vae/weights.pt'; init: a run
@@ -117,6 +130,23 @@ def pretrain(step: str, seed: int = 0):
 
     try:
         run.pretrain_job(step, seed)
+    finally:
+        runs.commit()
+
+
+@app.function(gpu=FAST_GPUS, volumes=VOLUMES, timeout=4 * 3600)
+def clips(step: str, seed: int = 0, steps: int = 20000, rows_to: str = 'all'):
+    # run.py's clips_job (step 19 stage 1: clip denoising on the T5 demos' clips; binding probe every 4000
+    # steps and at the end, films.png) into the runs Volume
+    import os
+    import sys
+
+    sys.path.insert(0, R)
+    os.chdir(R)
+    from dream_robot.policies.verne import run
+
+    try:
+        run.clips_job(step, seed, steps, rows_to)
     finally:
         runs.commit()
 

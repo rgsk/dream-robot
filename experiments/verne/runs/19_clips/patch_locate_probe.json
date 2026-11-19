@@ -1,0 +1,42 @@
+{
+ "untrained": {
+  "named_gt_other": 0.5349999666213989,
+  "auc": 0.8822811841964722
+ },
+ "erase_pretrain": {
+  "named_gt_other": 1.0,
+  "auc": 0.9908244609832764
+ },
+ "clips19_pretrain": {
+  "named_gt_other": 0.5525000095367432,
+  "auc": 0.937178909778595
+ },
+ "clips19b_pretrain": {
+  "named_gt_other": 0.5450000166893005,
+  "auc": 0.9176577925682068
+ },
+ "erase_stage2_s0": {
+  "named_gt_other": 0.7724999785423279,
+  "auc": 0.9249095916748047
+ },
+ "erase_stage2_s1": {
+  "named_gt_other": 0.762499988079071,
+  "auc": 0.9157156348228455
+ },
+ "clips19_stage2_s0": {
+  "named_gt_other": 0.5475000143051147,
+  "auc": 0.9034961462020874
+ },
+ "clips19_stage2_s1": {
+  "named_gt_other": 0.5399999618530273,
+  "auc": 0.890506386756897
+ },
+ "clips19b_stage2": {
+  "named_gt_other": 0.5424999594688416,
+  "auc": 0.8607896566390991
+ },
+ "no_pretrain_stage2": {
+  "named_gt_other": 0.5249999761581421,
+  "auc": 0.8772543668746948
+ }
+}

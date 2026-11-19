@@ -365,6 +365,71 @@ def pretrain_job(step: str, seed: int) -> None:
     print(f'done: {out}')
 
 
+def clips_job(step: str, seed: int, steps: int, rows_to: str = 'all') -> None:
+    # rows_to: who cross-attends to the words + state during clip denoising: 'all' tokens (step 19) or only
+    # the 'present' (step 19b)
+    # step 19 stage 1 (clip denoising on the T5 demos' clips, video only) -> RUNS/<step>/pretrain/seed<k>/:
+    # meta.json, log.json (binding probe every 4000 steps), weights.pt, patch_binding_probe.json, films.png (binding_films on val reset scenes)
+    from . import clips
+    from . import pretrain as pt
+    from .data import load_scenes
+
+    out = RUNS / step / 'pretrain' / f'seed{seed}'
+    out.mkdir(parents=True, exist_ok=True)
+    meta = source() | {
+        'package_hash': package_hash(),
+        'gpu': torch.cuda.get_device_name(),
+        'seed': seed,
+        'steps': steps,
+        'rows_to': rows_to,
+        'vae': str(vae.WEIGHTS.relative_to(REPO)),
+    }
+    if (out / 'meta.json').exists():
+        old = json.loads((out / 'meta.json').read_text())
+        if old['package_hash'] != meta['package_hash']:
+            sys.exit(
+                f'{out} was made with package {old["package_hash"]}, now {meta["package_hash"]}'
+            )
+    else:
+        write_json(out / 'meta.json', meta | {'started': time.strftime('%Y-%m-%d %H:%M:%S')})
+    state, action, episode, latent, instruction, slot, train_ids, val_ids, _ = load_task('t5')
+    d = to_gpu(latent, state, instruction, slot, action, episode, train_ids)
+
+    sc, val = load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS)
+    if (out / 'weights.pt').exists():
+        weights = torch.load(out / 'weights.pt')
+    else:
+        run = clips.pretrain_clips(
+            d,
+            train_ids,
+            val_ids,
+            steps,
+            seed=seed,
+            ckpt=out / 'ckpt',
+            probe=lambda net: pt.binding_probe(net, sc, val, d.s_mean, d.s_std),
+            rows_to=rows_to,
+        )
+        weights = run['weights']
+        write_json(out / 'log.json', run['log'])
+        torch.save(weights, out / 'weights.pt')
+    net = Verne().cuda()
+    net.load_state_dict(weights)
+    if not (out / 'patch_binding_probe.json').exists():
+        write_json(
+            out / 'patch_binding_probe.json', pt.binding_probe(net, sc, val, d.s_mean, d.s_std)
+        )
+    if not (out / 'films.png').exists():
+        import imageio.v3 as iio
+
+        iio.imwrite(
+            out / 'films.png',
+            clips.binding_films(
+                net, vae.load(vae.WEIGHTS), val, d.s_mean, d.s_std, rows_to=rows_to
+            ),
+        )
+    print(f'done: {out}')
+
+
 def queue(step: str, tasks: list[str], seeds: list[int], workers: int) -> None:
     # every (task, seed), one at a time, each a fresh process; a failed job doesn't stop the rest
     for task in tasks:
@@ -399,6 +464,13 @@ if __name__ == '__main__':
     pre = sub.add_parser('pretrain')
     pre.add_argument('step')
     pre.add_argument('seed', type=int)
+    cl = sub.add_parser('clips')
+    cl.add_argument('step')
+    cl.add_argument('seed', type=int)
+    cl.add_argument('--steps', type=int, default=20000)
+    cl.add_argument(
+        '--rows-to', choices=('all', 'present'), default='all', help='who reads words + state'
+    )
     q = sub.add_parser('queue')
     q.add_argument('step')
     q.add_argument('--tasks', nargs='+', choices=TASKS, default=list(TASKS))
@@ -433,5 +505,7 @@ if __name__ == '__main__':
         job(a.step, a.task, a.seed, a.workers, a.init)
     elif a.cmd == 'pretrain':
         pretrain_job(a.step, a.seed)
+    elif a.cmd == 'clips':
+        clips_job(a.step, a.seed, a.steps, a.rows_to)
     else:
         queue(a.step, a.tasks, a.seeds, a.workers)

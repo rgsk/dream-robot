@@ -1,0 +1,36 @@
+probe, prompt colour: train 1.000   val 0.695
+probe, prompt both  : train 1.000   val 1.000
+step      0   train 2.4988   val right / shuffled caption: τ 0.2 2.8155 / 2.8157   τ 0.5 2.8369 / 2.8378   τ 0.8 2.7937 / 2.7952
+step   1000   train 0.7040   val right / shuffled caption: τ 0.2 0.8129 / 0.9994   τ 0.5 0.5998 / 0.7346   τ 0.8 0.5334 / 0.5683
+step   2000   train 0.5312   val right / shuffled caption: τ 0.2 0.6899 / 0.8857   τ 0.5 0.5069 / 0.6663   τ 0.8 0.4502 / 0.4866
+step   3000   train 0.5330   val right / shuffled caption: τ 0.2 0.6249 / 0.8340   τ 0.5 0.4591 / 0.6684   τ 0.8 0.4253 / 0.4690
+probe, prompt colour: train 1.000   val 0.680
+probe, prompt both  : train 1.000   val 1.000
+step   4000   train 0.4378   val right / shuffled caption: τ 0.2 0.5837 / 0.8129   τ 0.5 0.4248 / 0.6490   τ 0.8 0.4018 / 0.4598
+step   5000   train 0.5063   val right / shuffled caption: τ 0.2 0.5636 / 0.8012   τ 0.5 0.3990 / 0.6580   τ 0.8 0.3888 / 0.4667
+step   6000   train 0.3497   val right / shuffled caption: τ 0.2 0.5470 / 0.8015   τ 0.5 0.3775 / 0.6462   τ 0.8 0.3775 / 0.4692
+step   7000   train 0.4472   val right / shuffled caption: τ 0.2 0.5358 / 0.7908   τ 0.5 0.3666 / 0.6564   τ 0.8 0.3734 / 0.4764
+probe, prompt colour: train 1.000   val 0.790
+probe, prompt both  : train 1.000   val 1.000
+step   8000   train 0.3458   val right / shuffled caption: τ 0.2 0.5390 / 0.8028   τ 0.5 0.3582 / 0.6640   τ 0.8 0.3657 / 0.4887
+step   9000   train 0.3418   val right / shuffled caption: τ 0.2 0.5499 / 0.8258   τ 0.5 0.3545 / 0.6905   τ 0.8 0.3608 / 0.5013
+step  10000   train 0.3088   val right / shuffled caption: τ 0.2 0.5357 / 0.8246   τ 0.5 0.3487 / 0.7081   τ 0.8 0.3555 / 0.5079
+step  11000   train 0.3547   val right / shuffled caption: τ 0.2 0.5467 / 0.8385   τ 0.5 0.3444 / 0.7324   τ 0.8 0.3528 / 0.5335
+probe, prompt colour: train 1.000   val 0.810
+probe, prompt both  : train 1.000   val 1.000
+step  12000   train 0.3553   val right / shuffled caption: τ 0.2 0.5559 / 0.8617   τ 0.5 0.3466 / 0.7561   τ 0.8 0.3548 / 0.5593
+step  13000   train 0.3079   val right / shuffled caption: τ 0.2 0.5576 / 0.8586   τ 0.5 0.3444 / 0.7504   τ 0.8 0.3511 / 0.5682
+step  14000   train 0.3237   val right / shuffled caption: τ 0.2 0.5614 / 0.8707   τ 0.5 0.3448 / 0.7768   τ 0.8 0.3514 / 0.5982
+step  15000   train 0.3271   val right / shuffled caption: τ 0.2 0.5725 / 0.8825   τ 0.5 0.3443 / 0.7792   τ 0.8 0.3515 / 0.6089
+probe, prompt colour: train 1.000   val 0.815
+probe, prompt both  : train 1.000   val 1.000
+step  16000   train 0.2983   val right / shuffled caption: τ 0.2 0.5810 / 0.8915   τ 0.5 0.3478 / 0.8003   τ 0.8 0.3526 / 0.6306
+step  17000   train 0.3408   val right / shuffled caption: τ 0.2 0.5748 / 0.8913   τ 0.5 0.3445 / 0.8028   τ 0.8 0.3513 / 0.6351
+step  18000   train 0.3218   val right / shuffled caption: τ 0.2 0.5833 / 0.8998   τ 0.5 0.3467 / 0.8111   τ 0.8 0.3513 / 0.6457
+step  19000   train 0.2764   val right / shuffled caption: τ 0.2 0.5819 / 0.8992   τ 0.5 0.3463 / 0.8120   τ 0.8 0.3514 / 0.6503
+probe, prompt colour: train 1.000   val 0.815
+probe, prompt both  : train 1.000   val 1.000
+step  20000   train 0.2943   val right / shuffled caption: τ 0.2 0.5829 / 0.9003   τ 0.5 0.3466 / 0.8139   τ 0.8 0.3516 / 0.6528
+probe, prompt colour: train 1.000   val 0.815
+probe, prompt both  : train 1.000   val 1.000
+done: /root/dream-robot/experiments/verne/runs/19_clips/pretrain/seed0

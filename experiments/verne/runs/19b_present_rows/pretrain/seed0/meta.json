@@ -1,0 +1,11 @@
+{
+ "commit": "43825b5",
+ "dirty": true,
+ "package_hash": "53f8e1343fb9",
+ "gpu": "NVIDIA H100 80GB HBM3",
+ "seed": 0,
+ "steps": 20000,
+ "rows_to": "present",
+ "vae": "experiments/verne/runs/07_instruction/vae_wsd/weights.pt",
+ "started": "2026-11-18 21:16:22"
+}

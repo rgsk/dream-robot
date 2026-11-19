@@ -1,4 +1,11 @@
-"""Step 18 (roadmap box 08): positions by RoPE, as Verne's (wan_dit.py rope_cos_sin / frame_rope, action_dit.py
+"""Step 19: the video side can also denoise a clip (clip_velocity; pretraining, clips.py): the clean present
+frame (frame 0) and FUTURE noisy frames (1..7, STRIDE control steps apart, one shared noise level), image-to-
+video as Wan I2V. Present patches attend to themselves only (as at run time, where there is no future); future
+patches attend to everything. Both cross-attend to the words and the state. The noise level is an embedding
+added to the future tokens (time_video; the present has none); gen_out reads the future tokens after the last
+video layer -> velocity. The policy path (see) is unchanged: the present alone. Step 19b: rows_to='present', only
+the present cross-attends to the words and the state; the future reads neither.
+Step 18 (roadmap box 08): positions by RoPE, as Verne's (wan_dit.py rope_cos_sin / frame_rope, action_dit.py
 chunk_rope): each head's queries and keys are rotated by their token's place, video patches by (frame, row,
 column) of the canvas grid (the present frame is frame 0; channels 12 / 10 / 10 of the 32), action tokens by
 their step in the chunk (all 32 channels). The learned position vectors (video_pos, action_pos) are gone.
@@ -58,7 +65,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor, nn
 
-from .data import CHUNK, WORDS
+from .data import CHUNK, FUTURE, WORDS
 from .vae import Z
 
 P = 2  # patch side in latent cells: latent 16 x 32 -> 8 x 16 = 128 patches (16 x 16 px each)
@@ -119,10 +126,13 @@ def rope_angles(dim: int, positions: Tensor) -> Tensor:
     return torch.outer(positions.double(), w).float()
 
 
-def video_angles() -> Tensor:
-    # [N_PATCH, HEAD_DIM / 2]: patch (row r, column c) of frame 0, in the patches' order (rows, then columns)
-    r, c = torch.meshgrid(torch.arange(16 // P), torch.arange(32 // P), indexing='ij')
-    places = (torch.zeros(N_PATCH), r.flatten(), c.flatten())
+def video_angles(frames: int) -> Tensor:
+    # [frames · N_PATCH, HEAD_DIM / 2]: patch (frame f, row r, column c), frame by frame, then rows, then
+    # columns (the first N_PATCH are frame 0: the present alone)
+    f, r, c = torch.meshgrid(
+        torch.arange(frames), torch.arange(16 // P), torch.arange(32 // P), indexing='ij'
+    )
+    places = (f.flatten(), r.flatten(), c.flatten())
     return torch.cat([rope_angles(d, pl) for d, pl in zip(ROPE_PARTS, places)], 1)
 
 
@@ -185,19 +195,26 @@ class Block(nn.Module):
         rows: Tensor,
         rmask: Tensor,
         e: Tensor | None = None,
+        amask: Tensor | None = None,
+        cross_upto: int | None = None,
     ) -> Tensor:
-        # rows [B, 10, dim] the word rows + the state row, rmask [B, 10] bool, True = may attend
+        # rows [B, 10, dim] the word rows + the state row, rmask [B, 10] bool, True = may attend; amask
+        # [S, S] bool self-attention mask (True = may attend), None = all; cross_upto: only the first
+        # cross_upto tokens cross-attend to the rows (None = all)
         gate, shift2, scale2, gate2, shift3, scale3, gate3 = (
             self.terms(e)[2:] if e is not None else (0, 0, 0, 1, 0, 0, 1)
         )
-        a = F.scaled_dot_product_attention(q, k, v)
+        a = F.scaled_dot_product_attention(q, k, v, attn_mask=amask)
         x = x + (1 + gate) * self.out(rearrange(a, 'b h s d -> b s (h d)'))
+        n = x.shape[1] if cross_upto is None else cross_upto
         cq = rearrange(
-            self.cq(self.norm3(x) * (1 + scale3) + shift3), 'b s (h d) -> b h s d', h=HEADS
+            self.cq(self.norm3(x[:, :n]) * (1 + scale3) + shift3), 'b s (h d) -> b h s d', h=HEADS
         )
         ck, cv = rearrange(self.ckv(rows), 'b s (n h d) -> n b h s d', n=2, h=HEADS)
         a = F.scaled_dot_product_attention(cq, ck, cv, attn_mask=rmask[:, None, None])
-        x = x + gate3 * self.cout(rearrange(a, 'b h s d -> b s (h d)'))
+        x = torch.cat(
+            [x[:, :n] + gate3 * self.cout(rearrange(a, 'b h s d -> b s (h d)')), x[:, n:]], 1
+        )
         return x + gate2 * self.mlp(self.norm2(x) * (1 + scale2) + shift2)
 
 
@@ -222,13 +239,24 @@ class Verne(nn.Module):
         super().__init__()
         self.patch_in = nn.Linear(Z * P * P, D_VIDEO)
         # RoPE angles: buffers (move with the model), not weights, not saved
-        self.register_buffer('video_angles', video_angles(), persistent=False)
+        self.register_buffer('video_angles', video_angles(1 + FUTURE), persistent=False)
+        # a clip's self-attention: the present (first N_PATCH) sees only itself, the future sees everything
+        n = (1 + FUTURE) * N_PATCH
+        clip_mask = torch.ones(n, n, dtype=torch.bool)
+        clip_mask[:N_PATCH, N_PATCH:] = False
+        self.register_buffer('clip_mask', clip_mask, persistent=False)
         self.register_buffer(
             'action_angles', rope_angles(HEAD_DIM, torch.arange(CHUNK)), persistent=False
         )
         self.video_words = nn.Embedding(1 + len(WORDS), D_VIDEO)  # row 0 'no word', then WORDS
         self.video_state = embedding_mlp(D_VIDEO)
         self.edit_out = nn.Linear(D_VIDEO, Z * P * P)  # pretraining only: tokens -> latent change
+        self.time_video = (
+            nn.Sequential(  # clip pretraining: a future frame's noise level -> added to it
+                nn.Linear(FREQ, D_VIDEO), nn.SiLU(), nn.Linear(D_VIDEO, D_VIDEO)
+            )
+        )
+        self.gen_out = nn.Linear(D_VIDEO, Z * P * P)  # clip pretraining: future tokens -> velocity
         self.video = nn.ModuleList([Block(D_VIDEO) for _ in range(LAYERS)])
         self.action_in = nn.Linear(8, D_ACTION)
         self.time_in = nn.Sequential(
@@ -251,11 +279,52 @@ class Verne(nn.Module):
         rows, rmask = rows_of(self.video_words, self.video_state, ins, state)
         kvs = []
         for i, block in enumerate(self.video):
-            q, k, v = block.qkv_of(x, self.video_angles)
+            q, k, v = block.qkv_of(x, self.video_angles[:N_PATCH])
             kvs.append((k, v))
             if i < LAYERS - 1:  # the last layer's output is never read
                 x = block.finish(x, q, k, v, rows, rmask)
         return kvs, x
+
+    def clip_velocity(
+        self,
+        frame: Tensor,
+        future: Tensor,
+        tau: Tensor,
+        state: Tensor,
+        ins: Tensor,
+        rows_to: str = 'all',
+    ) -> Tensor:
+        # clip pretraining: clean present latent [B, Z, 16, 32], noisy future [B, FUTURE, Z, 16, 32] at flow
+        # time tau [B] (0 noise .. 1 clean, one per clip), state [B, 16], instruction [B, 8] -> velocity of
+        # the future [B, FUTURE, Z, 16, 32]. rows_to: who cross-attends to the words + state, 'all' tokens or
+        # only the 'present' (step 19b: the future then learns the caption only through the present's tokens)
+        to_patches = lambda z: rearrange(z, 'b c (h p) (w q) -> b (h w) (p q c)', p=P, q=P)
+        noise_level = self.time_video(sinusoid(1000 * (1 - tau)))[:, None]  # [B, 1, D_VIDEO]
+        x = torch.cat(
+            [
+                self.patch_in(to_patches(frame)),
+                self.patch_in(to_patches(future.flatten(0, 1)))
+                .unflatten(0, (len(frame), FUTURE))
+                .flatten(1, 2)
+                + noise_level,
+            ],
+            1,
+        )
+        rows, rmask = rows_of(self.video_words, self.video_state, ins, state)
+        for block in self.video:
+            q, k, v = block.qkv_of(x, self.video_angles)
+            x = block.finish(
+                x,
+                q,
+                k,
+                v,
+                rows,
+                rmask,
+                amask=self.clip_mask,
+                cross_upto={'all': None, 'present': N_PATCH}[rows_to],
+            )
+        out = self.gen_out(x[:, N_PATCH:]).unflatten(1, (FUTURE, N_PATCH))
+        return rearrange(out, 'b f (h w) (p q c) -> b f c (h p) (w q)', h=16 // P, p=P, q=P)
 
     def see(self, frame: Tensor, state: Tensor, ins: Tensor) -> list[tuple[Tensor, Tensor]]:
         # the policy's read of a clean frame: each video layer's keys and values

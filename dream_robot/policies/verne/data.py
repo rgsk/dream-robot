@@ -173,6 +173,18 @@ def get_batch(d: Demos, ids: NDArray, B: int, rng: np.random.Generator) -> Batch
     )
 
 
+# Step 19 clips: a present frame and FUTURE frames STRIDE control steps apart (frames past the episode's end
+# repeat its last). 7 x 32 = 224 steps covers most of a T5 episode (192-324 steps, median 251).
+FUTURE, STRIDE = 7, 32
+
+
+def clip_rows(episode: NDArray, now: NDArray) -> NDArray[np.int64]:
+    # episode [N] (each episode's rows contiguous), present rows now [B] -> rows [B, 1 + FUTURE]: the present,
+    # then now + STRIDE·k, held at the episode's last row
+    last = np.searchsorted(episode, episode[now], side='right') - 1
+    return np.minimum(now[:, None] + STRIDE * np.arange(1 + FUTURE), last[:, None])
+
+
 # T5 reset scenes (no demo, home pose) for the video side's pretraining (steps 14-15) and the binding probe
 SCENE_SEEDS = {'train': range(5000, 6000), 'val': range(9000, 9200)}
 
