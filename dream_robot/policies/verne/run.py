@@ -212,7 +212,9 @@ def job(
     paired: bool = False,
     steps: int = STEPS,
     early: float = 0.0,
+    erase: float = 0.0,
 ) -> None:
+    # erase > 0 (step 21a): step 15's erase loss on reset scenes joins the action loss, weighted erase, B 64
     # init: a run folder under RUNS whose weights.pt training starts from (step 15: the stage 1 run,
     # '15_erase_pretrain/pretrain/seed0'), else a fresh Verne; cotrain > 0 (step 19g): the clip loss
     # (future_by as the clip job's) joins the action loss, weighted cotrain, with both probes every 4k steps
@@ -230,6 +232,7 @@ def job(
         'future_by': future_by,
         'paired': paired,
         'early': early,
+        'erase': erase,
     }
     if (out / 'meta.json').exists():
         old = json.loads((out / 'meta.json').read_text())
@@ -248,7 +251,7 @@ def job(
     else:
         start = torch.load(RUNS / init / 'weights.pt') if init else None
         probe = None
-        if cotrain > 0 and scene == 't5':
+        if (cotrain > 0 or erase > 0) and scene == 't5':
             from . import pretrain as pt
             from .data import load_erased, load_scenes
 
@@ -271,6 +274,8 @@ def job(
             probe=probe,
             paired=paired,
             early=early,
+            erase=erase,
+            erase_data=(sc, er, 64) if erase > 0 else None,
         )
         weights = run['weights']
         write_json(out / 'log.json', run['log'])
@@ -557,6 +562,7 @@ if __name__ == '__main__':
     j.add_argument(
         '--future-by', choices=('all', 'present', 'heads', 'change', 'change_top'), default='all'
     )
+    j.add_argument('--erase', type=float, default=0.0, help='weight of the erase loss (step 21a)')
     ev = sub.add_parser('eval', help="a run's ckpt/step<N>.pt evaluated like its end")
     ev.add_argument('step')
     ev.add_argument('task')
@@ -618,6 +624,7 @@ if __name__ == '__main__':
             a.paired,
             a.steps,
             a.early,
+            a.erase,
         )
     elif a.cmd == 'eval':
         eval_ckpt(a.step, a.task, a.seed, a.at, a.workers)

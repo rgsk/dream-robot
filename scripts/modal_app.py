@@ -39,7 +39,7 @@ if modal.is_local():
         )
 image = (
     modal.Image.debian_slim(python_version='3.14')
-    .apt_install('libegl1', 'libgl1', 'libglvnd0', 'ffmpeg')
+    .apt_install('libegl1', 'libgl1', 'libglvnd0', 'ffmpeg', 'gcc')  # gcc: torch.compile's triton builds its launcher
     .uv_pip_install(requirements=[REQS])
     .env(
         {
@@ -58,7 +58,8 @@ GPUS = ['L40S', 'A100-40GB', 'A10', 'L4']
 FAST_GPUS = ['H100', 'L40S']
 # jobs that render robosuite scenes (rollouts, EGL): no H100, whose graphics engine faulted (XID 31 / 109,
 # 2026-11-19); L40S renders, the A100 rendered steps 17-18's seeds
-RENDER_GPUS = ['L40S', 'A100-40GB']
+# L40S only (user, 2026-11-19): the A100 fallback is slower
+RENDER_GPUS = ['L40S']
 data = modal.Volume.from_name('dream-robot-data', create_if_missing=True)
 runs = modal.Volume.from_name('dream-robot-runs', create_if_missing=True)
 app = modal.App('dream-robot', image=image)
@@ -113,6 +114,7 @@ def job(
     paired: bool = False,
     steps: int = 20000,
     early: float = 0.0,
+    erase: float = 0.0,
 ):
     # run.py's job (train, sweeps at n_exec 8 and 16, probe) into the runs Volume; vae: another VAE's
     # weights under the runs Volume for this run only, e.g. '03_vae_latents/vae/weights.pt'; init: a run
@@ -128,7 +130,7 @@ def job(
     from dream_robot.policies.verne import run
 
     try:
-        run.job(step, task, seed, workers, init, cotrain, future_by, paired, steps, early)
+        run.job(step, task, seed, workers, init, cotrain, future_by, paired, steps, early, erase)
     finally:
         runs.commit()  # whatever finished, even if a later part failed
 

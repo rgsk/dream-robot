@@ -1,0 +1,91 @@
+probe, prompt colour: train 1.000   val 1.000
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 1.000   auc 0.988
+step      0   train 2.018   val 2.205   erase 0.0020
+step   1000   train 0.302   val 0.278   erase 0.0055
+step   2000   train 0.246   val 0.247   erase 0.0046
+step   3000   train 0.203   val 0.236   erase 0.0044
+probe, prompt colour: train 1.000   val 1.000
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.990   auc 0.987
+step   4000   train 0.202   val 0.226   erase 0.0046
+step   5000   train 0.169   val 0.195   erase 0.0038
+step   6000   train 0.174   val 0.202   erase 0.0039
+step   7000   train 0.178   val 0.205   erase 0.0034
+probe, prompt colour: train 1.000   val 1.000
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 1.000   auc 0.989
+step   8000   train 0.176   val 0.210   erase 0.0035
+step   9000   train 0.167   val 0.179   erase 0.0034
+step  10000   train 0.122   val 0.196   erase 0.0032
+step  11000   train 0.148   val 0.202   erase 0.0028
+probe, prompt colour: train 1.000   val 1.000
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.998   auc 0.990
+step  12000   train 0.121   val 0.202   erase 0.0030
+step  13000   train 0.085   val 0.181   erase 0.0027
+step  14000   train 0.088   val 0.219   erase 0.0027
+step  15000   train 0.092   val 0.224   erase 0.0026
+probe, prompt colour: train 1.000   val 1.000
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.998   auc 0.989
+step  16000   train 0.109   val 0.227   erase 0.0026
+step  17000   train 0.073   val 0.205   erase 0.0025
+step  18000   train 0.093   val 0.241   erase 0.0026
+step  19000   train 0.077   val 0.235   erase 0.0025
+probe, prompt colour: train 1.000   val 1.000
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.998   auc 0.990
+step  20000   train 0.114   val 0.231   erase 0.0024
+probe, prompt colour: train 1.000   val 1.000
+probe, prompt both  : train 1.000   val 1.000
+locate probe: named > other 0.998   auc 0.990
+Timeout (0:00:30)!
+Thread 0x00007159c0278740 [python] (most recent call first):
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/utils/binding_utils.py", line 157 in render
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/sims/robosuite/tasks/pick_place_cube/env.py", line 63 in wrapped
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/utils/binding_utils.py", line 1138 in render
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/environments/robot_env.py", line 413 in camera_rgb
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/utils/observables.py", line 377 in _check_sensor_validity
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/utils/observables.py", line 206 in __init__
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/environments/robot_env.py", line 370 in _setup_observables
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/environments/manipulation/lift.py", line 352 in _setup_observables
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/environments/base.py", line 311 in _reset_observables
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/environments/base.py", line 285 in reset
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/sims/robosuite/tasks/instructed_pick_place/env.py", line 274 in reset
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 99 in rollout
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 157 in _episode
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 254 in _process_worker
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/multiprocessing/process.py", line 108 in run
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/multiprocessing/process.py", line 320 in _bootstrap
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 135 in _main
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 122 in spawn_main
+  File "<string>", line 1 in <module>
+5 episode(s) not finished by the workers, running here: [1002, 1003, 1004, 1007, 1023]
+n_exec  8: 47/50   failures {'dropped': 2, 'no_grasp': 1}
+Timeout (0:00:30)!
+Thread 0x000070d4e876c740 [python] (most recent call first):
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/utils/binding_utils.py", line 157 in render
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/sims/robosuite/tasks/pick_place_cube/env.py", line 63 in wrapped
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/utils/binding_utils.py", line 1138 in render
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/environments/robot_env.py", line 413 in camera_rgb
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/utils/observables.py", line 377 in _check_sensor_validity
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/utils/observables.py", line 206 in __init__
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/environments/robot_env.py", line 370 in _setup_observables
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/environments/manipulation/lift.py", line 352 in _setup_observables
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/environments/base.py", line 311 in _reset_observables
+  File "/home/rahul/Documents/codes/ml/dream-robot/.venv/lib/python3.14/site-packages/robosuite/environments/base.py", line 285 in reset
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/sims/robosuite/tasks/instructed_pick_place/env.py", line 274 in reset
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 99 in rollout
+  File "/home/rahul/Documents/codes/ml/dream-robot/dream_robot/policies/verne/rollouts.py", line 157 in _episode
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/concurrent/futures/process.py", line 254 in _process_worker
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/multiprocessing/process.py", line 108 in run
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/multiprocessing/process.py", line 320 in _bootstrap
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 135 in _main
+  File "/home/rahul/.local/share/uv/python/cpython-3.14.5-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 122 in spawn_main
+  File "<string>", line 1 in <module>
+4 episode(s) not finished by the workers, running here: [1004, 1006, 1008, 1009]
+n_exec 16: 49/50   failures {'dropped': 1}
+19 episode(s) not finished by the workers, running here: [1003, 1004, 1005, 1006, 1010, 1013, 1016, 1017, 1021, 1022, 1026, 1028, 1031, 1034, 1037, 1040, 1041, 1045, 1048]
+closes 50/50, miss  0.5 cm, x slope +0.98 (corr +1.00, intercept +0.0 cm), y slope +0.71 (corr +0.89, intercept +0.0 cm)
+done: /home/rahul/Documents/codes/ml/dream-robot/experiments/verne/runs/21a_erase_cotrain/t5/seed4

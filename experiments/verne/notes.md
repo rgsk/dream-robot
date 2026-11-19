@@ -554,3 +554,23 @@ Rule: the frame's path (self-attention) must start at least as open as the words
 - 20c seed 2 (local): **48/47**, wrong_cube 0/1, no_grasp 1/1, dropped 1/1, miss **0.9 cm**, slopes 0.96 / 0.71, locate 76.5%.
 - Box 06 on 3 seeds: **41/40, 43/42, 48/47** (step 18 joints: 41/40, 42/40, 39/39); miss 2.1 / 1.6 / 0.9 cm (18: 2.0-3.4).
   Read: hand moves + IK are at least as good, likely better (mean 44 vs 40.7 at n_exec 8; closer closes). Done.
+
+## Step 21a · erase co-training: step 15's erase loss kept on during demos (weight 1.0, B 64 reset scenes), runs/21a_erase_cotrain
+- Step 20 recipe (init 18_rope/pretrain/seed0, colour-only demos, hand moves + IK, 20k, local 4060) + job --erase 1.0.
+  Step 15's open item (demo training wore the mark 100 -> 76-83%).
+- Seed 0: **49/49 of 50**, wrong_cube **0/0**, failures no_grasp 1 / dropped 1; miss **0.5 cm**, slopes 0.99 / 0.75
+  (step 20 s0: 41/40, wrong 5/3, miss 2.1 cm). Locate 100% all run (step 20: 75.5-83% after demos), whole-frame 100%.
+  Erase loss 0.0057 (1k) -> 0.0025 (20k, below stage 1's 0.0035). Val action 0.21-0.24 (step 20 ~0.18-0.26). One seed.
+- Rollout workers OOM'd on the 8 GB card (VS Code GPU process + job + 8 workers); unfinished episodes ran in the main
+  process (6 / 21 / 49 of 50), same seeds, so results are complete.
+- Seed 1 (Modal L40S, eager): **44/48**, wrong_cube 0/0, dropped 4/2, no_grasp 2/0, miss 0.6 cm, slopes 0.97 / 0.73.
+- Seed 2 (Modal L40S, compiled): **43/50**, wrong_cube 0/0, no_grasp 5/0, dropped 2/0, miss 0.6 cm, slopes 0.97 / 0.78.
+- Seed 4 (local, compiled; a speed check vs seed 0): **47/49**, wrong_cube 0/0, dropped 2/1, no_grasp 1/0, miss 0.5 cm.
+  One worker hung in EGL render (faulthandler dump, 5 episodes rerun in-process); compiled main process holds
+  ~1.2 GB + 8 workers ~0.7 GB each on the 8 GB card.
+- **21a on 4 seeds: 49/49, 44/48, 43/50, 47/49; wrong_cube 0 in all 8 sweeps (400 rollouts)** (step 20: 9 / 10 of 150;
+  41/40, 43/42, 48/47). Locate 100% held in every seed. Left failures = grasping (dropped, no_grasp).
+- torch.compile (mode reduce-overhead: CUDA graphs) on the per-step losses (train.py): s / 1000 steps, from ckpt
+  times (alternating values = probe every 4k): local 4060 eager 25-33 -> compiled 15-23 (517 -> 334 s, 1.55x);
+  Modal L40S eager 35-38 -> **6-10** (651 -> 142 s, **4.6x**; now ~2x faster than local). Step-0 losses match
+  eager (same draws). Modal image + gcc (triton). Modal jobs on L40S only.
