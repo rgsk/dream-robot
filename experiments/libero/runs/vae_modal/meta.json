@@ -1,0 +1,10 @@
+{
+ "gpu": "NVIDIA H100 80GB HBM3",
+ "steps": 10000,
+ "schedule": "cosine",
+ "lr": 0.0005,
+ "warmup": 250,
+ "every": 2,
+ "val_episodes": 5,
+ "started": "2026-11-20 10:42:29"
+}

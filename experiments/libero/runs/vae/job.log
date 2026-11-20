@@ -1,0 +1,9 @@
+KITCHEN_SCENE3_put_the_frying_pan_on_the_stove: 4529 train, 47 val
+KITCHEN_SCENE3_put_the_moka_pot_on_the_stove: 3398 train, 39 val
+KITCHEN_SCENE3_turn_on_the_stove: 2093 train, 23 val
+KITCHEN_SCENE8_turn_off_the_stove: 4019 train, 38 val
+14039 training frames, 147 val frames
+step     0   train 0.3445 KL 0.037   val 0.3629 KL 0.037
+step   500   train 0.0151 KL 1.895   val 0.0140 KL 1.870
+step  1000   train 0.0071 KL 1.716   val 0.0076 KL 1.674
+step  1500   train 0.0065 KL 1.566   val 0.0066 KL 1.603

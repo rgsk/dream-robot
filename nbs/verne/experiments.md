@@ -1,8 +1,8 @@
-# Tasks
+# Experiments
 
-Harder tasks to take Verne to once T1 / T5 are solved (spread, step 22: T5 93% over 5 seeds, wrong cube 0).
-Each entry: the task, why it's hard, how to train it, how to test it, the first cheap step. Not started
-unless marked.
+Experiments to take Verne to once T1 / T5 are solved (spread, step 22: T5 93% over 5 seeds, wrong cube 0):
+harder tasks, and checks of the idea itself. Each entry: what it is, why it's hard, how to train it, how to test
+it, the first cheap step. Not started unless marked.
 
 ## Two-clause T5: "red left, blue right" from single-move demos (proposed 2026-11-20)
 

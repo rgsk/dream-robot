@@ -127,9 +127,11 @@ def train(
     seed: int = 0,
     ckpt: Path | None = None,
     extend_from: Path | None = None,
+    schedule: str = 'wsd',
 ) -> dict[str, Any]:
     # frames: uint8 canvases [N, 3, 128, 256] (cpu) to train on, val: a few held-out ones
-    # lr: warmup-stable-decay (lr.py); ckpt: a folder for step<N>.pt / stable.pt (resumes from the
+    # lr: warmup-stable-decay (lr.py), or schedule='cosine': the same warmup, then cosine from the peak to 0
+    # (LIBERO's VAE, 2026-11-20: every T1/T5 WSD run spiked in its long constant-lr phase); ckpt: a folder for step<N>.pt / stable.pt (resumes from the
     # latest step<N>.pt);
     # extend_from: a shorter run's ckpt folder to continue from its stable.pt
     # out: {'weights': state dict incl. latent stats (cpu), 'log': [step, recon, KL, val recon, KL]}
@@ -142,8 +144,14 @@ def train(
     # batch 64 at 128x256 needs > 8 GB in one pass: on a small card, halves with gradients summed
     parts = 1 if torch.cuda.get_device_properties(0).total_memory > 20e9 else 2
     for step in range(start, steps + 1):
-        lr_mod.checkpoint(ckpt, step, steps, 1000, vae, opt, step, rng, log, decay=decay)
-        lr_mod.set_lr(opt, lr * lr_mod.wsd(step, steps, warmup, decay))
+        cosine = schedule == 'cosine'
+        lr_mod.checkpoint(ckpt, step, steps, 1000, vae, opt, step, rng, log, decay=None if cosine else decay)
+        factor = (
+            min((step + 1) / warmup, 1.0) * lr_mod.cosine(step, steps)
+            if cosine
+            else lr_mod.wsd(step, steps, warmup, decay)
+        )
+        lr_mod.set_lr(opt, lr * factor)
         ids = np.sort(rng.integers(0, len(frames), B))
         opt.zero_grad()
         for part in np.array_split(ids, parts):

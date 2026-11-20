@@ -52,6 +52,7 @@ image = (
         }
     )
     .add_local_dir('dream_robot', f'{R}/dream_robot', ignore=['**/__pycache__'])
+    .add_local_dir('experiments/libero/scripts', f'{R}/experiments/libero/scripts', ignore=['**/__pycache__'])
     .add_local_file('scratch/modal_synced_from.json', f'{R}/synced_from.json')
 )
 # the first free one, in order (L40S ran out once, 2026-11-19); all are plenty for a 4.5M-param Verne
@@ -66,6 +67,10 @@ data = modal.Volume.from_name('dream-robot-data', create_if_missing=True)
 runs = modal.Volume.from_name('dream-robot-runs', create_if_missing=True)
 app = modal.App('dream-robot', image=image)
 VOLUMES = {f'{R}/data': data, f'{R}/experiments/verne/runs': runs}
+# LIBERO (2026-11-20): its runs on their own Volume, mounted where experiments/libero/scripts write;
+# data/libero/npz/ (to_npz.py's output) uploaded once to the data Volume at /libero/npz
+libero_runs = modal.Volume.from_name('dream-robot-libero-runs', create_if_missing=True)
+LIBERO_VOLUMES = {f'{R}/data': data, f'{R}/experiments/libero/runs': libero_runs}
 
 
 @app.function(gpu=GPUS, timeout=600)
@@ -151,6 +156,25 @@ def job(
         )
     finally:
         runs.commit()  # whatever finished, even if a later part failed
+
+
+@app.function(gpu=FAST_GPUS, volumes=LIBERO_VOLUMES, timeout=4 * 3600)
+def libero_vae(name: str = 'vae', steps: int = 10000):
+    # experiments/libero/scripts/train_vae.py into the LIBERO runs Volume at <name>/ (weights.pt, log.json,
+    # recon.png, ckpt/); pull: modal volume get --force dream-robot-libero-runs /<name> experiments/libero/runs/
+    import os
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, R)
+    sys.path.insert(0, f'{R}/experiments/libero/scripts')
+    os.chdir(R)
+    import train_vae
+
+    try:
+        train_vae.main(Path(f'{R}/experiments/libero/runs/{name}'), steps)
+    finally:
+        libero_runs.commit()
 
 
 @app.function(gpu=GPUS, volumes=VOLUMES, timeout=4 * 3600)
