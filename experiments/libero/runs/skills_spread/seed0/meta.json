@@ -1,0 +1,24 @@
+{
+ "gpu": "NVIDIA L40S",
+ "steps": 20000,
+ "seed": 0,
+ "init": "/root/dream-robot/experiments/libero/runs/position_spread/seed0",
+ "position": 1.0,
+ "actions": "option B: aiming hand poses relative to the chunk start + grip + progress",
+ "words": [
+  "turn_on",
+  "turn_off",
+  "put",
+  "stove_knob",
+  "stove",
+  "moka_pot",
+  "frying_pan",
+  "to_stove_knob",
+  "to_stove",
+  "to_moka_pot",
+  "to_frying_pan"
+ ],
+ "snapshot_every": 2000,
+ "full_every": 5000,
+ "started": "2026-11-20 12:53:21"
+}

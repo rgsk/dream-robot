@@ -2,7 +2,9 @@
 # Per demo step: both cameras (flipped upright), robot state, the recorded action, the skill call as fixed-vocab
 # tokens (verb, object, target; see notes.md "Design"), and position labels for EVERY name in the scene (not just
 # the skill's): its centre in each camera + an in-view flag, from setting the recorded sim state and projecting
-# the named body / site. Position pretraining asks about all of them.
+# the named body / site. Position pretraining asks about all of them. Since 2026-11-20 also the controller's hand pose
+# per step (hand_pos [N, 3], hand_rot [N, 3, 3]) and where the demo was aiming it (goal_pos, goal_rot: the recorded
+# command applied to the hand), Verne's option-B action targets.
 # Also a check film per task (demo_0, labels drawn: object red, target blue).
 # Runs in envs/libero/.venv:
 #   MUJOCO_GL=egl envs/libero/.venv/bin/python experiments/libero/scripts/to_npz.py data/libero/libero_90/X_demo.hdf5 ...
@@ -62,6 +64,26 @@ def world_point(sim, spec):
     return sim.data.site_xpos[sim.model.site_name2id(name)].copy()
 
 
+POS_MAX, ROT_MAX = 0.05, 0.5  # OSC_POSE output_max (the demos' env_args): a command a moves the goal by these
+
+
+def hand(env) -> tuple[np.ndarray, np.ndarray]:
+    # the pose OSC moves (scripts/hand_check.py): the controller's end effector, world frame. The recorded obs
+    # ee_pos is ~8 mm off it, so it isn't used
+    c = env.env.robots[0].controller
+    c.update(force=True)
+    return np.array(c.ee_pos), np.array(c.ee_ori_mat)
+
+
+def goals(pos, rot, acts) -> tuple[np.ndarray, np.ndarray]:
+    # where the hand was AIMING each step: the recorded command applied to the hand, p + 0.05·a[:3],
+    # exp(0.5·a[3:])·R (hand_check.py: driving to these replays as well as the commands; the achieved next pose
+    # drops the push into a knob)
+    from scipy.spatial.transform import Rotation
+
+    return pos + POS_MAX * acts[:, :3], Rotation.from_rotvec(ROT_MAX * acts[:, 3:6]).as_matrix() @ rot
+
+
 def pixels(sim, p):
     # world point -> [2 cameras, (row, col)] in the upright image (the npz's frames), and in-view flags [2].
     # robosuite's own projection rounds to whole pixels and CLAMPS off-image points to the edge (a wrist label sat
@@ -89,7 +111,7 @@ def convert(path: Path) -> None:
         d = f['data']
         demos = sorted(d, key=lambda s: int(s.split('_')[1]))
         cols = {k: [] for k in ('top', 'wrist', 'joints', 'gripper', 'ee_pos', 'ee_ori', 'action', 'episode',
-                                'pix', 'seen')}
+                                'pix', 'seen', 'hand_pos', 'hand_rot', 'goal_pos', 'goal_rot')}
         for i, k in enumerate(demos):
             e, o = d[k], d[k]['obs']
             n = e['actions'].shape[0]
@@ -103,14 +125,19 @@ def convert(path: Path) -> None:
             # every name in every frame (NaN / unseen where the scene doesn't have it)
             pix = np.full((n, len(NAMES), 2, 2), np.nan, np.float32)
             seen = np.zeros((n, len(NAMES), 2), bool)
+            hp, hr = np.empty((n, 3)), np.empty((n, 3, 3))
             for t, s in enumerate(e['states'][()]):
                 sim.set_state_from_flattened(s)
                 sim.forward()
+                hp[t], hr[t] = hand(env)
                 for j, name in enumerate(NAMES):
                     if name in where:
                         pix[t, j], seen[t, j] = pixels(sim, world_point(sim, where[name]))
             cols['pix'].append(pix)
             cols['seen'].append(seen)
+            gp, gr = goals(hp, hr, e['actions'][()])
+            for c, v in (('hand_pos', hp), ('hand_rot', hr), ('goal_pos', gp), ('goal_rot', gr)):
+                cols[c].append(v.astype(np.float32))
         env.close()
     arr = {c: np.concatenate(v) for c, v in cols.items()}
     tokens = np.array([VERBS.index(verb), NAMES.index(obj), NAMES.index(target)], np.int64)

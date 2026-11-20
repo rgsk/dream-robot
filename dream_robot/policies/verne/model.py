@@ -274,16 +274,19 @@ def rows_of(
     return rows, torch.cat([one, ins, one], 1).bool()
 
 
-def embedding_mlp(dim: int) -> nn.Module:
-    # the state [previous, now] [B, 16] -> one row [B, dim] (Verne's embedding_mlp: linear, GELU, linear)
-    return nn.Sequential(nn.Linear(16, dim), nn.GELU(), nn.Linear(dim, dim))
+def embedding_mlp(dim: int, n_in: int = 16) -> nn.Module:
+    # the state [previous, now] [B, n_in] -> one row [B, dim] (Verne's embedding_mlp: linear, GELU, linear)
+    return nn.Sequential(nn.Linear(n_in, dim), nn.GELU(), nn.Linear(dim, dim))
 
 
 class Verne(nn.Module):
-    def __init__(self):
+    # n_words: the instruction vocabulary (T5: WORDS; LIBERO: libero.WORDS); state_dim: numbers per state (T5: 7 joints
+    # + gripper; LIBERO: 7 joints + 2 fingers); frames: 'latent' / 'pixels' (default vae.INPUT). The defaults are
+    # T5's, so every earlier run's weights load unchanged
+    def __init__(self, n_words: int = len(WORDS), state_dim: int = 8, frames: str = INPUT):
         super().__init__()
         self.patch_in = nn.Linear(Z * P * P, D_VIDEO)
-        if INPUT == 'pixels':  # only then, so latent runs keep their state dicts (and old inits still load)
+        if frames == 'pixels':  # only then, so latent runs keep their state dicts (and old inits still load)
             self.pixel_in = nn.Linear(3 * PX * PX, D_VIDEO)
         # RoPE angles: buffers (move with the model), not weights, not saved
         self.register_buffer('video_angles', video_angles(1 + FUTURE), persistent=False)
@@ -295,8 +298,8 @@ class Verne(nn.Module):
         self.register_buffer(
             'action_angles', rope_angles(HEAD_DIM, torch.arange(CHUNK)), persistent=False
         )
-        self.video_words = nn.Embedding(1 + len(WORDS), D_VIDEO)  # row 0 'no word', then WORDS
-        self.video_state = embedding_mlp(D_VIDEO)
+        self.video_words = nn.Embedding(1 + n_words, D_VIDEO)  # row 0 'no word', then the words
+        self.video_state = embedding_mlp(D_VIDEO, 2 * state_dim)
         self.edit_out = nn.Linear(D_VIDEO, Z * P * P)  # pretraining only: tokens -> latent change
         # step 22: the named cube's centre per camera, from the tokens entering the last layer. 'patch': one score
         # per token, softmax over the camera's 64 patches, the weighted mean of the patch centres (the answer must
@@ -319,8 +322,8 @@ class Verne(nn.Module):
             nn.Linear(FREQ, D_ACTION), nn.SiLU(), nn.Linear(D_ACTION, D_ACTION)
         )
         self.time_out = nn.Sequential(nn.SiLU(), nn.Linear(D_ACTION, 9 * D_ACTION))  # -> e
-        self.action_words = nn.Embedding(1 + len(WORDS), D_ACTION)
-        self.action_state = embedding_mlp(D_ACTION)
+        self.action_words = nn.Embedding(1 + n_words, D_ACTION)
+        self.action_state = embedding_mlp(D_ACTION, 2 * state_dim)
         self.action = nn.ModuleList([Block(D_ACTION, adaln=True) for _ in range(LAYERS)])
         self.action_out = nn.Linear(D_ACTION, ACTION)
 

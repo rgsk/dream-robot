@@ -199,6 +199,43 @@ def pretrain(step: str, seed: int = 0):
         runs.commit()
 
 
+@app.function(gpu=FAST_GPUS, volumes=LIBERO_VOLUMES, timeout=4 * 3600, memory=32768)
+def libero_position(name: str = 'position_spread', steps: int = 5000, seed: int = 0):
+    # LIBERO stage 1 (verne/libero.py: a name -> that object's centre per camera, spread, pixels) into the LIBERO
+    # runs Volume at <name>/seed<k>/ (log.json, weights.pt, ckpt/, position.png). Training only: H100 is fine
+    import os
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, R)
+    os.chdir(R)
+    from dream_robot.policies.verne import libero
+
+    try:
+        libero.stage1_job(Path(f'{R}/experiments/libero/runs/{name}/seed{seed}'), steps, seed)
+    finally:
+        libero_runs.commit()
+
+
+@app.function(gpu=FAST_GPUS, volumes=LIBERO_VOLUMES, timeout=4 * 3600, memory=32768)
+def libero_skills(name: str = 'skills_spread', init: str = 'position_spread/seed0', steps: int = 10000, seed: int = 0):
+    # LIBERO stage 2 (verne/libero.py: skill words + option-B actions, position loss on) from a stage-1 run on the
+    # LIBERO runs Volume -> <name>/seed<k>/ (log.json, weights.pt, stats.pt, ckpt/). Training only: H100 is fine
+    import os
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, R)
+    os.chdir(R)
+    from dream_robot.policies.verne import libero
+
+    runs_dir = Path(f'{R}/experiments/libero/runs')
+    try:
+        libero.stage2_job(runs_dir / name / f'seed{seed}', runs_dir / init, steps, seed)
+    finally:
+        libero_runs.commit()
+
+
 @app.function(gpu=GPUS, volumes=VOLUMES, timeout=4 * 3600, memory=32768)
 def position(step: str, seed: int = 0, readout: str = 'patch', steps: int = 5000, frames: str = 'latent'):
     # run.py's position_job (step 22 stage 1: the named cube's centre per camera; probes, position.png). frames

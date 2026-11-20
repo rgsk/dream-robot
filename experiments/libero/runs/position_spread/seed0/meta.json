@@ -1,0 +1,21 @@
+{
+ "gpu": "NVIDIA H100 80GB HBM3",
+ "steps": 5000,
+ "seed": 0,
+ "readout": "spread",
+ "frames": "pixels",
+ "words": [
+  "turn_on",
+  "turn_off",
+  "put",
+  "stove_knob",
+  "stove",
+  "moka_pot",
+  "frying_pan",
+  "to_stove_knob",
+  "to_stove",
+  "to_moka_pot",
+  "to_frying_pan"
+ ],
+ "started": "2026-11-20 12:10:28"
+}

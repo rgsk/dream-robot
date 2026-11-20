@@ -60,3 +60,56 @@ test tasks); ours is a different protocol: skills -> chained long tasks, small m
   at 1500). Val recon 0.3625 -> 0.0050 (2k) -> 0.0031 (6k) -> **0.0028** (10k), no spikes; KL 1.34. T5's: 0.0017.
 - recon: objects, arm, knob kept; the stove's red glow when on survives (turn_on's visible result); fine
   burner rings blur away in the top view. Good enough for pointing at stove / pan / moka.
+
+## Step 4 · stage 1 on LIBERO: point at a named object, spread, pixels (runs/position_spread/seed0)
+- dream_robot/policies/verne/libero.py: vocab 3 verbs + 4 names + 4 'to_<name>' (11 words); state 9; demo frames
+  (31k, demos 0-4 of each task held out); every frame asked about any name in view; spread per camera, cameras
+  where the name is out of view skipped. Verne(n_words, state_dim, frames) (T5 defaults unchanged). Modal
+  libero_position (H100, 5k steps).
+- Held-out (err patches / right = nearer the named object than every other object in view), step 5000:
+  **all 0.54 / 97.2%**; stove_knob 0.54 / 97%, stove 0.60 / 98%, moka_pot 0.52 / 95%, frying_pan 0.45 / 98%.
+  Moka lagged early (right 29% at 1k, 52% at 2k, 94% at 2.5k). position.png: crosses on the right objects in both
+  cameras, arm anywhere, incl. stove-on frames and scene 8 (knob + cook region only).
+- Occluded objects still count as in view (a knob hidden under the pan keeps its label).
+
+## Step 5 · option B (Verne's hand-pose actions) on LIBERO: can hand poses drive the arm? (scripts/hand_check.py)
+- Controller (env_args): OSC_POSE, control_delta, a in [-1, 1]: Δp = 0.05·a[:3] m, R_goal = exp(0.5·a[3:])·R_now.
+  Driver: a[:3] = clip((p − p_now)/0.05), a[3:] = clip(rotvec(R·R_nowᵀ)/0.5), gripper = the recorded command.
+  Hand pose = the controller's ee (recorded obs ee_pos is ~8 mm off it: don't use the stored one).
+- Replay from each demo's first state, 5 demos per skill: recorded commands vs driving to the NEXT recorded hand pose
+  each step (closed loop): turn_on 5/5 vs 5/5, moka 4/5 vs 5/5, pan 5/5 vs 5/5, turn_off 3/5 vs **1/5**.
+  Total 17/20 vs 16/20. The hand trails the recorded path by 12-18 mm (commands: 5-6 mm): a one-step target
+  is reached only partly per step (OSC lag). Turn-off (a knob turn) suffers most. Even recorded commands replay
+  imperfectly (3/5 turn_off): the sim isn't fully deterministic from a saved state.
+- Aim-ahead (target = recorded hand pose 1 / 2 / 3 steps ahead), 10 demos per skill, success · path distance:
+  turn_on cmds 10/10 · 6.6 mm | +1 10/10 · 16.7 | +2 9/10 · 11.7 | +3 9/10 · 8.0
+  moka    cmds  9/10 · 4.4    | +1 10/10 · 17.4 | +2 10/10 · 12.0 | +3 10/10 · 6.9
+  pan     cmds 10/10 · 6.4    | +1  9/10 · 18.4 | +2  9/10 · 12.4 | +3  9/10 · 6.7
+  turn_off cmds 9/10 · 6.2    | +1  7/10 · 13.6 | +2  6/10 · 10.1 | +3  6/10 · 6.4
+- Read: +3 puts the hand back on the path (6-8 mm) but turn_off stays 6-7/10 vs 9/10: the miss isn't lag. A
+  knob turn needs the hand pushed PAST where it ends up (contact); the achieved pose drops that push. T5 step 20
+  labelled with the hand at each recorded joint TARGET (the goal), not the achieved hand. LIBERO's goal is
+  recoverable: p_goal = p_t + 0.05·a[:3], R_goal = exp(0.5·a[3:])·R_t.
+- Goal poses (target = the recorded command applied to the recorded hand), 10 demos per skill, success · path:
+  turn_off cmds 7/10 · 6.5 mm | goal 7/10 · 3.7    turn_on cmds 10/10 · 5.5 | goal 10/10 · 3.3
+  moka     cmds 9/10 · 4.4    | goal 10/10 · 0.6   pan     cmds 10/10 · 6.4 | goal 10/10 · 0.6
+  Goal = commands on every skill (37/40 vs 36/40), path closer than the commands' own replay. turn_off's
+  commands scored 9/10 last run and 7/10 now: replaying a saved state isn't repeatable; 10 demos is noisy.
+- Decision: option B with GOAL poses as the training targets (as T5 step 20: the hand at the recorded target).
+- to_npz.py now also stores the controller hand (hand_pos/rot) and the aiming pose (goal_pos/rot) per step.
+  Aim vs the hand one step later: median 13-21 mm, 95% 24-35 mm, while the hand moves 2-6 mm per step (median):
+  the demos always aim ~2 cm ahead and the hand covers a fraction each step (OSC kp 150), everywhere, not only at
+  contact. Why aiming 3 steps ahead already put the hand on the path.
+
+## Step 6 · stage 2 on LIBERO (runs/skills_spread/seed0) + rollouts (scripts/rollout.py)
+- libero.py stage 2: skill words + option-B targets (aiming poses relative to the chunk start, grip, progress),
+  demo B 32, position loss on (B 64, weight 1), lr 3e-4 cosine, init stage 1 seed 0, 20k steps (Modal H100);
+  weights-only snapshots every 2k, full ckpt every 5k; stats.pt written before training.
+- rollout.py (LIBERO venv, local 4060): LIBERO's own pruned init states, 10 settle steps, chunk every 8 steps,
+  driver to the live hand, max 400 steps, task's own success check.
+- **10k snapshot, 20 episodes per skill: 56/80.** turn_on **20/20** (78-103 steps), turn_off (scene 8) **15/20**,
+  pan **15/20**, moka **6/20**. Moka fail film (ep0): reaches the pot, closes beside it, carries nothing to the
+  stove and hovers there (T5's old failure: missed grasp, no retry).
+- **20k (final), 20 episodes per skill: 66/80** (10k: 56/80). turn_on 20/20, turn_off 17/20 (15), pan 17/20 (15),
+  moka **12/20** (6). Training: held-out action loss 0.209 (10k) -> 0.199 (20k), pointing right 98.5 -> 98.8%.
+  Late training helped the arm, moka most; 20k stays the default for LIBERO stage 2. One seed.

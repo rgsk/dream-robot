@@ -26,13 +26,13 @@ step "torch from RoboCasa's venv (hard links)"
 S="$HERE/../robocasa/.venv/lib/python3.11/site-packages"
 D="$("$PY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
 if [[ -d "$S/torch" && ! -d "$D/torch" ]]; then
-    for x in "$S"/torch "$S"/torch-2.7.1.dist-info "$S"/torchgen "$S"/functorch "$S"/triton "$S"/triton-*.dist-info "$S"/nvidia "$S"/nvidia_*.dist-info; do
+    for x in "$S"/torch "$S"/torch-2.7.1.dist-info "$S"/torchgen "$S"/functorch "$S"/triton "$S"/triton-*.dist-info "$S"/nvidia "$S"/nvidia_*.dist-info "$S"/cusparselt; do  # cusparselt: its own top folder
         [[ -e "$x" ]] && cp -al "$x" "$D/"
     done
 fi
 
 step "packages"
-uv pip install --python "$PY" "hf-libero>=0.1.3,<0.2" "torch==2.7.1" h5py "imageio[ffmpeg]" pillow pyyaml "mcp>=1.20"
+uv pip install --python "$PY" "hf-libero>=0.1.3,<0.2" "torch==2.7.1" h5py "imageio[ffmpeg]" pillow pyyaml "mcp>=1.20" frozendict einops
 
 step "dream_robot on the path"
 SITE="$("$PY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
