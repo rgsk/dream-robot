@@ -188,3 +188,9 @@ test tasks); ours is a different protocol: skills -> chained long tasks, small m
   sim's bowl point, 220 steps): table_center 10, on_stove 10, between 9, cookie_box-next 7, on_cookie_box 7,
   next_to_ramekin 6, drawer 5, next_to_plate 4, on_wooden_cabinet 4, **on_ramekin 1**. One seed.
 - eval_watch.sh (snapshot evals alongside training) written, cancelled: too slow sharing the GPU with training.
+- Point at the OTHER bowl (rollout.py ... other; same 10 init states; success = bowl_2 on the plate, never demoed
+  in that scene), final weights: **34/100**, wrong bowl (the task's own) 15/100. Per task (other / wrong):
+  on_ramekin 9/0, on_wooden_cabinet 9/0, next_to_ramekin 7/0, on_stove 4/0, cookie_box-next 2/0, on_cookie_box 2/0,
+  table_center 1/0, drawer 0/1, between 0/7, next_to_plate 0/7. The point steers the arm in most scenes (85 of 100
+  episodes didn't take the trained bowl); it loses to the layout where the two bowls sit close (between, next_to_plate).
+  on_ramekin: other bowl 9/10 vs its own (stacked) bowl 1/10.

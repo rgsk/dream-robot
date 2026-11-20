@@ -10,7 +10,10 @@
 # the driver (scripts/hand_check.py) turns that step's pose into LIBERO's OSC delta from the LIVE hand; gripper sign.
 #
 #   [VERNE_LIBERO_SUITE=libero_spatial] MUJOCO_GL=egl envs/libero/.venv/bin/python \
-#       experiments/libero/scripts/rollout.py RUN_DIR WEIGHTS [episodes] [films]
+#       experiments/libero/scripts/rollout.py RUN_DIR WEIGHTS [episodes] [films] [bowl | other]
+# 'other' (Spatial, 2026-11-21): point at the OTHER bowl (bowl_2, which no demo of that task moves); success = bowl_2
+# on the plate (LIBERO's On), and 'wrong' = bowl_1 ended on the plate instead. A test that the arm follows the point,
+# not the layout.
 #   e.g. experiments/libero/runs/skills_spread/seed0 ckpt/weights_step10000.pt 20 2
 # -> RUN_DIR/rollouts_<weights stem>.json (task -> per episode [success, steps]) and films in
 #    scratch_nov/libero/rollouts/<run>_<weights stem>/
@@ -64,13 +67,26 @@ def make_env(task: str):
     return env, init
 
 
+TARGET = 'bowl'  # main() sets it: 'bowl' (the task's) or 'other'
+
+
+def on_plate(env, obj: str) -> bool:
+    od = env.env.object_states_dict
+    return bool(od['plate_1'].check_ontop(od[obj]))
+
+
+def solved(env) -> bool:
+    return on_plate(env, 'akita_black_bowl_2') if TARGET == 'other' else env.check_success()
+
+
 def sim_point(env) -> tuple[float, float]:
     # bowl_1's body centre in the upright 128 px top camera (to_npz's own projection), (row, col)
     sys.path.insert(0, str(REPO / 'experiments/libero/scripts'))
     import to_npz
 
     sim = env.env.sim
-    pix, _ = to_npz.pixels(sim, sim.data.body_xpos[sim.model.body_name2id(POINT_BODY)].copy())
+    body = 'akita_black_bowl_2_main' if TARGET == 'other' else POINT_BODY
+    pix, _ = to_npz.pixels(sim, sim.data.body_xpos[sim.model.body_name2id(body)].copy())
     return float(pix[0, 0]), float(pix[0, 1])
 
 
@@ -125,18 +141,23 @@ def episode(net, st, env, init_state, ins, seed: int, film: list | None) -> tupl
                 top[max(r - 1, 0):r + 2, max(c - 1, 0):c + 2] = (255, 0, 0)
             film.append(np.concatenate([top, obs['robot0_eye_in_hand_image'][::-1]], 1))
         prev, (canvas, state) = state, observe(obs)
-        if done or env.check_success():
+        if (done and TARGET == 'bowl') or solved(env):
             return True, t + 1, point
+    if TARGET == 'other' and on_plate(env, 'akita_black_bowl_1'):
+        return False, -1, point  # steps -1: the task's own bowl ended on the plate (wrong bowl)
     return False, MAX_STEPS, point
 
 
-def main(run: Path, weights: str, episodes: int = 20, films: int = 2) -> None:
+def main(run: Path, weights: str, episodes: int = 20, films: int = 2, target: str = 'bowl') -> None:
     import imageio.v3 as iio
+
+    global TARGET
+    TARGET = target
 
     st = {k: v.cuda() for k, v in torch.load(run / 'stats.pt').items()}
     net = Verne(n_words=len(L.WORDS), state_dim=L.STATE, frames='pixels').cuda().eval()
     net.load_state_dict(torch.load(run / weights))
-    tag = Path(weights).stem
+    tag = Path(weights).stem + ('' if target == 'bowl' else f'_{target}')
     film_dir = REPO / 'scratch_nov/libero/rollouts' / f'{run.parent.name}_{run.name}_{tag}'
     film_dir.mkdir(parents=True, exist_ok=True)
     out = {}
@@ -153,7 +174,8 @@ def main(run: Path, weights: str, episodes: int = 20, films: int = 2) -> None:
         env.close()
         out[task] = res
         print(f'{task}: {sum(r[0] for r in res)}/{len(res)}  (steps of successes: '
-              f'{[r[1] for r in res if r[0]]})', flush=True)
+              f'{[r[1] for r in res if r[0]]})' + (f'  wrong bowl {sum(r[1] == -1 for r in res)}' if target != 'bowl' else ''),
+              flush=True)
     (run / f'rollouts_{tag}.json').write_text(json.dumps(out, indent=1))
     total = [r[0] for res in out.values() for r in res]
     print(f'total {sum(total)}/{len(total)} = {np.mean(total):.1%}', flush=True)
@@ -162,4 +184,4 @@ def main(run: Path, weights: str, episodes: int = 20, films: int = 2) -> None:
 
 if __name__ == '__main__':
     a = sys.argv[1:]
-    main(Path(a[0]), a[1], int(a[2]) if len(a) > 2 else 20, int(a[3]) if len(a) > 3 else 2)
+    main(Path(a[0]), a[1], int(a[2]) if len(a) > 2 else 20, int(a[3]) if len(a) > 3 else 2, a[4] if len(a) > 4 else 'bowl')
