@@ -49,8 +49,11 @@ if SUITE == 'libero_90':
     NAMES = ('stove_knob', 'stove', 'moka_pot', 'frying_pan')  # the suite's words (a subset of to_npz's NAMES)
     TARGETS = ('stove',)  # names that are a put target in some skill: also asked as 'to_<name>' in stage 1
     POINTED = ()  # labels asked with a point (none: no point input)
-elif SUITE == 'libero_spatial':
-    FOLDERS = (REPO / 'data/libero/npz/libero_spatial',)
+elif SUITE in ('libero_spatial', 'libero_spatial_noisy'):
+    # _noisy: + the noisy replays (experiments/libero/scripts/noisy_replays.py: one per training demo, a push and the
+    # driver's recovery; their own tasks in d.tasks, episodes 1000+, never held out)
+    FOLDERS = (REPO / 'data/libero/npz/libero_spatial',) + (
+        (REPO / 'data/libero/npz/libero_spatial_noisy',) if SUITE == 'libero_spatial_noisy' else ())
     NAMES = ('plate', 'bowl')
     TARGETS = ('plate',)
     POINTED = ('bowl', 'other_bowl')
@@ -75,6 +78,10 @@ def load(dev: str = 'cuda', limit: int | None = None) -> namespace:
     # (train rows), task_point [tasks] (its object is pointed at). limit: rows per task (a quick check)
     parts = []
     paths = [p for f in FOLDERS for p in sorted(f.glob('*.npz'))]
+    # frames straight into one preallocated array (no second full copy: Spatial + noisy replays are ~12 GB)
+    lens = [len(np.load(p)['episode']) if limit is None else limit for p in paths]
+    frames_all = np.empty((sum(lens), 3, 128, 256), np.uint8)
+    at = 0
     for t, path in enumerate(paths):
         z = np.load(path)
         # to_npz's names -> this suite's: label columns and skill tokens by name (to_npz's list only grows; a label
@@ -87,16 +94,18 @@ def load(dev: str = 'cuda', limit: int | None = None) -> namespace:
         assert str(z['verbs'][v]) == VERBS[v], path
         tokens = np.array([v, NAMES.index(zn[o]) + 1, NAMES.index(zn[tg]) + 1 if tg else 0])
         n = len(z['episode']) if limit is None else limit
-        frame = np.concatenate([z['top'][:n], z['wrist'][:n]], 2).transpose(0, 3, 1, 2)  # [n, 3, 128, 256]
+        frames_all[at:at + n, :, :, :128] = z['top'][:n].transpose(0, 3, 1, 2)  # [n, 3, 128, 256]: top | wrist
+        frames_all[at:at + n, :, :, 128:] = z['wrist'][:n].transpose(0, 3, 1, 2)
+        at += n
         state = np.concatenate([z['joints'][:n], z['gripper'][:n]], 1)
         ep = z['episode'][:n]
-        part = dict(frame=frame, state=state, centre=pix[:n, cols] / 16, seen=seen[:n, cols],
+        part = dict(state=state, centre=pix[:n, cols] / 16, seen=seen[:n, cols],
                     task=np.full(n, t), episode=ep, name=path.stem, skill=str(z['skill']), tokens=tokens)
         for k in ('hand_pos', 'hand_rot', 'goal_pos', 'goal_rot'):
             part[k] = z[k][:n]
         part['grip'] = z['action'][:n, 6]
         parts.append(part)
-    keys = ('frame', 'state', 'centre', 'seen', 'task', 'episode', 'hand_pos', 'hand_rot', 'goal_pos', 'goal_rot',
+    keys = ('state', 'centre', 'seen', 'task', 'episode', 'hand_pos', 'hand_rot', 'goal_pos', 'goal_rot',
             'grip')
     cat = {k: np.concatenate([p[k] for p in parts]) for k in keys}
     # previous row: same task and episode, one step back
@@ -113,8 +122,8 @@ def load(dev: str = 'cuda', limit: int | None = None) -> namespace:
     progress = (np.arange(len(start)) - first) / np.maximum(last - first, 1)
     t = lambda x: torch.tensor(x, device=dev, dtype=torch.float32)  # noqa: E731
     return namespace(
-        frame=torch.from_numpy(cat['frame']) if os.environ.get('VERNE_FRAMES_ON_CPU') == '1'
-        else torch.tensor(cat['frame'], device=dev),
+        frame=torch.from_numpy(frames_all) if os.environ.get('VERNE_FRAMES_ON_CPU') == '1'
+        else torch.tensor(frames_all, device=dev),
         state=state,
         prev=torch.tensor(prev, device=dev),
         centre=torch.tensor(np.nan_to_num(cat['centre']), device=dev, dtype=torch.float32),

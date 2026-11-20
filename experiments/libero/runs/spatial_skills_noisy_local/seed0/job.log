@@ -1,0 +1,24 @@
+106868 rows (6321 held out); skills ['put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)', 'put(bowl, plate)']
+step      0   action train 2.079  val 2.010   position 0.1453   pointing err 0.88 right 0.858
+step   1000   action train 0.371  val 0.341   position 0.5760   pointing err 0.32 right 0.927
+step   2000   action train 0.329  val 0.300   position 0.1187   pointing err 0.33 right 0.931
+step   3000   action train 0.290  val 0.305   position 0.1740   pointing err 0.36 right 0.922
+step   4000   action train 0.234  val 0.276   position 0.1347   pointing err 0.27 right 0.942
+step   5000   action train 0.309  val 0.264   position 0.1946   pointing err 0.26 right 0.939
+step   6000   action train 0.338  val 0.263   position 0.1134   pointing err 0.24 right 0.939
+step   7000   action train 0.257  val 0.257   position 0.2146   pointing err 0.24 right 0.944
+step   8000   action train 0.223  val 0.290   position 0.1370   pointing err 0.21 right 0.953
+step   9000   action train 0.357  val 0.258   position 0.0780   pointing err 0.20 right 0.959
+step  10000   action train 0.232  val 0.253   position 0.1188   pointing err 0.18 right 0.955
+step  11000   action train 0.228  val 0.242   position 0.1386   pointing err 0.16 right 0.954
+step  12000   action train 0.265  val 0.237   position 0.0680   pointing err 0.16 right 0.949
+step  13000   action train 0.217  val 0.247   position 0.1031   pointing err 0.15 right 0.952
+step  14000   action train 0.247  val 0.225   position 0.0968   pointing err 0.14 right 0.960
+step  15000   action train 0.276  val 0.266   position 0.0401   pointing err 0.12 right 0.964
+step  16000   action train 0.174  val 0.252   position 0.0331   pointing err 0.12 right 0.964
+step  17000   action train 0.195  val 0.241   position 0.0744   pointing err 0.11 right 0.966
+step  18000   action train 0.179  val 0.212   position 0.0094   pointing err 0.10 right 0.970
+step  19000   action train 0.318  val 0.233   position 0.0831   pointing err 0.10 right 0.964
+step  20000   action train 0.227  val 0.239   position 0.0618   pointing err 0.10 right 0.967
+done: experiments/libero/runs/spatial_skills_noisy_local/seed0
+------ FINISHED ------

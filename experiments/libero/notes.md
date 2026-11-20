@@ -194,3 +194,23 @@ test tasks); ours is a different protocol: skills -> chained long tasks, small m
   table_center 1/0, drawer 0/1, between 0/7, next_to_plate 0/7. The point steers the arm in most scenes (85 of 100
   episodes didn't take the trained bowl); it loses to the layout where the two bowls sit close (between, next_to_plate).
   on_ramekin: other bowl 9/10 vs its own (stacked) bowl 1/10.
+- Failure modes (rollout.py now prints them, as T5's: no_grasp / dropped / missed_plate / still_holding / wrong_bowl),
+  final local weights, same 100 episodes (63/100 again): **missed_plate 19, no_grasp 14, dropped 4**. no_grasp mostly
+  on_ramekin 5 (stacked bowl) and drawer 4; missed_plate spread (wooden_cabinet 5, next_to_plate 4, next_to_ramekin 3).
+  The 7 filmed failures were all placement; the full count says both. -> noisy replays: pushes before the grasp
+  and before the release, none mid-carry.
+- Noisy replays v1 (approach 60 / carry 40) stopped after 5 tasks: 34-39 of 45 demos kept per task (~55% of tries),
+  carry pushes rarely survive the success filter.
+- Noisy replays v2 (scripts/noisy_replays.py: one per training demo, push 50% before the grasp / 50% before the
+  release, clock paused till the hand rejoins within 4 mm, labels = the driver's aims, success-filtered with one retry):
+  369 of 450 kept (30-43 per task; 192 grasp, 177 place), 44.6k rows. Suite libero_spatial_noisy = clean + noisy;
+  load fills one preallocated frame array (107k rows, ~10.5 GB, fits; training ~2x slower, memory-bound).
+- Stage 2 clean + noisy, local (runs/spatial_skills_noisy_local/seed0, same recipe / init as the 63 run): held-out
+  action 0.239 (clean 0.270). **79/100** (clean 63): failures missed_plate **7** (19), no_grasp 13 (14), dropped **0**
+  (4), still_holding 1. Per task (clean -> noisy): on_ramekin 1 -> 5, wooden_cabinet 4 -> 8, on_cookie_box 7 -> 10,
+  next_to_plate 4 -> 6, next_to_ramekin 6 -> 8, cookie_box-next 7 -> 8, drawer 5 -> 5, between 9, center 10, stove 10.
+  The place-phase pushes fixed placement; misses at the grasp barely moved (drawer 5 no_grasp, ramekin 4). One seed.
+- no_grasp films (noisy run; drawer ep3/4 re-filmed with scratch_nov/libero/dart/film_episodes.py, ramekin ep0/1):
+  drawer: hand stops above the drawer rim, closes on nothing, carries an empty hand to the plate. Ramekin: closes
+  off-centre on the raised bowl's rim, tips it off the ramekin. Both bowls sit at unusual heights (in the drawer /
+  on the ramekin); no retry after a miss (demos never show one).

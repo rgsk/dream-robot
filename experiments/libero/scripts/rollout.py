@@ -20,6 +20,7 @@
 import json
 import os
 import sys
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -79,6 +80,26 @@ def solved(env) -> bool:
     return on_plate(env, 'akita_black_bowl_2') if TARGET == 'other' else env.check_success()
 
 
+def body_pos(env, name: str) -> np.ndarray:
+    sim = env.env.sim
+    return sim.data.body_xpos[sim.model.body_name2id(name)].copy()
+
+
+def failure_mode(env, z0: dict, zmax: dict) -> str:
+    # Spatial, a failed episode (as T5's failure modes): the pointed bowl never lifted 3 cm -> no_grasp (or the other
+    # bowl lifted -> wrong_bowl); lifted and still 3 cm up at the end -> still_holding; back down within 10 cm of the
+    # plate (xy) -> missed_plate (e.g. on its rim); elsewhere -> dropped
+    mine = 'akita_black_bowl_2_main' if TARGET == 'other' else POINT_BODY
+    theirs = 'akita_black_bowl_1_main' if TARGET == 'other' else 'akita_black_bowl_2_main'
+    if zmax[mine] - z0[mine] < 0.03:
+        return 'wrong_bowl' if zmax[theirs] - z0[theirs] >= 0.03 else 'no_grasp'
+    p = body_pos(env, mine)
+    if p[2] - z0[mine] >= 0.03:
+        return 'still_holding'
+    near = np.linalg.norm((p - body_pos(env, 'plate_1_main'))[:2]) < 0.10
+    return 'missed_plate' if near else 'dropped'
+
+
 def sim_point(env) -> tuple[float, float]:
     # bowl_1's body centre in the upright 128 px top camera (to_npz's own projection), (row, col)
     sys.path.insert(0, str(REPO / 'experiments/libero/scripts'))
@@ -111,7 +132,7 @@ def observe(obs) -> tuple[np.ndarray, np.ndarray]:
     return canvas, np.concatenate([obs['robot0_joint_pos'], obs['robot0_gripper_qpos']]).astype(np.float32)
 
 
-def episode(net, st, env, init_state, ins, seed: int, film: list | None) -> tuple[bool, int, tuple | None]:
+def episode(net, st, env, init_state, ins, seed: int, film: list | None) -> tuple[bool, int, tuple | None, str]:
     torch.manual_seed(seed)
     env.reset()
     obs = env.set_init_state(init_state)
@@ -121,6 +142,9 @@ def episode(net, st, env, init_state, ins, seed: int, film: list | None) -> tupl
     prev = state
     plan = []
     point = sim_point(env) if POINT_BODY else None  # given once, held all episode
+    bowls = ('akita_black_bowl_1_main', 'akita_black_bowl_2_main') if POINT_BODY else ()
+    z0 = {b: body_pos(env, b)[2] for b in bowls}
+    zmax = dict(z0)
     pt = None if point is None else L.point_input(torch.tensor([point], dtype=torch.float32).cuda() / 16)
     for t in range(MAX_STEPS):
         if not plan:
@@ -141,11 +165,14 @@ def episode(net, st, env, init_state, ins, seed: int, film: list | None) -> tupl
                 top[max(r - 1, 0):r + 2, max(c - 1, 0):c + 2] = (255, 0, 0)
             film.append(np.concatenate([top, obs['robot0_eye_in_hand_image'][::-1]], 1))
         prev, (canvas, state) = state, observe(obs)
+        for b in bowls:
+            zmax[b] = max(zmax[b], body_pos(env, b)[2])
         if (done and TARGET == 'bowl') or solved(env):
-            return True, t + 1, point
+            return True, t + 1, point, 'none'
+    mode = failure_mode(env, z0, zmax) if bowls else 'fail'
     if TARGET == 'other' and on_plate(env, 'akita_black_bowl_1'):
-        return False, -1, point  # steps -1: the task's own bowl ended on the plate (wrong bowl)
-    return False, MAX_STEPS, point
+        return False, -1, point, mode  # steps -1: the task's own bowl ended on the plate (wrong bowl)
+    return False, MAX_STEPS, point, mode
 
 
 def main(run: Path, weights: str, episodes: int = 20, films: int = 2, target: str = 'bowl') -> None:
@@ -167,18 +194,19 @@ def main(run: Path, weights: str, episodes: int = 20, films: int = 2, target: st
         res = []
         for i in range(min(episodes, len(init))):
             film = [] if i < films else None
-            ok, n, point = episode(net, st, env, init[i], ins, seed=i, film=film)
-            res.append([ok, n, point])
+            ok, n, point, mode = episode(net, st, env, init[i], ins, seed=i, film=film)
+            res.append([ok, n, point, mode])
             if film:
                 iio.imwrite(film_dir / f'{task}_ep{i}_{"success" if ok else "fail"}.mp4', np.stack(film), fps=20)
         env.close()
         out[task] = res
         print(f'{task}: {sum(r[0] for r in res)}/{len(res)}  (steps of successes: '
-              f'{[r[1] for r in res if r[0]]})' + (f'  wrong bowl {sum(r[1] == -1 for r in res)}' if target != 'bowl' else ''),
-              flush=True)
+              f'{[r[1] for r in res if r[0]]})' + (f'  wrong bowl {sum(r[1] == -1 for r in res)}' if target != 'bowl' else '')
+              + f'  failures {dict(Counter(r[3] for r in res if not r[0]))}', flush=True)
     (run / f'rollouts_{tag}.json').write_text(json.dumps(out, indent=1))
     total = [r[0] for res in out.values() for r in res]
-    print(f'total {sum(total)}/{len(total)} = {np.mean(total):.1%}', flush=True)
+    print(f'total {sum(total)}/{len(total)} = {np.mean(total):.1%}   failures '
+          f'{dict(Counter(r[3] for res in out.values() for r in res if not r[0]))}', flush=True)
     print(f'films: {film_dir}\n------ FINISHED ------', flush=True)
 
 

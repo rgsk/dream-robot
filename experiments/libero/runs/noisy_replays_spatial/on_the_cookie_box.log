@@ -1,0 +1,8 @@
+[robosuite WARNING] No private macro file found! (__init__.py:7)
+[robosuite WARNING] It is recommended to use a private macro file (__init__.py:8)
+[robosuite WARNING] To setup, run: python /home/rahul/Documents/codes/ml/dream-robot/envs/libero/.venv/lib/python3.11/site-packages/robosuite/scripts/setup_macros.py (__init__.py:9)
+Local assets not found. Downloading from HuggingFace Hub...
+Assets already downloaded at /home/rahul/.cache/libero/assets
+Warning: make sure gym is installed if you want to use the GymWrapper.
+pick_up_the_black_bowl_on_the_cookie_box_and_place_it_on_the_plate: 30 replays kept of 71 tries (45 demos), 3016 steps; {'ahead_grasp': 3, 'back_grasp': 5, 'back_place': 3, 'down_grasp': 7, 'down_place': 5, 'side_grasp': 3, 'side_place': 2, 'up_grasp': 1, 'up_place': 1}
+pick_up_the_black_bowl_on_the_ramekin_and_place_it_on_the_plate: 36 replays kept of 66 tries (45 demos), 4212 steps; {'ahead_grasp': 4, 'ahead_place': 1, 'back_grasp': 5, 'back_place': 5, 'down_grasp': 4, 'down_place': 7, 'side_grasp': 4, 'side_place': 2, 'up_grasp': 1, 'up_place': 3}

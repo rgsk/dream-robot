@@ -1,0 +1,22 @@
+{
+ "gpu": "NVIDIA GeForce RTX 4060",
+ "steps": 20000,
+ "seed": 0,
+ "init": "experiments/libero/runs/spatial_point_free/seed0",
+ "suite": "libero_spatial_noisy",
+ "position": 1.0,
+ "readout": "free",
+ "actions": "option B: aiming hand poses relative to the chunk start + grip + progress",
+ "words": [
+  "turn_on",
+  "turn_off",
+  "put",
+  "plate",
+  "bowl",
+  "to_plate",
+  "to_bowl"
+ ],
+ "snapshot_every": 2000,
+ "full_every": 5000,
+ "started": "2026-11-21 01:12:18"
+}
