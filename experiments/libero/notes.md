@@ -113,3 +113,26 @@ test tasks); ours is a different protocol: skills -> chained long tasks, small m
 - **20k (final), 20 episodes per skill: 66/80** (10k: 56/80). turn_on 20/20, turn_off 17/20 (15), pan 17/20 (15),
   moka **12/20** (6). Training: held-out action loss 0.209 (10k) -> 0.199 (20k), pointing right 98.5 -> 98.8%.
   Late training helped the arm, moka most; 20k stays the default for LIBERO stage 2. One seed.
+
+## Step 7 · free readout on LIBERO (runs/position_free, runs/skills_free)
+- libero.py readout option ('spread' / 'free'; free: squared distance per camera, out-of-view skipped).
+- Stage 1 free seed 0, step 5000: **err 0.12 patches, right 99.6%** (every name 99-100%; moka 0.15 / 100%).
+  Spread: 0.54 / 97.2% (moka 95%). Free reached 98.9% (moka 99%) by step 1000, spread 79.6% (moka 29%).
+  position.png: crosses dead on, both cameras.
+- Free stage 2 seed 0 (init free stage 1, free position loss on, 20k, Modal). **10k snapshot: 67/80** (spread 10k:
+  56/80): turn_on 20/20, moka **15/20** (spread 6), pan 15/20 (15), turn_off 17/20 (15).
+- **Free 20k (final): 70/80** (spread 20k: 66/80): turn_on 20/20, moka **17/20** (12), pan 17/20 (17), turn_off 16/20
+  (17). Pointing at the end: free 0.11 patches / 99.6%, spread 0.48 / 98.8%.
+- Odd: free's held-out action loss ends at 0.444 vs spread's 0.199, yet its arm is better. Not understood yet
+  (both use the same val rows); check its log curve before trusting the loss as a guide.
+- Read (one seed each): on LIBERO's multi-patch objects free beats spread, mostly on the moka pot (17 vs 12 at 20k,
+  15 vs 6 at 10k): the opposite of T5's one-patch cubes. Your hunch held.
+- Action-loss puzzle (log curves): free OVERFITS the demos from ~8k: train 0.12 -> 0.04, held-out 0.225 (8k, its
+  best) -> 0.444 (20k); its position loss falls to 0.0013 (stage 1 already solved it). Spread: train ~0.13-0.16,
+  held-out flat 0.19-0.21; its position loss stays ~0.12 (spread can't go below its snap floor), so the aux
+  gradient never stops. Guess: that steady aux gradient regularises spread; free's vanishes. The arm doesn't
+  suffer (free 10k 67, 20k 70): the held-out loss scores exact demo actions on 5 unseen demos per task, not
+  closed-loop success.
+- LIBERO's eval init states are NOT the demos' starts (checked moka / turn_on / pan): robot joints differ, the
+  gripper starts less open (0.021 vs 0.034), objects in a narrower spread (only a few object entries vary). So
+  the rollout scores are on fresh starts.

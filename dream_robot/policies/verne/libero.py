@@ -149,13 +149,33 @@ def spread_loss(w: Tensor, target: Tensor, seen: Tensor) -> Tensor:
     return (per_cam * s).sum() / s.sum().clamp(min=1)
 
 
-def predict(net: Verne, d: namespace, rows: Tensor, names: Tensor, as_target: Tensor) -> Tensor:
-    # [B, 2 cams, 2]: the weighted mean of patch centres per camera
-    return net.position(frames(d, rows), states(d, rows), words(names, as_target), 'spread').view(-1, 2, 2)
+def free_loss(pred: Tensor, target: Tensor, seen: Tensor) -> Tensor:
+    # 'free' readout (step 22: one linear layer per camera on its 64 tokens -> (row, col), anywhere): squared
+    # distance per camera, out-of-view cameras skipped. pred, target [B, 2, 2], seen [B, 2]
+    per_cam = ((pred - target) ** 2).sum(-1)
+    s = seen.float()
+    return (per_cam * s).sum() / s.sum().clamp(min=1)
+
+
+def position_loss(net: Verne, d: namespace, rows: Tensor, names: Tensor, as_target: Tensor, readout: str) -> Tensor:
+    # stage 1's loss for one batch of (row, name) queries, readout 'spread' or 'free'
+    f, st, ins = frames(d, rows), states(d, rows), words(names, as_target)
+    target, seen = d.centre[rows, names], d.seen[rows, names]
+    with torch.autocast('cuda', dtype=torch.bfloat16):
+        out = net.position_weights(f, st, ins) if readout == 'spread' else net.position(f, st, ins, 'free')
+    if readout == 'spread':
+        return spread_loss(out.float(), target, seen)
+    return free_loss(out.float().view(-1, 2, 2), target, seen)
+
+
+def predict(net: Verne, d: namespace, rows: Tensor, names: Tensor, as_target: Tensor,
+            readout: str = 'spread') -> Tensor:
+    # [B, 2 cams, 2]: spread: the weighted mean of patch centres per camera; free: its own point
+    return net.position(frames(d, rows), states(d, rows), words(names, as_target), readout).view(-1, 2, 2)
 
 
 @torch.no_grad()
-def val_numbers(net: Verne, d: namespace, every: int = 10) -> dict[str, float]:
+def val_numbers(net: Verne, d: namespace, every: int = 10, readout: str = 'spread') -> dict[str, float]:
     # every `every`-th held-out row x every name in view: per camera the error to the target (patches), and 'right':
     # the prediction is nearer the named object than every other object in view in that camera; per name and overall
     net.eval()
@@ -168,7 +188,7 @@ def val_numbers(net: Verne, d: namespace, every: int = 10) -> dict[str, float]:
         errs, rights = [], []
         for i in range(0, len(r), 256):
             b = r[i : i + 256]
-            pred = predict(net, d, b, torch.full_like(b, j), torch.zeros_like(b, dtype=torch.bool))
+            pred = predict(net, d, b, torch.full_like(b, j), torch.zeros_like(b, dtype=torch.bool), readout)
             dist = (pred[:, None] - d.centre[b]).norm(dim=-1)  # [B, 4 names, 2 cams]
             dist = torch.where(d.seen[b], dist, torch.inf)
             own = dist[:, j]  # [B, 2]
@@ -185,7 +205,8 @@ def val_numbers(net: Verne, d: namespace, every: int = 10) -> dict[str, float]:
     return out
 
 
-def stage1(d: namespace, steps: int, B: int = 64, lr: float = 3e-4, seed: int = 0, ckpt: Path | None = None) -> dict:
+def stage1(d: namespace, steps: int, B: int = 64, lr: float = 3e-4, seed: int = 0, ckpt: Path | None = None,
+           readout: str = 'spread') -> dict:
     # stage 1 (module docstring) -> {'weights': the whole Verne on the cpu, 'log': per 500 steps}
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
@@ -199,15 +220,13 @@ def stage1(d: namespace, steps: int, B: int = 64, lr: float = 3e-4, seed: int = 
         lr_mod.set_lr(opt, lr * lr_mod.cosine(step, steps))
         rows = torch.tensor(rng.choice(train_rows, B), device=dev)
         names, as_target = queries(d, rows, rng)
-        with torch.autocast('cuda', dtype=torch.bfloat16):
-            w = net.position_weights(frames(d, rows), states(d, rows), words(names, as_target))
-        loss = spread_loss(w.float(), d.centre[rows, names], d.seen[rows, names])
+        loss = position_loss(net, d, rows, names, as_target, readout)
         opt.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(net.parameters(), lr_mod.CLIP)
         opt.step()
         if step % 500 == 0:
-            v = val_numbers(net, d)
+            v = val_numbers(net, d, readout=readout)
             log.append({'step': step, 'train': loss.item()} | v)
             per = '  '.join(f'{n} {v.get(f"err_{n}", float("nan")):.2f}/{v.get(f"right_{n}", float("nan")):.2f}'
                             for n in NAMES)
@@ -217,7 +236,7 @@ def stage1(d: namespace, steps: int, B: int = 64, lr: float = 3e-4, seed: int = 
 
 
 @torch.no_grad()
-def picture(net: Verne, d: namespace, n_per_task: int = 2) -> np.ndarray:
+def picture(net: Verne, d: namespace, n_per_task: int = 2, readout: str = 'spread') -> np.ndarray:
     # uint8 [H, W, 3]: held-out frames (n per task, mid-demo), each asked about every name in view; a cross per name
     # in its colour: target thin, prediction thick; 2x size
     from PIL import Image, ImageDraw
@@ -234,7 +253,8 @@ def picture(net: Verne, d: namespace, n_per_task: int = 2) -> np.ndarray:
             for j, name in enumerate(NAMES):
                 if not d.seen[row, j].any():
                     continue
-                pred = predict(net, d, r, torch.tensor([j], device=r.device), torch.tensor([False], device=r.device))[0]
+                pred = predict(net, d, r, torch.tensor([j], device=r.device), torch.tensor([False], device=r.device),
+                               readout)[0]
                 for cam in range(2):
                     if not d.seen[row, j, cam]:
                         continue
@@ -248,7 +268,7 @@ def picture(net: Verne, d: namespace, n_per_task: int = 2) -> np.ndarray:
     return np.concatenate([x for tl in tiles for x in (tl, gap)][:-1], 0)
 
 
-def stage1_job(out: Path, steps: int = 5000, seed: int = 0) -> None:
+def stage1_job(out: Path, steps: int = 5000, seed: int = 0, readout: str = 'spread') -> None:
     # stage 1 into out/: meta.json, log.json, weights.pt, ckpt/, position.png
     import json
     import time
@@ -258,20 +278,20 @@ def stage1_job(out: Path, steps: int = 5000, seed: int = 0) -> None:
     out.mkdir(parents=True, exist_ok=True)
     if not (out / 'meta.json').exists():
         (out / 'meta.json').write_text(json.dumps({
-            'gpu': torch.cuda.get_device_name(), 'steps': steps, 'seed': seed, 'readout': 'spread', 'frames': 'pixels',
+            'gpu': torch.cuda.get_device_name(), 'steps': steps, 'seed': seed, 'readout': readout, 'frames': 'pixels',
             'words': WORDS, 'started': time.strftime('%Y-%m-%d %H:%M:%S')}, indent=1))
     d = load()
     print(f'{len(d.val)} rows ({int(d.val.sum())} held out) from {d.tasks}', flush=True)
     if (out / 'weights.pt').exists():
         weights = torch.load(out / 'weights.pt')
     else:
-        run = stage1(d, steps, seed=seed, ckpt=out / 'ckpt')
+        run = stage1(d, steps, seed=seed, ckpt=out / 'ckpt', readout=readout)
         weights = run['weights']
         (out / 'log.json').write_text(json.dumps(run['log']))
         torch.save(weights, out / 'weights.pt')
     net = Verne(n_words=len(WORDS), state_dim=STATE, frames='pixels').cuda()
     net.load_state_dict(weights)
-    iio.imwrite(out / 'position.png', picture(net, d))
+    iio.imwrite(out / 'position.png', picture(net, d, readout=readout))
     print(f'done: {out}\n------ FINISHED ------', flush=True)
 
 
@@ -304,7 +324,7 @@ FULL_EVERY = 5000  # full checkpoints (+ optimizer, ~85 MB) to resume / rewind
 
 
 def stage2(d: namespace, init: dict, steps: int, B: int = 32, pB: int = 64, position: float = 1.0, lr: float = 3e-4,
-           seed: int = 0, ckpt: Path | None = None, on_stats=None) -> dict:
+           seed: int = 0, ckpt: Path | None = None, on_stats=None, readout: str = 'spread') -> dict:
     # stage 2 (module docstring) from stage 1's weights `init` (the video side; the action side starts fresh, as
     # train.py) -> {'weights', 'log': per 1000 steps (step, action train, action val, position train, pointing val),
     # 'a_mean', 'a_std'}
@@ -335,8 +355,7 @@ def stage2(d: namespace, init: dict, steps: int, B: int = 32, pB: int = 64, posi
         names, as_target = queries(d, prow, rng)
         with torch.autocast('cuda', dtype=torch.bfloat16):
             la = action_loss(net, frame, state, ins, acts)
-            w = net.position_weights(frames(d, prow), states(d, prow), words(names, as_target))
-        lp = spread_loss(w.float(), d.centre[prow, names], d.seen[prow, names])
+        lp = position_loss(net, d, prow, names, as_target, readout)
         total = la + position * lp
         opt.zero_grad()
         total.backward()
@@ -345,7 +364,7 @@ def stage2(d: namespace, init: dict, steps: int, B: int = 32, pB: int = 64, posi
         if step % 1000 == 0:
             with torch.no_grad(), torch.autocast('cuda', dtype=torch.bfloat16):
                 lv = float(np.mean([action_loss(net, *v).item() for v in val]))
-            pv = val_numbers(net, d, every=20)
+            pv = val_numbers(net, d, every=20, readout=readout)
             log.append({'step': step, 'train': la.item(), 'val': lv, 'position': lp.item(), 'point_err': pv['err'],
                         'point_right': pv['right']})
             print(f'step {step:6d}   action train {la.item():.3f}  val {lv:.3f}   position {lp.item():.4f}   '
@@ -354,7 +373,7 @@ def stage2(d: namespace, init: dict, steps: int, B: int = 32, pB: int = 64, posi
             'a_mean': a_mean.cpu(), 'a_std': a_std.cpu()}
 
 
-def stage2_job(out: Path, init: Path, steps: int = 10000, seed: int = 0) -> None:
+def stage2_job(out: Path, init: Path, steps: int = 10000, seed: int = 0, readout: str = 'spread') -> None:
     # stage 2 into out/: meta.json, log.json, weights.pt, stats.pt (the action / state stats a rollout needs, written
     # before training), ckpt/ (step<N>.pt full every FULL_EVERY, weights_step<N>.pt every SNAPSHOT_EVERY)
     import json
@@ -364,6 +383,7 @@ def stage2_job(out: Path, init: Path, steps: int = 10000, seed: int = 0) -> None
     if not (out / 'meta.json').exists():
         (out / 'meta.json').write_text(json.dumps({
             'gpu': torch.cuda.get_device_name(), 'steps': steps, 'seed': seed, 'init': str(init), 'position': 1.0,
+            'readout': readout,
             'actions': 'option B: aiming hand poses relative to the chunk start + grip + progress', 'words': WORDS,
             'snapshot_every': SNAPSHOT_EVERY, 'full_every': FULL_EVERY,
             'started': time.strftime('%Y-%m-%d %H:%M:%S')}, indent=1))
@@ -373,7 +393,8 @@ def stage2_job(out: Path, init: Path, steps: int = 10000, seed: int = 0) -> None
         torch.save({'a_mean': a_mean.cpu(), 'a_std': a_std.cpu(), 's_mean': d.s_mean.cpu(), 's_std': d.s_std.cpu()},
                    out / 'stats.pt')
 
-    run = stage2(d, torch.load(init / 'weights.pt'), steps, seed=seed, ckpt=out / 'ckpt', on_stats=save_stats)
+    run = stage2(d, torch.load(init / 'weights.pt'), steps, seed=seed, ckpt=out / 'ckpt', on_stats=save_stats,
+                 readout=readout)
     (out / 'log.json').write_text(json.dumps(run['log']))
     torch.save(run['weights'], out / 'weights.pt')
     print(f'done: {out}\n------ FINISHED ------', flush=True)

@@ -200,7 +200,7 @@ def pretrain(step: str, seed: int = 0):
 
 
 @app.function(gpu=FAST_GPUS, volumes=LIBERO_VOLUMES, timeout=4 * 3600, memory=32768)
-def libero_position(name: str = 'position_spread', steps: int = 5000, seed: int = 0):
+def libero_position(name: str = 'position_spread', steps: int = 5000, seed: int = 0, readout: str = 'spread'):
     # LIBERO stage 1 (verne/libero.py: a name -> that object's centre per camera, spread, pixels) into the LIBERO
     # runs Volume at <name>/seed<k>/ (log.json, weights.pt, ckpt/, position.png). Training only: H100 is fine
     import os
@@ -212,13 +212,14 @@ def libero_position(name: str = 'position_spread', steps: int = 5000, seed: int 
     from dream_robot.policies.verne import libero
 
     try:
-        libero.stage1_job(Path(f'{R}/experiments/libero/runs/{name}/seed{seed}'), steps, seed)
+        libero.stage1_job(Path(f'{R}/experiments/libero/runs/{name}/seed{seed}'), steps, seed, readout)
     finally:
         libero_runs.commit()
 
 
 @app.function(gpu=FAST_GPUS, volumes=LIBERO_VOLUMES, timeout=4 * 3600, memory=32768)
-def libero_skills(name: str = 'skills_spread', init: str = 'position_spread/seed0', steps: int = 10000, seed: int = 0):
+def libero_skills(name: str = 'skills_spread', init: str = 'position_spread/seed0', steps: int = 20000, seed: int = 0,
+                  readout: str = 'spread'):
     # LIBERO stage 2 (verne/libero.py: skill words + option-B actions, position loss on) from a stage-1 run on the
     # LIBERO runs Volume -> <name>/seed<k>/ (log.json, weights.pt, stats.pt, ckpt/). Training only: H100 is fine
     import os
@@ -231,7 +232,7 @@ def libero_skills(name: str = 'skills_spread', init: str = 'position_spread/seed
 
     runs_dir = Path(f'{R}/experiments/libero/runs')
     try:
-        libero.stage2_job(runs_dir / name / f'seed{seed}', runs_dir / init, steps, seed)
+        libero.stage2_job(runs_dir / name / f'seed{seed}', runs_dir / init, steps, seed, readout)
     finally:
         libero_runs.commit()
 
