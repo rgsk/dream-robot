@@ -1,12 +1,16 @@
 # A trained LIBERO Verne (verne/libero.py stage 2) in LIBERO's sim: each skill from LIBERO's own fixed start states
-# (init_files/libero_90/<task>.pruned_init), success = the task's own check. Runs in envs/libero/.venv.
+# (init_files/<suite>/<task>.pruned_init), success = the task's own check. Runs in envs/libero/.venv. The suite is
+# libero.py's (VERNE_LIBERO_SUITE): libero_90 = our 4 scene-3 / scene-8 skills; libero_spatial = the benchmark's 10
+# tasks, 50 start states each, MAX_STEPS 220 (the published protocol's limit), and the bowl POINT: here the sim's
+# (bowl_1's body projected into the settled first frame's top camera, as to_npz labels it) = the ceiling for an LLM's.
 #
 # Per chunk (every N_EXEC steps): the cameras (rows flipped as to_npz stored them) + [previous, now] joints and
 # fingers + the skill words -> Verne samples 16 x 11 (std units) -> raw: 16 aiming poses relative to the hand now,
 # gripper, progress -> world poses from the controller's hand at the chunk start (hand.absolute). Each executed step:
 # the driver (scripts/hand_check.py) turns that step's pose into LIBERO's OSC delta from the LIVE hand; gripper sign.
 #
-#   MUJOCO_GL=egl envs/libero/.venv/bin/python experiments/libero/scripts/rollout.py RUN_DIR WEIGHTS [episodes] [films]
+#   [VERNE_LIBERO_SUITE=libero_spatial] MUJOCO_GL=egl envs/libero/.venv/bin/python \
+#       experiments/libero/scripts/rollout.py RUN_DIR WEIGHTS [episodes] [films]
 #   e.g. experiments/libero/runs/skills_spread/seed0 ckpt/weights_step10000.pt 20 2
 # -> RUN_DIR/rollouts_<weights stem>.json (task -> per episode [success, steps]) and films in
 #    scratch_nov/libero/rollouts/<run>_<weights stem>/
@@ -27,26 +31,47 @@ from dream_robot.policies.verne import libero as L  # noqa: E402
 from dream_robot.policies.verne.model import Verne, sample  # noqa: E402
 
 N_EXEC = 8  # executed steps per chunk (T5's n_exec 8)
-MAX_STEPS = 400  # 20 s at 20 Hz; the longest training demo is 283 steps
 POS_MAX, ROT_MAX = 0.05, 0.5  # OSC_POSE output_max
-# task -> its bddl file (libero_90) and the skill tokens to_npz gave it (verb, object, target)
-TASKS = {
-    'KITCHEN_SCENE3_turn_on_the_stove': (0, 1, 0),
-    'KITCHEN_SCENE3_put_the_moka_pot_on_the_stove': (2, 3, 2),
-    'KITCHEN_SCENE3_put_the_frying_pan_on_the_stove': (2, 4, 2),
-    'KITCHEN_SCENE8_turn_off_the_stove': (1, 1, 0),
-}
+SUITE = L.SUITE
+if SUITE == 'libero_90':
+    MAX_STEPS = 400  # 20 s at 20 Hz; the longest training demo is 283 steps
+    # task -> the skill tokens to_npz gave it (verb, object, target; into VERBS, ('none',) + NAMES)
+    TASKS = {
+        'KITCHEN_SCENE3_turn_on_the_stove': (0, 1, 0),
+        'KITCHEN_SCENE3_put_the_moka_pot_on_the_stove': (2, 3, 2),
+        'KITCHEN_SCENE3_put_the_frying_pan_on_the_stove': (2, 4, 2),
+        'KITCHEN_SCENE8_turn_off_the_stove': (1, 1, 0),
+    }
+    POINT_BODY = None
+else:  # libero_spatial: put(bowl, plate) everywhere; longest training demo 197 steps
+    MAX_STEPS = 220
+    put = (L.VERBS.index('put'), L.NAMES.index('bowl') + 1, L.NAMES.index('plate') + 1)
+    TASKS = {f'pick_up_the_black_bowl_{w}_and_place_it_on_the_plate': put for w in (
+        'between_the_plate_and_the_ramekin', 'from_table_center', 'in_the_top_drawer_of_the_wooden_cabinet',
+        'next_to_the_cookie_box', 'next_to_the_plate', 'next_to_the_ramekin', 'on_the_cookie_box', 'on_the_ramekin',
+        'on_the_stove', 'on_the_wooden_cabinet')}
+    POINT_BODY = 'akita_black_bowl_1_main'
 
 
 def make_env(task: str):
     from libero.libero import get_libero_path
     from libero.libero.envs import OffScreenRenderEnv
 
-    bddl = Path(get_libero_path('bddl_files')) / 'libero_90' / f'{task}.bddl'
+    bddl = Path(get_libero_path('bddl_files')) / SUITE / f'{task}.bddl'
     env = OffScreenRenderEnv(bddl_file_name=str(bddl), camera_heights=128, camera_widths=128)
     env.seed(0)
-    init = torch.load(Path(get_libero_path('init_states')) / 'libero_90' / f'{task}.pruned_init', weights_only=False)
+    init = torch.load(Path(get_libero_path('init_states')) / SUITE / f'{task}.pruned_init', weights_only=False)
     return env, init
+
+
+def sim_point(env) -> tuple[float, float]:
+    # bowl_1's body centre in the upright 128 px top camera (to_npz's own projection), (row, col)
+    sys.path.insert(0, str(REPO / 'experiments/libero/scripts'))
+    import to_npz
+
+    sim = env.env.sim
+    pix, _ = to_npz.pixels(sim, sim.data.body_xpos[sim.model.body_name2id(POINT_BODY)].copy())
+    return float(pix[0, 0]), float(pix[0, 1])
 
 
 def hand(env):
@@ -70,7 +95,7 @@ def observe(obs) -> tuple[np.ndarray, np.ndarray]:
     return canvas, np.concatenate([obs['robot0_joint_pos'], obs['robot0_gripper_qpos']]).astype(np.float32)
 
 
-def episode(net, st, env, init_state, ins, seed: int, film: list | None) -> tuple[bool, int]:
+def episode(net, st, env, init_state, ins, seed: int, film: list | None) -> tuple[bool, int, tuple | None]:
     torch.manual_seed(seed)
     env.reset()
     obs = env.set_init_state(init_state)
@@ -79,10 +104,13 @@ def episode(net, st, env, init_state, ins, seed: int, film: list | None) -> tupl
     canvas, state = observe(obs)
     prev = state
     plan = []
+    point = sim_point(env) if POINT_BODY else None  # given once, held all episode
+    pt = None if point is None else L.point_input(torch.tensor([point], dtype=torch.float32).cuda() / 16)
     for t in range(MAX_STEPS):
         if not plan:
             frame = torch.from_numpy(canvas)[None].cuda().float() / 127.5 - 1
-            s = (torch.from_numpy(np.concatenate([prev, state]))[None].cuda() - st['s_mean'].repeat(2)) / st['s_std'].repeat(2)
+            s = L.join(torch.from_numpy(prev)[None].cuda(), torch.from_numpy(state)[None].cuda(), st['s_mean'],
+                       st['s_std'], pt)
             raw = (sample(net, frame, s, ins) * st['a_std'] + st['a_mean'])[0].cpu().numpy()  # [16, 11]
             p0, r0 = hand(env)
             pos, rot = hand_mod.absolute(p0[None], r0[None], raw[:, :9])
@@ -91,11 +119,15 @@ def episode(net, st, env, init_state, ins, seed: int, film: list | None) -> tupl
         p_now, r_now = hand(env)
         obs, _, done, _ = env.step(command(p_now, r_now, p, r, g))
         if film is not None:
-            film.append(np.concatenate([obs['agentview_image'][::-1], obs['robot0_eye_in_hand_image'][::-1]], 1))
+            top = obs['agentview_image'][::-1].copy()
+            if point is not None:  # the given point: a red square on the top camera
+                r, c = int(round(point[0])), int(round(point[1]))
+                top[max(r - 1, 0):r + 2, max(c - 1, 0):c + 2] = (255, 0, 0)
+            film.append(np.concatenate([top, obs['robot0_eye_in_hand_image'][::-1]], 1))
         prev, (canvas, state) = state, observe(obs)
         if done or env.check_success():
-            return True, t + 1
-    return False, MAX_STEPS
+            return True, t + 1, point
+    return False, MAX_STEPS, point
 
 
 def main(run: Path, weights: str, episodes: int = 20, films: int = 2) -> None:
@@ -114,15 +146,17 @@ def main(run: Path, weights: str, episodes: int = 20, films: int = 2) -> None:
         res = []
         for i in range(min(episodes, len(init))):
             film = [] if i < films else None
-            ok, n = episode(net, st, env, init[i], ins, seed=i, film=film)
-            res.append([ok, n])
+            ok, n, point = episode(net, st, env, init[i], ins, seed=i, film=film)
+            res.append([ok, n, point])
             if film:
                 iio.imwrite(film_dir / f'{task}_ep{i}_{"success" if ok else "fail"}.mp4', np.stack(film), fps=20)
         env.close()
         out[task] = res
-        print(f'{task}: {sum(ok for ok, _ in res)}/{len(res)}  (steps of successes: '
-              f'{[n for ok, n in res if ok]})', flush=True)
+        print(f'{task}: {sum(r[0] for r in res)}/{len(res)}  (steps of successes: '
+              f'{[r[1] for r in res if r[0]]})', flush=True)
     (run / f'rollouts_{tag}.json').write_text(json.dumps(out, indent=1))
+    total = [r[0] for res in out.values() for r in res]
+    print(f'total {sum(total)}/{len(total)} = {np.mean(total):.1%}', flush=True)
     print(f'films: {film_dir}\n------ FINISHED ------', flush=True)
 
 

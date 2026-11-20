@@ -146,3 +146,45 @@ test tasks); ours is a different protocol: skills -> chained long tasks, small m
 - Scripted smoke (no LLM): turn_on x4 then put(pan) x8 without home: stove on, but the pan skill never starts
   (arm parked at the knob, stove glowing: a start no pan demo has). With home() between: **episodes 0 and 1 both
   succeed** (9 / 8 calls, 520 / 460 steps). Skills trained alone chain into the LIBERO-90 long task.
+
+## Step 9 · LIBERO-Spatial, the first benchmark suite (2026-11-20)
+- Pivot: publish a standard LIBERO number (train on the suite's own demos, official init states, 50 eps / task).
+  All 4 suites downloaded (original HDF5 with sim states, data/libero/<suite>/, 32 GB; data/libero/download_suites.sh).
+  Grid films of demo_0 per task: scratch_nov/libero/suites/<suite>.mp4. Ultimate target: LIBERO-Plus / PRO.
+- Spatial first: every task is bowl_1 -> plate_1 in its own layout; the instruction phrase only says which of two
+  identical black bowls (T5's colour word, but by relation). Recipe unchanged: each phrase is one name word
+  (bowl_<phrase>), plus 'plate' as the target; pointing labels from the sim states.
+- to_npz.py: Spatial names + skills; bddl looked up by our file's name (the suites' HDF5s record older bddl names);
+  suites -> data/libero/npz/<suite>/. 10 tasks, 500 demos, 62k steps, 5.8 GB. Bowl in view top 100%, wrist 87-100%;
+  label film checked (red on the named bowl, blue on the plate, both cameras).
+- verne/libero.py: VERNE_LIBERO_SUITE ('libero_90' default | 'libero_spatial') picks folder, names, targets;
+  npz columns and tokens mapped by name. modal_app libero_position / libero_skills take suite=.
+- VERNE_FRAMES_ON_CPU=1: frames stay in CPU memory, each batch moved (the 4060 can't hold Spatial's 6 GB of frames).
+- Stage 1 free, Spatial, seed 0 (runs/spatial_position_free/seed0, LOCAL 4060, 5k steps in ~2 min): **err 0.10
+  patches, right 96.2%** (every name 0.09-0.20 / 94-99%; worst bowl_on_the_wooden_cabinet 0.20). 'right' here only
+  separates bowl vs plate (the other bowl isn't labelled), and misses are mostly the bowl sitting on the plate.
+  position.png (mid-demo frames, held bowl): crosses on the named bowl and the plate, both cameras.
+- Two bowls (user, 2026-11-20): each task's layout is unique (bowl_1 + bowl_2 spots differ per task), so a policy can
+  read the task off the layout and skip the instruction; the phrases are relations (needs spatial language).
+  Decision: the LLM points at the bowl, Verne executes. Self-test of LLM pointing (me, 10 first frames at 512 px with
+  ticks, scratch_nov/libero/llm_point/): right bowl 10/10, off 5.4 px of 128 (0.34 patches), mostly a steady ~5 px
+  row offset (the sim label = body origin, lower than the visible centre); sideways ~1 px.
+- Spatial redone: words put / plate / bowl / to_plate only; labels plate, bowl (the task's), other_bowl. Point input
+  (row, col, given) joins the state (STATE 12). Point = the bowl's top-camera centre in the demo's FIRST frame + 0.5
+  patch jitter, held all episode. Stage 1 asks plate (no point), bowl + point at bowl, bowl + point at other_bowl.
+  Stage 2 gives every Spatial row its bowl point. Old per-phrase run (spatial_position_free) superseded.
+- Stage 1, point, free, seed 0 (runs/spatial_point_free/seed0, local 4060, 5k steps): err **0.16 patches**; right
+  plate 94%, bowl 93%, **other_bowl 100%**. 'bowl' + point at the task's bowl -> nearest the OTHER bowl in 1 of 1265
+  top-camera frames; its misses (123) are all the plate, late in the demo (progress > 0.5, bowl sitting on the
+  plate). The point alone picks the bowl.
+- Next: combined suite (scene 3 + Spatial, one vocabulary) after Spatial stage 2 + rollouts.
+- Stage 2 on Modal (runs/spatial_skills_point_free, H100, 20k): **0/100** at 10k (arm hovers above the bowl, never
+  descends; progress head stuck ~0.29 on any frame). Its weights don't fit the local data (action loss 3.0 vs logged
+  0.08): Modal's action stats differ from the same files read locally (a_std ~3x, grip / progress means off). npz
+  byte-identical, code unchanged, a second Modal launch (L40S) reproduced the stats exactly -> deterministic, cause
+  on Modal's side, NOT found yet. Modal LIBERO stage 2 untrusted until it is.
+- Stage 2 LOCAL (runs/spatial_skills_point_free_local/seed0, 4060, 20k in ~13 min, local stats): held-out action
+  0.270, pointing right 96.8%. 10k snapshot 2/10 (1 ep / task). **20k: 63/100** (10 official init states per task,
+  sim's bowl point, 220 steps): table_center 10, on_stove 10, between 9, cookie_box-next 7, on_cookie_box 7,
+  next_to_ramekin 6, drawer 5, next_to_plate 4, on_wooden_cabinet 4, **on_ramekin 1**. One seed.
+- eval_watch.sh (snapshot evals alongside training) written, cancelled: too slow sharing the GPU with training.

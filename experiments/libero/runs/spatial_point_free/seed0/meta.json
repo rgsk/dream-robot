@@ -1,0 +1,18 @@
+{
+ "gpu": "NVIDIA GeForce RTX 4060",
+ "steps": 5000,
+ "seed": 0,
+ "readout": "free",
+ "frames": "pixels",
+ "suite": "libero_spatial",
+ "words": [
+  "turn_on",
+  "turn_off",
+  "put",
+  "plate",
+  "bowl",
+  "to_plate",
+  "to_bowl"
+ ],
+ "started": "2026-11-20 22:34:46"
+}

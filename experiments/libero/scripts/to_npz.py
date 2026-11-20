@@ -28,7 +28,13 @@ CAMERAS = ('agentview', 'robot0_eye_in_hand')  # -> 'top', 'wrist' in the npz
 VERBS = ('turn_on', 'turn_off', 'put')
 # things a slot can name, and that position pretraining asks about. 'stove' = its cook region (a put target),
 # 'stove_knob' = the button turn_on / turn_off press: one word per place the hand goes
-NAMES = ('none', 'stove_knob', 'stove', 'moka_pot', 'frying_pan')
+NAMES = ('none', 'stove_knob', 'stove', 'moka_pot', 'frying_pan', 'plate', 'bowl', 'other_bowl')
+# LIBERO-Spatial (2026-11-20): every task is bowl_1 -> plate_1 in its own layout, with a second identical bowl
+# (bowl_2) somewhere else. The instruction's phrase says which; the policy doesn't read it: the LLM points at the
+# bowl. 'bowl' = the one the task moves, 'other_bowl' = the other (labelled so pointing can ask about both)
+SPATIAL = ('between_the_plate_and_the_ramekin', 'from_table_center', 'in_the_top_drawer_of_the_wooden_cabinet',
+           'next_to_the_cookie_box', 'next_to_the_plate', 'next_to_the_ramekin', 'on_the_cookie_box',
+           'on_the_ramekin', 'on_the_stove', 'on_the_wooden_cabinet')
 # where each name sits in a scene: (kind, sim name); missing = not in that scene, or ambiguous (scene 8 has two
 # moka pots: 'moka_pot' alone can't say which, so it isn't labelled there)
 WHERE = {
@@ -43,14 +49,23 @@ SKILLS = {
     'KITCHEN_SCENE3_put_the_moka_pot_on_the_stove': ('put', 'moka_pot', 'stove'),
     'KITCHEN_SCENE3_put_the_frying_pan_on_the_stove': ('put', 'frying_pan', 'stove'),
 }
+for w in SPATIAL:
+    stem = f'pick_up_the_black_bowl_{w}_and_place_it_on_the_plate'
+    SKILLS[stem] = ('put', 'bowl', 'plate')
+    WHERE[stem] = {'bowl': ('body', 'akita_black_bowl_1_main'), 'other_bowl': ('body', 'akita_black_bowl_2_main'),
+                   'plate': ('body', 'plate_1_main')}
 
 
-def make_env(f):
+def make_env(f, stem: str | None = None):
     from libero.libero import get_libero_path
     from libero.libero.envs import OffScreenRenderEnv
 
+    # the package's bddl under our file's own name; else the name the HDF5 recorded (libero_90 files: old folder,
+    # same name). The suites' HDF5s record older names (pick_the_akita_black_bowl_...) the package no longer has
+    root = Path(get_libero_path('bddl_files'))
+    hit = sorted(root.glob(f'*/{stem}.bddl')) if stem else []
     name = Path(json.loads(f['data'].attrs['env_args'])['env_kwargs']['bddl_file_name']).name
-    bddl = next(Path(get_libero_path('bddl_files')).glob(f'*/{name}'))
+    bddl = hit[0] if hit else next(root.glob(f'*/{name}'))
     env = OffScreenRenderEnv(bddl_file_name=str(bddl), camera_heights=HW, camera_widths=HW)
     env.seed(0)
     env.reset()
@@ -104,9 +119,10 @@ def pixels(sim, p):
 def convert(path: Path) -> None:
     stem = path.name.removesuffix('_demo.hdf5')
     verb, obj, target = SKILLS[stem]
-    where = WHERE[stem[:stem.index('_', len('KITCHEN_SCENE'))]]
+    where = WHERE.get(stem) or WHERE[stem[:stem.index('_', len('KITCHEN_SCENE'))]]
+    out = OUT / path.parent.name if path.parent.name != 'libero_90' else OUT  # suites in their own folder
     with h5py.File(path) as f:
-        env = make_env(f)
+        env = make_env(f, stem)
         sim = env.env.sim
         d = f['data']
         demos = sorted(d, key=lambda s: int(s.split('_')[1]))
@@ -141,8 +157,8 @@ def convert(path: Path) -> None:
         env.close()
     arr = {c: np.concatenate(v) for c, v in cols.items()}
     tokens = np.array([VERBS.index(verb), NAMES.index(obj), NAMES.index(target)], np.int64)
-    OUT.mkdir(parents=True, exist_ok=True)
-    np.savez(OUT / f'{stem}.npz', **arr, tokens=tokens, verbs=VERBS, names=NAMES,
+    out.mkdir(parents=True, exist_ok=True)
+    np.savez(out / f'{stem}.npz', **arr, tokens=tokens, verbs=VERBS, names=NAMES,
              skill=f'{verb}({obj}{", " + target if target != "none" else ""})')
     vis = ', '.join(f'{nm} {arr["seen"][:, j, 0].mean():.0%}/{arr["seen"][:, j, 1].mean():.0%}'
                     for j, nm in enumerate(NAMES) if nm in where)

@@ -1,0 +1,102 @@
+{
+ "pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate": [
+  [
+   false,
+   220,
+   [
+    79.34679412841797,
+    94.93429565429688
+   ]
+  ]
+ ],
+ "pick_up_the_black_bowl_from_table_center_and_place_it_on_the_plate": [
+  [
+   false,
+   220,
+   [
+    78.11351776123047,
+    66.27072143554688
+   ]
+  ]
+ ],
+ "pick_up_the_black_bowl_in_the_top_drawer_of_the_wooden_cabinet_and_place_it_on_the_plate": [
+  [
+   false,
+   220,
+   [
+    76.88153839111328,
+    38.58504104614258
+   ]
+  ]
+ ],
+ "pick_up_the_black_bowl_next_to_the_cookie_box_and_place_it_on_the_plate": [
+  [
+   false,
+   220,
+   [
+    105.01631164550781,
+    51.233154296875
+   ]
+  ]
+ ],
+ "pick_up_the_black_bowl_next_to_the_plate_and_place_it_on_the_plate": [
+  [
+   false,
+   220,
+   [
+    87.41436004638672,
+    112.29701232910156
+   ]
+  ]
+ ],
+ "pick_up_the_black_bowl_next_to_the_ramekin_and_place_it_on_the_plate": [
+  [
+   true,
+   110,
+   [
+    66.45947265625,
+    107.8275146484375
+   ]
+  ]
+ ],
+ "pick_up_the_black_bowl_on_the_cookie_box_and_place_it_on_the_plate": [
+  [
+   false,
+   220,
+   [
+    93.02460479736328,
+    68.09996795654297
+   ]
+  ]
+ ],
+ "pick_up_the_black_bowl_on_the_ramekin_and_place_it_on_the_plate": [
+  [
+   false,
+   220,
+   [
+    60.12473678588867,
+    87.65066528320312
+   ]
+  ]
+ ],
+ "pick_up_the_black_bowl_on_the_stove_and_place_it_on_the_plate": [
+  [
+   true,
+   141,
+   [
+    57.47667694091797,
+    46.25509262084961
+   ]
+  ]
+ ],
+ "pick_up_the_black_bowl_on_the_wooden_cabinet_and_place_it_on_the_plate": [
+  [
+   false,
+   220,
+   [
+    61.485877990722656,
+    11.876988410949707
+   ]
+  ]
+ ]
+}

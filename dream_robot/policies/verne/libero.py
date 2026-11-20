@@ -17,7 +17,17 @@ action loss, and stage 1's loss kept on (weight 1.0), as T5 step 22. Actions are
 per chunk step the hand pose the demo was AIMING at (to_npz's goal pose: the recorded command applied to the
 controller's hand), relative to the hand at the chunk's start (hand.relative: position in its frame + the relative
 rotation's first two columns), then the gripper command (-1 open, +1 close) and progress (step / (length − 1)).
+
+Suites (VERNE_LIBERO_SUITE, read at import): 'libero_90' (default; our scene-3 / scene-8 skills, data/libero/npz) or
+'libero_spatial' (2026-11-20: the benchmark suite, data/libero/npz/libero_spatial). Spatial: every task is
+put(bowl, plate) with a second identical bowl in the scene; the policy never reads which (the instruction's phrase):
+the LLM POINTS at the bowl in the top camera. The point (row, col in [-1, 1], + a 'given' flag) joins the state, so
+STATE is 12 there. Stage 1 asks 'plate' (no point), and 'bowl' + a point near either bowl (labels 'bowl' / 'other_bowl')
+-> that bowl's centre: only the point can say which. The point is that bowl's top-camera centre in the demo's FIRST
+frame (the LLM points once, before the call), jittered (JITTER patches), held for the whole episode.
 """
+
+import os
 
 from pathlib import Path
 from types import SimpleNamespace as namespace
@@ -32,30 +42,56 @@ from .data import ACTION, CHUNK
 from .model import Verne, loss as action_loss
 
 REPO = Path(__file__).resolve().parents[3]
-NPZ = REPO / 'data/libero/npz'
-VERBS = ('turn_on', 'turn_off', 'put')
-NAMES = ('stove_knob', 'stove', 'moka_pot', 'frying_pan')  # to_npz's NAMES without 'none', same order
+SUITE = os.environ.get('VERNE_LIBERO_SUITE', 'libero_90')
+VERBS = ('turn_on', 'turn_off', 'put')  # to_npz's VERBS
+if SUITE == 'libero_90':
+    FOLDERS = (REPO / 'data/libero/npz',)
+    NAMES = ('stove_knob', 'stove', 'moka_pot', 'frying_pan')  # the suite's words (a subset of to_npz's NAMES)
+    TARGETS = ('stove',)  # names that are a put target in some skill: also asked as 'to_<name>' in stage 1
+    POINTED = ()  # labels asked with a point (none: no point input)
+elif SUITE == 'libero_spatial':
+    FOLDERS = (REPO / 'data/libero/npz/libero_spatial',)
+    NAMES = ('plate', 'bowl')
+    TARGETS = ('plate',)
+    POINTED = ('bowl', 'other_bowl')
+else:
+    raise ValueError(SUITE)
 WORDS = VERBS + NAMES + tuple(f'to_{n}' for n in NAMES)
-TARGETS = ('stove',)  # names that are a put target in some skill: also asked as 'to_<name>' in stage 1
-STATE = 9  # 7 joints + 2 fingers
+# label columns: the words' objects, then labels asked only by point ('other_bowl': the word 'bowl' + a point at it)
+LABELS = NAMES + tuple(n for n in POINTED if n not in NAMES)
+WORD_OF = [NAMES.index(n) if n in NAMES else NAMES.index('bowl') for n in LABELS]
+POINT = bool(POINTED)
+STATE = 9 + 3 * POINT  # 7 joints + 2 fingers (+ the point: row, col, given)
+JITTER = 0.5  # the point's noise in training, patches (std per axis; the LLM's own test: ~0.35 patches off)
 VAL_EPISODES = 5  # of each task's 50 demos: episodes 0-4 held out (as the LIBERO VAE)
 
 
 def load(dev: str = 'cuda', limit: int | None = None) -> namespace:
+    # VERNE_FRAMES_ON_CPU=1: frames stay in CPU memory (shared with the numpy array, no copy) and frames() moves
+    # each batch (a small GPU: Spatial's 6 GB of frames don't fit the 4060)
     # every task's npz -> one table on the GPU: frame [N, 3, 128, 256] uint8, state [N, 9], prev [N] (the row one
-    # control step back, a demo's first row itself), centre [N, 4 names, 2 cams, 2] in patches, seen [N, 4, 2],
-    # task [N], episode [N] (per task), val [N] bool, tasks (names), s_mean / s_std (train rows). limit: rows per task
-    # (a quick check)
+    # control step back, a demo's first row itself), first [N] (its demo's first row), centre [N, LABELS, 2 cams, 2]
+    # in patches, seen [N, LABELS, 2], task [N], episode [N] (per task), val [N] bool, tasks (names), s_mean / s_std
+    # (train rows), task_point [tasks] (its object is pointed at). limit: rows per task (a quick check)
     parts = []
-    for t, path in enumerate(sorted(NPZ.glob('*.npz'))):
+    paths = [p for f in FOLDERS for p in sorted(f.glob('*.npz'))]
+    for t, path in enumerate(paths):
         z = np.load(path)
-        assert tuple(str(n) for n in z['names'])[1:] == NAMES, path
+        # to_npz's names -> this suite's: label columns and skill tokens by name (to_npz's list only grows; a label
+        # an older npz lacks stays NaN / unseen)
+        zn = [str(n) for n in z['names']]
+        pix = np.concatenate([z['pix'], np.full_like(z['pix'][:, :1], np.nan)], 1)  # last column: missing
+        seen = np.concatenate([z['seen'], np.zeros_like(z['seen'][:, :1])], 1)
+        cols = [zn.index(n) if n in zn else -1 for n in LABELS]
+        v, o, tg = (int(x) for x in z['tokens'])
+        assert str(z['verbs'][v]) == VERBS[v], path
+        tokens = np.array([v, NAMES.index(zn[o]) + 1, NAMES.index(zn[tg]) + 1 if tg else 0])
         n = len(z['episode']) if limit is None else limit
         frame = np.concatenate([z['top'][:n], z['wrist'][:n]], 2).transpose(0, 3, 1, 2)  # [n, 3, 128, 256]
         state = np.concatenate([z['joints'][:n], z['gripper'][:n]], 1)
         ep = z['episode'][:n]
-        part = dict(frame=frame, state=state, centre=z['pix'][:n, 1:] / 16, seen=z['seen'][:n, 1:],
-                    task=np.full(n, t), episode=ep, name=path.stem, skill=str(z['skill']), tokens=z['tokens'])
+        part = dict(frame=frame, state=state, centre=pix[:n, cols] / 16, seen=seen[:n, cols],
+                    task=np.full(n, t), episode=ep, name=path.stem, skill=str(z['skill']), tokens=tokens)
         for k in ('hand_pos', 'hand_rot', 'goal_pos', 'goal_rot'):
             part[k] = z[k][:n]
         part['grip'] = z['action'][:n, 6]
@@ -77,7 +113,8 @@ def load(dev: str = 'cuda', limit: int | None = None) -> namespace:
     progress = (np.arange(len(start)) - first) / np.maximum(last - first, 1)
     t = lambda x: torch.tensor(x, device=dev, dtype=torch.float32)  # noqa: E731
     return namespace(
-        frame=torch.tensor(cat['frame'], device=dev),
+        frame=torch.from_numpy(cat['frame']) if os.environ.get('VERNE_FRAMES_ON_CPU') == '1'
+        else torch.tensor(cat['frame'], device=dev),
         state=state,
         prev=torch.tensor(prev, device=dev),
         centre=torch.tensor(np.nan_to_num(cat['centre']), device=dev, dtype=torch.float32),
@@ -89,6 +126,8 @@ def load(dev: str = 'cuda', limit: int | None = None) -> namespace:
         skills=[p['skill'] for p in parts],
         task_words=torch.stack([skill_words(p['tokens']) for p in parts]).to(dev),  # [tasks, len(WORDS)]
         last=torch.tensor(last, device=dev),
+        first=torch.tensor(first, device=dev),
+        task_point=torch.tensor([NAMES[int(p['tokens'][1]) - 1] in POINTED for p in parts], device=dev),
         hand_pos=t(cat['hand_pos']),
         hand_rot=t(cat['hand_rot']),
         goal_pos=t(cat['goal_pos']),
@@ -101,7 +140,7 @@ def load(dev: str = 'cuda', limit: int | None = None) -> namespace:
 
 
 def skill_words(tokens) -> Tensor:
-    # to_npz's skill tokens [verb, object, target] (indices into its VERBS and ('none',) + NAMES) -> the instruction
+    # skill tokens [verb, object, target] (indices into VERBS and ('none',) + NAMES; load maps to_npz's) -> the instruction
     # multi-hot [len(WORDS)]: the verb, the object's name, and 'to_<target>' (none for turn_on / turn_off)
     v, o, tg = (int(x) for x in tokens)
     out = torch.zeros(len(WORDS))
@@ -113,12 +152,37 @@ def skill_words(tokens) -> Tensor:
 
 
 def frames(d: namespace, rows: Tensor) -> Tensor:
-    return d.frame[rows].float() / 127.5 - 1
+    return d.frame[rows.to(d.frame.device)].to(rows.device, non_blocking=True).float() / 127.5 - 1
 
 
-def states(d: namespace, rows: Tensor) -> Tensor:
-    # [B, 18] std units: [previous step, now]
-    return (torch.cat([d.state[d.prev[rows]], d.state[rows]], 1) - d.s_mean.repeat(2)) / d.s_std.repeat(2)
+def join(prev: Tensor, now: Tensor, s_mean: Tensor, s_std: Tensor, point: Tensor | None) -> Tensor:
+    # raw states [B, 9] -> the state input [B, 2 · STATE]: [previous, (point), now, (point)], states in std units;
+    # point [B, 3] (row, col in [-1, 1], given flag) or None (no point: zeros)
+    prev, now = (prev - s_mean) / s_std, (now - s_mean) / s_std
+    if not POINT:
+        return torch.cat([prev, now], 1)
+    if point is None:
+        point = torch.zeros(len(now), 3, device=now.device)
+    return torch.cat([prev, point, now, point], 1)
+
+
+def states(d: namespace, rows: Tensor, point: Tensor | None = None) -> Tensor:
+    return join(d.state[d.prev[rows]], d.state[rows], d.s_mean, d.s_std, point)
+
+
+def point_input(centre: Tensor) -> Tensor:
+    # top-camera centre [B, 2] in patches (0..8) -> the point input [B, 3]: row, col in [-1, 1], given 1
+    return torch.cat([centre / 4 - 1, torch.ones_like(centre[:, :1])], 1)
+
+
+def points(d: namespace, rows: Tensor, labels: Tensor, jitter: bool = True) -> Tensor:
+    # [B, 3] the point for each (row, label): for POINTED labels that label's top-camera centre in the row's demo's
+    # first frame (+ JITTER noise), else zeros (no point)
+    c = d.centre[d.first[rows], labels, 0]  # [B, 2] patches
+    if jitter:
+        c = c + JITTER * torch.randn_like(c)
+    pointed = torch.tensor([n in POINTED for n in LABELS], device=rows.device)[labels]
+    return point_input(c) * pointed[:, None]
 
 
 def words(names: Tensor, as_target: Tensor) -> Tensor:
@@ -129,14 +193,22 @@ def words(names: Tensor, as_target: Tensor) -> Tensor:
     return out
 
 
+def label_words(labels: Tensor, as_target: Tensor) -> Tensor:
+    # label index [B] (into LABELS) -> its word's multi-hot ('other_bowl' asks 'bowl')
+    return words(torch.tensor(WORD_OF, device=labels.device)[labels], as_target)
+
+
 def queries(d: namespace, rows: Tensor, rng: np.random.Generator) -> tuple[Tensor, Tensor]:
-    # per row a random name in view in at least one camera, and (for TARGETS names) at random as 'to_<name>'
-    any_seen = d.seen[rows].any(2)  # [B, 4]
-    score = torch.tensor(rng.random(any_seen.shape), device=rows.device) * any_seen
-    names = score.argmax(1)
-    can_target = torch.tensor([n in TARGETS for n in NAMES], device=rows.device)[names]
+    # per row a random label in view in at least one camera (a POINTED one only if in the top camera at its demo's
+    # first frame: where the point comes from), and (for TARGETS) at random as 'to_<name>'
+    ok = d.seen[rows].any(2)  # [B, LABELS]
+    pointed = torch.tensor([n in POINTED for n in LABELS], device=rows.device)
+    ok &= ~pointed | d.seen[d.first[rows], :, 0]
+    score = torch.tensor(rng.random(ok.shape), device=rows.device) * ok
+    labels = score.argmax(1)
+    can_target = torch.tensor([n in TARGETS for n in LABELS], device=rows.device)[labels]
     as_target = can_target & torch.tensor(rng.random(len(rows)) < 0.5, device=rows.device)
-    return names, as_target
+    return labels, as_target
 
 
 def spread_loss(w: Tensor, target: Tensor, seen: Tensor) -> Tensor:
@@ -157,10 +229,10 @@ def free_loss(pred: Tensor, target: Tensor, seen: Tensor) -> Tensor:
     return (per_cam * s).sum() / s.sum().clamp(min=1)
 
 
-def position_loss(net: Verne, d: namespace, rows: Tensor, names: Tensor, as_target: Tensor, readout: str) -> Tensor:
-    # stage 1's loss for one batch of (row, name) queries, readout 'spread' or 'free'
-    f, st, ins = frames(d, rows), states(d, rows), words(names, as_target)
-    target, seen = d.centre[rows, names], d.seen[rows, names]
+def position_loss(net: Verne, d: namespace, rows: Tensor, labels: Tensor, as_target: Tensor, readout: str) -> Tensor:
+    # stage 1's loss for one batch of (row, label) queries, readout 'spread' or 'free'
+    f, st, ins = frames(d, rows), states(d, rows, points(d, rows, labels)), label_words(labels, as_target)
+    target, seen = d.centre[rows, labels], d.seen[rows, labels]
     with torch.autocast('cuda', dtype=torch.bfloat16):
         out = net.position_weights(f, st, ins) if readout == 'spread' else net.position(f, st, ins, 'free')
     if readout == 'spread':
@@ -168,10 +240,11 @@ def position_loss(net: Verne, d: namespace, rows: Tensor, names: Tensor, as_targ
     return free_loss(out.float().view(-1, 2, 2), target, seen)
 
 
-def predict(net: Verne, d: namespace, rows: Tensor, names: Tensor, as_target: Tensor,
+def predict(net: Verne, d: namespace, rows: Tensor, labels: Tensor, as_target: Tensor,
             readout: str = 'spread') -> Tensor:
-    # [B, 2 cams, 2]: spread: the weighted mean of patch centres per camera; free: its own point
-    return net.position(frames(d, rows), states(d, rows), words(names, as_target), readout).view(-1, 2, 2)
+    # [B, 2 cams, 2]: spread: the weighted mean of patch centres per camera; free: its own point. Points unjittered
+    st = states(d, rows, points(d, rows, labels, jitter=False))
+    return net.position(frames(d, rows), st, label_words(labels, as_target), readout).view(-1, 2, 2)
 
 
 @torch.no_grad()
@@ -179,17 +252,19 @@ def val_numbers(net: Verne, d: namespace, every: int = 10, readout: str = 'sprea
     # every `every`-th held-out row x every name in view: per camera the error to the target (patches), and 'right':
     # the prediction is nearer the named object than every other object in view in that camera; per name and overall
     net.eval()
-    rows = torch.tensor(np.flatnonzero(d.val)[::every], device=d.frame.device)
+    rows = torch.tensor(np.flatnonzero(d.val)[::every], device=d.state.device)
     out, total = {}, {'err': [], 'right': []}
-    for j, name in enumerate(NAMES):
+    for j, name in enumerate(LABELS):
         r = rows[d.seen[rows, j].any(1)]
+        if name in POINTED:
+            r = r[d.seen[d.first[r], j, 0]]
         if not len(r):
             continue
         errs, rights = [], []
         for i in range(0, len(r), 256):
             b = r[i : i + 256]
             pred = predict(net, d, b, torch.full_like(b, j), torch.zeros_like(b, dtype=torch.bool), readout)
-            dist = (pred[:, None] - d.centre[b]).norm(dim=-1)  # [B, 4 names, 2 cams]
+            dist = (pred[:, None] - d.centre[b]).norm(dim=-1)  # [B, LABELS, 2 cams]
             dist = torch.where(d.seen[b], dist, torch.inf)
             own = dist[:, j]  # [B, 2]
             ok = d.seen[b, j]
@@ -210,7 +285,7 @@ def stage1(d: namespace, steps: int, B: int = 64, lr: float = 3e-4, seed: int = 
     # stage 1 (module docstring) -> {'weights': the whole Verne on the cpu, 'log': per 500 steps}
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
-    dev = d.frame.device
+    dev = d.state.device
     train_rows = np.flatnonzero(~d.val & d.seen.any((1, 2)).cpu().numpy())
     net = Verne(n_words=len(WORDS), state_dim=STATE, frames='pixels').to(dev)
     opt = torch.optim.AdamW(net.parameters(), lr=lr)
@@ -229,7 +304,7 @@ def stage1(d: namespace, steps: int, B: int = 64, lr: float = 3e-4, seed: int = 
             v = val_numbers(net, d, readout=readout)
             log.append({'step': step, 'train': loss.item()} | v)
             per = '  '.join(f'{n} {v.get(f"err_{n}", float("nan")):.2f}/{v.get(f"right_{n}", float("nan")):.2f}'
-                            for n in NAMES)
+                            for n in LABELS)
             print(f'step {step:5d}  train {loss.item():.4f}  val err {v["err"]:.2f} right {v["right"]:.3f}  '
                   f'[{per}]', flush=True)
     return {'weights': {k: v.cpu() for k, v in net.state_dict().items()}, 'log': log}
@@ -242,16 +317,17 @@ def picture(net: Verne, d: namespace, n_per_task: int = 2, readout: str = 'sprea
     from PIL import Image, ImageDraw
 
     net.eval()
-    colours = {'stove_knob': (255, 200, 0), 'stove': (0, 80, 255), 'moka_pot': (255, 0, 0), 'frying_pan': (0, 170, 0)}
+    colours = {'stove_knob': (255, 200, 0), 'stove': (0, 80, 255), 'moka_pot': (255, 0, 0), 'frying_pan': (0, 170, 0),
+               'plate': (0, 80, 255), 'bowl': (255, 0, 0), 'other_bowl': (0, 170, 0)}
     tiles = []
     for t in range(len(d.tasks)):
         ids = np.flatnonzero(d.val & (d.task == t))
         for row in ids[np.linspace(len(ids) // 4, 3 * len(ids) // 4, n_per_task).astype(int)]:
-            r = torch.tensor([row], device=d.frame.device)
+            r = torch.tensor([row], device=d.state.device)
             im = Image.fromarray(d.frame[row].permute(1, 2, 0).cpu().numpy()).resize((512, 256), Image.NEAREST)
             dr = ImageDraw.Draw(im)
-            for j, name in enumerate(NAMES):
-                if not d.seen[row, j].any():
+            for j, name in enumerate(LABELS):
+                if not d.seen[row, j].any() or (name in POINTED and not d.seen[d.first[row], j, 0]):
                     continue
                 pred = predict(net, d, r, torch.tensor([j], device=r.device), torch.tensor([False], device=r.device),
                                readout)[0]
@@ -260,8 +336,8 @@ def picture(net: Verne, d: namespace, n_per_task: int = 2, readout: str = 'sprea
                         continue
                     for (rr, cc), wd in ((d.centre[row, j, cam].tolist(), 2), (pred[cam].tolist(), 4)):
                         x, y = (cc + 8 * cam) * 32, rr * 32
-                        dr.line([(x - 10, y), (x + 10, y)], fill=colours[name], width=wd)
-                        dr.line([(x, y - 10), (x, y + 10)], fill=colours[name], width=wd)
+                        dr.line([(x - 10, y), (x + 10, y)], fill=colours.get(name, (255, 0, 0)), width=wd)
+                        dr.line([(x, y - 10), (x, y + 10)], fill=colours.get(name, (255, 0, 0)), width=wd)
             tiles.append(np.asarray(im))
     net.train()
     gap = np.full((6, tiles[0].shape[1], 3), 255, np.uint8)
@@ -279,6 +355,7 @@ def stage1_job(out: Path, steps: int = 5000, seed: int = 0, readout: str = 'spre
     if not (out / 'meta.json').exists():
         (out / 'meta.json').write_text(json.dumps({
             'gpu': torch.cuda.get_device_name(), 'steps': steps, 'seed': seed, 'readout': readout, 'frames': 'pixels',
+            'suite': SUITE,
             'words': WORDS, 'started': time.strftime('%Y-%m-%d %H:%M:%S')}, indent=1))
     d = load()
     print(f'{len(d.val)} rows ({int(d.val.sum())} held out) from {d.tasks}', flush=True)
@@ -308,15 +385,19 @@ def chunk_targets(d: namespace, now: Tensor) -> Tensor:
 
 def action_stats(d: namespace, every: int = 5) -> tuple[Tensor, Tensor]:
     # per-number mean, std of the raw targets over every `every`-th training row's chunk
-    rows = torch.tensor(np.flatnonzero(~d.val)[::every], device=d.frame.device)
+    rows = torch.tensor(np.flatnonzero(~d.val)[::every], device=d.state.device)
     raw = torch.cat([chunk_targets(d, rows[i : i + 4096]) for i in range(0, len(rows), 4096)])
     return raw.mean((0, 1)), raw.std((0, 1)).clamp(min=1e-6)
 
 
 def demo_batch(d: namespace, rows: Tensor, a_mean: Tensor, a_std: Tensor):
-    # frame, state, skill words, std-unit action chunk for training rows `rows`
-    return (frames(d, rows), states(d, rows), d.task_words[torch.as_tensor(d.task[rows.cpu().numpy()], device=rows.device)],
-            (chunk_targets(d, rows) - a_mean) / a_std)
+    # frame, state (+ the point at the skill's object if its task points), skill words, std-unit action chunk
+    task = torch.as_tensor(d.task[rows.cpu().numpy()], device=rows.device)
+    point = None
+    if POINT:  # the object's label = its word's (bowl): points() zeroes rows whose task doesn't point
+        obj = d.task_words[task][:, len(VERBS):len(VERBS) + len(NAMES)].argmax(1)
+        point = points(d, rows, obj) * d.task_point[task][:, None]
+    return (frames(d, rows), states(d, rows, point), d.task_words[task], (chunk_targets(d, rows) - a_mean) / a_std)
 
 
 SNAPSHOT_EVERY = 2000  # weights-only snapshots (ckpt/weights_step<N>.pt, 28 MB) to score the arm along the run
@@ -330,7 +411,7 @@ def stage2(d: namespace, init: dict, steps: int, B: int = 32, pB: int = 64, posi
     # 'a_mean', 'a_std'}
     torch.manual_seed(seed)
     rng, val_rng = np.random.default_rng(seed), np.random.default_rng(1000 + seed)
-    dev = d.frame.device
+    dev = d.state.device
     net = Verne(n_words=len(WORDS), state_dim=STATE, frames='pixels').to(dev)
     fresh = ('action', 'time_in', 'time_out')
     missing, unexpected = net.load_state_dict({k: v for k, v in init.items() if not k.startswith(fresh)}, strict=False)
@@ -382,7 +463,7 @@ def stage2_job(out: Path, init: Path, steps: int = 10000, seed: int = 0, readout
     out.mkdir(parents=True, exist_ok=True)
     if not (out / 'meta.json').exists():
         (out / 'meta.json').write_text(json.dumps({
-            'gpu': torch.cuda.get_device_name(), 'steps': steps, 'seed': seed, 'init': str(init), 'position': 1.0,
+            'gpu': torch.cuda.get_device_name(), 'steps': steps, 'seed': seed, 'init': str(init), 'suite': SUITE, 'position': 1.0,
             'readout': readout,
             'actions': 'option B: aiming hand poses relative to the chunk start + grip + progress', 'words': WORDS,
             'snapshot_every': SNAPSHOT_EVERY, 'full_every': FULL_EVERY,
@@ -453,17 +534,18 @@ class Runner:
         return a
 
     @torch.no_grad()
-    def act(self, env, obs, tokens: tuple[int, int, int]) -> np.ndarray:
-        # one control step's OSC command for skill `tokens`, given the latest observation
+    def act(self, env, obs, tokens: tuple[int, int, int], point: tuple[float, float] | None = None) -> np.ndarray:
+        # one control step's OSC command for skill `tokens`, given the latest observation; point: (row, col) in the
+        # upright 128 px top camera (the LLM's), held for the call
         from .model import sample
 
         canvas, state = self.observe(obs)
         prev = state if self.prev is None else self.prev
         if not self.plan or tokens != self.tokens:
             frame = torch.from_numpy(canvas)[None].cuda().float() / 127.5 - 1
-            s = (torch.from_numpy(np.concatenate([prev, state]))[None].cuda() - self.st['s_mean'].repeat(2)) / self.st[
-                's_std'
-            ].repeat(2)
+            pt = None if point is None else point_input(torch.tensor([point], dtype=torch.float32).cuda() / 16)
+            s = join(torch.from_numpy(prev)[None].cuda(), torch.from_numpy(state)[None].cuda(), self.st['s_mean'],
+                     self.st['s_std'], pt)
             ins = skill_words(tokens)[None].cuda()
             raw = (sample(self.net, frame, s, ins) * self.st['a_std'] + self.st['a_mean'])[0].cpu().numpy()
             p0, r0 = self.hand(env)
