@@ -47,10 +47,15 @@
     // file watching: the system has 65k inotify watches; data (66 GB), the venv and run checkpoints ran it
     // out and VS Code stopped noticing edits. Files here still open and list, they just aren't live-tracked
     // (run job.log files stay watched)
+    // 2026-11-20: the old scratch/ (2.3 GB) stays excluded, so new throwaway output goes to monthly
+    // scratch_nov/, scratch_dec/, ... which ARE watched (explorer refreshes, open logs update); the
+    // simulators' source clones + assets (robocasa: 12.6k folders) and notebook caches are excluded too
     "files.watcherExclude": {
         "**/data/**": true,
         "**/.venv/**": true,
-        "**/scratch/**": true,
+        "scratch/**": true,
+        "envs/*/src/**": true,
+        "cache/**": true,
         "**/experiments/**/ckpt/**": true,
         "**/experiments/**/*.pt": true,
     },

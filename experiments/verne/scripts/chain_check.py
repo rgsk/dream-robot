@@ -89,7 +89,7 @@ def chain(net, vae, d, env, seed, n_exec, film):
     }
     if film:
         tag = f'{ins.color}_{ins.side}_then_{ins.distractor_color}_{side2}_{sum(done)}of2'
-        path = REPO / f'scratch/verne_chain/seed{seed}_n{n_exec}_{tag}.mp4'
+        path = REPO / f'scratch_nov/verne_chain/seed{seed}_n{n_exec}_{tag}.mp4'
         path.parent.mkdir(parents=True, exist_ok=True)
         write_video(frames + [frames[-1]] * 15, path, fps=env.control_hz)
     return row

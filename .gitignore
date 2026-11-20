@@ -48,6 +48,7 @@ MUJOCO_LOG.TXT
 .DS_Store
 
 scratch/
+scratch_*/
 cache/
 # watcher contents are per-session
 watch/file.txt
@@ -61,3 +62,4 @@ prac.ipynb
 envs/*/.venv*/
 envs/*/src/
 envs/*/setup.log
+envs/*/config/
