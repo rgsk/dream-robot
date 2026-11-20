@@ -154,7 +154,8 @@ def write_json(path: Path, obj) -> None:
 def evaluate(out: Path, weights: dict, d, scene: str, workers: int) -> None:
     # a trained Verne's results into `out`: T5's binding and locate probes, sweeps at N_EXECS, the
     # close-point probe; each skipped if its file is there (a rerun finishes what a crash left)
-    if scene == 't5' and not (out / 'patch_binding_probe.json').exists():
+    # the T5 probes compare scenes with their erase renders in latent space: latent runs only (pixels: skipped)
+    if scene == 't5' and vae.INPUT == 'latent' and not (out / 'patch_binding_probe.json').exists():
         # does the binding survive (or appear in) the demo training? as pretrain_job's probe; before the
         # sweeps, whose rollout workers leave the GPU too full for it (steps 15, 16 ran out of memory)
         from . import pretrain as pt
@@ -231,6 +232,7 @@ def job(
         'seed': seed,
         'steps': steps,
         'vae': str(vae.WEIGHTS.relative_to(REPO)),
+        'input': vae.INPUT,  # 'latent' (every step before 2026-11-20) or 'pixels'
         'init': init,
         'cotrain': cotrain,
         'future_by': future_by,
@@ -264,10 +266,11 @@ def job(
 
             sc, sv = load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS)
             er, ev = load_erased('train', vae.WEIGHTS), load_erased('val', vae.WEIGHTS)
+            # position labels from the latent scenes (pixels: same targets); locate's masks are latent: latent only
+            sc_lat = sc if vae.INPUT == 'latent' else load_scenes('train', vae.WEIGHTS, frames='latent')
             probe = lambda net: {  # noqa: E731
                 'binding': pt.binding_probe(net, sc, sv, d.s_mean, d.s_std),
-                'locate': pt.locate_probe(net, sc, sv, er, ev, d.s_mean, d.s_std),
-            }
+            } | ({'locate': pt.locate_probe(net, sc, sv, er, ev, d.s_mean, d.s_std)} if vae.INPUT == 'latent' else {})
         run = train(
             d,
             train_ids,
@@ -284,7 +287,7 @@ def job(
             erase=erase,
             erase_data=(sc, er, 64) if erase > 0 else None,
             position=position,
-            position_data=(sc, pos.centres(sc, er), readout, 64) if position > 0 else None,
+            position_data=(sc, pos.centres(sc_lat, er), readout, 64) if position > 0 else None,
         )
         weights = run['weights']
         write_json(out / 'log.json', run['log'])
@@ -465,6 +468,7 @@ def position_job(step: str, seed: int, readout: str, steps: int = PRETRAIN_STEPS
         'steps': steps,
         'readout': readout,
         'vae': str(vae.WEIGHTS.relative_to(REPO)),
+        'input': vae.INPUT,
     }
     if (out / 'meta.json').exists():
         old = json.loads((out / 'meta.json').read_text())
@@ -476,7 +480,10 @@ def position_job(step: str, seed: int, readout: str, steps: int = PRETRAIN_STEPS
         write_json(out / 'meta.json', meta | {'started': time.strftime('%Y-%m-%d %H:%M:%S')})
     sc, val = load_scenes('train', vae.WEIGHTS), load_scenes('val', vae.WEIGHTS)
     erased, val_erased = load_erased('train', vae.WEIGHTS), load_erased('val', vae.WEIGHTS)
-    cen, val_cen = pos.centres(sc, erased), pos.centres(val, val_erased)
+    # labels from the latent scenes + erase renders, whatever the policy sees (pixels: the same targets)
+    lat = (sc, val) if vae.INPUT == 'latent' else (load_scenes('train', vae.WEIGHTS, frames='latent'),
+                                                   load_scenes('val', vae.WEIGHTS, frames='latent'))
+    cen, val_cen = pos.centres(lat[0], erased), pos.centres(lat[1], val_erased)
     state, _, episode = load_table(TASKS['t5'][0])  # the T5 demos' state stats, as stage 2's
     train_ids, _ = split('t5', int(episode.max()) + 1)
     s = torch.tensor(state[np.isin(episode, train_ids)], device='cuda')
@@ -493,7 +500,7 @@ def position_job(step: str, seed: int, readout: str, steps: int = PRETRAIN_STEPS
         torch.save(weights, out / 'weights.pt')
     net = Verne().cuda()
     net.load_state_dict(weights)
-    if not (out / 'patch_locate_probe.json').exists():
+    if vae.INPUT == 'latent' and not (out / 'patch_locate_probe.json').exists():  # latent-space cube masks
         write_json(
             out / 'patch_locate_probe.json',
             pt.locate_probe(net, sc, val, erased, val_erased, s_mean, s_std),

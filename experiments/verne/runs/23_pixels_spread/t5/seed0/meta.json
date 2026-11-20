@@ -1,0 +1,20 @@
+{
+ "commit": "869ff2a",
+ "dirty": true,
+ "package_hash": "f3172b150efa",
+ "gpu": "NVIDIA L40S",
+ "task": "t5",
+ "seed": 0,
+ "steps": 10000,
+ "vae": "experiments/verne/runs/07_instruction/vae_wsd/weights.pt",
+ "input": "pixels",
+ "init": "23_pixels/pretrain_spread/seed0",
+ "cotrain": 0.0,
+ "future_by": "all",
+ "paired": false,
+ "early": 0.0,
+ "erase": 0.0,
+ "position": 1.0,
+ "readout": "spread",
+ "started": "2026-11-20 11:33:58"
+}

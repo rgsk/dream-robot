@@ -115,9 +115,15 @@ def canvas(top, wrist):
     )
 
 
+def as_frame(t: Tensor) -> Tensor:
+    # stored frames -> the model's input: latents (float16) as floats; raw canvases (uint8, vae.INPUT 'pixels')
+    # scaled to [-1, 1], as the VAE saw them
+    return t.float() / 127.5 - 1 if t.dtype == torch.uint8 else t.float()
+
+
 @dataclass(frozen=True, kw_only=True)
 class Demos:
-    latent: Tensor  # [N, Z, 16, 32] float16, the [top | wrist] canvas through the VAE
+    latent: Tensor  # [N, Z, 16, 32] float16, the [top | wrist] canvas through the VAE (pixels: [N, 3, 128, 256] uint8)
     state: Tensor  # [N, 8] joints + gripper, raw
     instruction: Tensor  # [N, 8] one-hot (WORDS), the recorded prompt
     slot: Tensor  # [N] the named cube's slot (0 near, 1 far), -1 without one (T1)
@@ -220,7 +226,7 @@ def get_batch(
     now = first[pick] + rng.integers(0, span)  # [B]
     prev = np.maximum(now - 1, first[pick])
     return Batch(
-        frame=d.latent[now].float(),
+        frame=as_frame(d.latent[now]),
         state=(torch.cat([d.state[prev], d.state[now]], 1) - d.s_mean.repeat(2))
         / d.s_std.repeat(2),
         instruction=d.instruction[now],
@@ -254,18 +260,23 @@ class Scenes:
     colours: Tensor  # [N, 2] each slot's colour, an index into the colour words (0 red .. 3 yellow)
 
 
-def load_scenes(part: str, vae_weights, dev: str = 'cuda') -> Scenes:
+def load_scenes(part: str, vae_weights, dev: str = 'cuda', frames: str | None = None) -> Scenes:
     # part 'train' / 'val' (SCENE_SEEDS). Rendered once (a few minutes) into
-    # data/robosuite/t5_scenes/<part>_<first 8 of the VAE weights' sha256>_colours.npz, then read back
+    # data/robosuite/t5_scenes/<part>_<first 8 of the VAE weights' sha256>_colours.npz, then read back.
+    # frames: 'latent' / 'pixels' (default vae.INPUT); pixels: the raw canvas in [-1, 1] (float16) instead of the
+    # latent, cached as <part>_pixels_colours.npz
     import hashlib
 
-    tag = hashlib.sha256(Path(vae_weights).read_bytes()).hexdigest()[:8]
+    from . import vae as vae_mod
+
+    frames = frames or vae_mod.INPUT
+    tag = 'pixels' if frames == 'pixels' else hashlib.sha256(Path(vae_weights).read_bytes()).hexdigest()[:8]
     path = REPO / 'data/robosuite/t5_scenes' / f'{part}_{tag}_colours.npz'
     if not path.exists():
-        from . import vae as vae_mod
         from .rollouts import make_env
 
-        enc, env = vae_mod.load(vae_weights), make_env('t5')
+        enc = vae_mod.Pixels() if frames == 'pixels' else vae_mod.load_vae(vae_weights)
+        env = make_env('t5')
         colour_words = WORDS[COLOURS]
         out = {k: [] for k in ('latent', 'state', 'instruction', 'slot', 'colours')}
         print(f'rendering {len(SCENE_SEEDS[part])} T5 scenes -> {path}', flush=True)
@@ -288,6 +299,8 @@ def load_scenes(part: str, vae_weights, dev: str = 'cuda') -> Scenes:
 
 
 def load_erased(part: str, vae_weights, dev: str = 'cuda') -> Tensor:
+    # always the VAE's latents (vae.load would hand pixel mode a pass-through): position labels and the locate
+    # probe come from these, whatever the policy sees
     # [N, 2, Z, 16, 32] float16: each SCENE_SEEDS[part] scene's first frame with its near (0) / far (1)
     # cube hidden (alpha 0, both cameras re-rendered), through the VAE; rows as load_scenes. Rendered
     # once into data/robosuite/t5_scenes/<part>_<VAE tag>_erased.npy
@@ -299,7 +312,7 @@ def load_erased(part: str, vae_weights, dev: str = 'cuda') -> Tensor:
         from . import vae as vae_mod
         from .rollouts import make_env
 
-        enc, env, out = vae_mod.load(vae_weights), make_env('t5'), []
+        enc, env, out = vae_mod.load_vae(vae_weights), make_env('t5'), []
         print(f'rendering {len(SCENE_SEEDS[part])} T5 scenes x 2 erased -> {path}', flush=True)
         for seed in SCENE_SEEDS[part]:
             env.reset(seed=seed)

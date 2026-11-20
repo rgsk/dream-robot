@@ -34,6 +34,11 @@ WEIGHTS = Path(
     )
 )
 Z = 4  # latent channels
+# what the policy sees (2026-11-20, pixels vs latents): 'latent' = the canvas through this VAE (every step so
+# far); 'pixels' = the raw canvas, uint8 stored, [-1, 1] in the model, cut into 16 x 16 px patches (the same
+# 8 x 16 token grid). An env var, as VERNE_VAE_WEIGHTS: rollout workers inherit it
+INPUT = os.environ.get('VERNE_INPUT', 'latent')
+assert INPUT in ('latent', 'pixels'), INPUT
 DIMS = (32, 64, 128)  # channels at 128x256, 64x128, 32x64; the latent is at 16x32
 
 
@@ -189,8 +194,20 @@ def reconstruct(vae: VAE, frames: np.ndarray) -> np.ndarray:
     return ((x + 1) * 127.5).round().byte().cpu().numpy()
 
 
-def load(path) -> VAE:
-    # a trained VAE (weights.pt from `run vae`) on the GPU, frozen
+class Pixels(nn.Module):
+    # INPUT 'pixels': stands in for the VAE wherever frames are encoded (rollouts, scene renders): the canvas
+    # [B, 3, 128, 256] in [-1, 1] passes through unchanged
+    def encode(self, x: Tensor) -> Tensor:
+        return x
+
+
+def load(path) -> VAE | Pixels:
+    # what encodes the policy's frames: the VAE, or (INPUT 'pixels') the pass-through
+    return Pixels() if INPUT == 'pixels' else load_vae(path)
+
+
+def load_vae(path) -> VAE:
+    # a trained VAE (weights.pt from `run vae`) on the GPU, frozen, whatever INPUT says
     vae = VAE().cuda().eval().requires_grad_(False)
     vae.load_state_dict(torch.load(path))
     return vae
@@ -202,6 +219,8 @@ def load_latents(name: str, weights_path) -> np.ndarray:
     # latents_<first 8 of the weights' sha256>.npy (a new VAE gets its own file), then read back
     from .data import REPO, canvas, load_cameras
 
+    if INPUT == 'pixels':  # the raw canvases, uint8 [N, 3, 128, 256] (the model scales them to [-1, 1])
+        return canvas(*load_cameras(name))
     tag = hashlib.sha256(Path(weights_path).read_bytes()).hexdigest()[:8]
     path = REPO / 'data/robosuite' / name / 'decoded' / f'latents_{tag}.npy'
     if not path.exists():

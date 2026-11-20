@@ -665,3 +665,36 @@ Rule: the frame's path (self-attention) must start at least as open as the words
 - 1007 (yellow right, red left; the chain check's 1-of-2): **2/2**, 24 turns, 55 s. Red missed 3 times; each time
   the LLM called it from the image, home, retry; 4th try placed. Verdicts matched the referee both times.
 - Read: the retry the chain lacked comes free from the LLM looking at frames. Next: more seeds (the chain's 11).
+
+## Step 23 · pixels instead of VAE latents (2026-11-20), runs/23_pixels
+- vae.INPUT via VERNE_INPUT ('latent' | 'pixels'): pixels = the raw canvas, uint8 stored, [-1, 1] in, 16 x 16 px
+  patches through one linear layer (Verne.pixel_in, 768 -> 256, made only in pixel mode) -> the same 8 x 16 token
+  grid; vae.load gives a pass-through, load_latents the raw canvases (T5 38k frames, 3.8 GB on the GPU). Latent
+  probes (binding, locate) skipped for pixels. Modal job --frames pixels (memory 32 GB).
+- A-pixels seed 0 (fresh init, demos only, 10k steps, L40S): **10/50 (n_exec 8), 7/50 (16)**; wrong_cube 21/18,
+  no_grasp 18/24. Close point **blind**: slope x -0.02, y 0.04, miss 8.8 cm (step 22 spread: slopes 0.95/0.81,
+  miss 0.6 cm): the gripper closes at one spot whatever the scene. Val loss 0.186 at 10k (latent runs 0.21-0.26).
+- No latent fresh-init run exists (step 20 started from an erase init), so this can't yet say pixels < latents.
+  Next: A-latent seed 0, same recipe.
+- Labels check (scripts/position_labels_check.py, 6 val scenes drawn on raw renders): every target on its own cube in
+  both cameras; wrist dead centre, top sometimes ~1/4 patch toward the cube's lower edge (erase blob takes the
+  shadow / side face). Same targets as step 22.
+- B stage 1, pixels, spread, seed 0 (runs/23_pixels/pretrain_spread; renders the 1200 reset scenes as raw canvases
+  once into the data Volume, t5_scenes/*_pixels_colours.npz): err top / wrist **0.47 / 0.39 patches**, right cube
+  **100 / 100%**, binding val 100%. Step 22 latent spread: 0.48 / 0.40, 99.5 / 99.5%, binding 99%. Same; the
+  answer snaps to patch centres (spread). Locate probe skipped (latent masks).
+- B stage 2, pixels, seed 0 (runs/23_pixels_spread; init = the pixel stage 1, spread loss on, weight 1.0, 10k, L40S):
+  **48/46 of 50, wrong cube 0/0**, dropped 1/3, no_grasp 1/1; close point miss **0.5 cm**, slopes **0.98 / 0.84**
+  (corr 1.00 / 0.93). Latent spread seed 0: 47/49, miss 0.9, slopes 0.95 / 0.69; 5 latent seeds 43-49.
+- Read: with the pointing pretraining, pixels match latents (best close-point fit of any T5 run so far); without
+  it, pixels were blind (A: 10/7, slope ~0). The pretraining, not the VAE, is what makes the arm find the cube.
+  One seed.
+- Free stage 1, pixels, seed 0 (runs/23_pixels/pretrain_free): err top / wrist **0.05 / 0.10 patches** (latent free
+  0.06 / 0.13), right 100 / 100%, binding val 100%. Spread's 0.47 / 0.39 is its snap to patch centres, not a miss.
+- B spread pixels seed 1 (init pixel stage 1 seed 0): **45/45, wrong cube 0/0**, dropped 5/4, no_grasp 0/1; miss
+  0.6 cm, slopes 0.98 / 0.80. Latent spread seed 1: 46/46. Two pixel seeds: 48/46, 45/45 (186/200 = 93%).
+- Free stage 2, pixels (runs/23_pixels_free, init pixel free stage 1 seed 0): seed 0 **47/49** (miss 0.7 cm, slopes
+  0.99 / 0.90), seed 1 **40/37** (wrong cube 2/1, no_grasp 3/8, miss 1.9 cm, slope y 0.46). 173/200 = 87%.
+  Latent free seeds 0-1: 45/45, 45/41 (176/200). Pixel spread seeds 0-1: 186/200, wrong cube 0.
+- Read (2 seeds each): pixels = latents for both readouts; spread > free again, and free's weak seed shows the same
+  sign as latent free's s4 (no_grasp up, y tracking down) plus the only wrong cubes of the pixel B runs.

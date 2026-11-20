@@ -154,8 +154,11 @@ def picture(
     S, tiles = 3, []
     for i in range(n):
         frame = val.latent[i : i + 1].float()
-        z = frame * vae.z_std[:, None, None] + vae.z_mean[:, None, None]
-        pic = ((vae.dec(z)[0].clamp(-1, 1) + 1) * 127.5).byte().permute(1, 2, 0).cpu().numpy()
+        if frame.shape[1] == 3:  # vae.INPUT 'pixels': the canvas itself
+            pic = ((frame[0].clamp(-1, 1) + 1) * 127.5).byte().permute(1, 2, 0).cpu().numpy()
+        else:
+            z = frame * vae.z_std[:, None, None] + vae.z_mean[:, None, None]
+            pic = ((vae.dec(z)[0].clamp(-1, 1) + 1) * 127.5).byte().permute(1, 2, 0).cpu().numpy()
         for which in (0, 1):
             ids, w = torch.tensor([i], device=dev), torch.tensor([which], device=dev)
             pred = net.position(

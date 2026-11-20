@@ -70,9 +70,10 @@ from einops import rearrange
 from torch import Tensor, nn
 
 from .data import ACTION, CHUNK, FUTURE, WORDS
-from .vae import Z
+from .vae import INPUT, Z
 
 P = 2  # patch side in latent cells: latent 16 x 32 -> 8 x 16 = 128 patches (16 x 16 px each)
+PX = 16  # vae.INPUT 'pixels': patch side in pixels, the same 8 x 16 grid straight from the canvas
 N_PATCH = (16 // P) * (32 // P)
 HEADS, HEAD_DIM = 4, 32  # shared by both transformers, so their keys and values can mix
 ROPE_PARTS = (
@@ -282,6 +283,8 @@ class Verne(nn.Module):
     def __init__(self):
         super().__init__()
         self.patch_in = nn.Linear(Z * P * P, D_VIDEO)
+        if INPUT == 'pixels':  # only then, so latent runs keep their state dicts (and old inits still load)
+            self.pixel_in = nn.Linear(3 * PX * PX, D_VIDEO)
         # RoPE angles: buffers (move with the model), not weights, not saved
         self.register_buffer('video_angles', video_angles(1 + FUTURE), persistent=False)
         # a clip's self-attention: the present (first N_PATCH) sees only itself, the future sees everything
@@ -326,9 +329,11 @@ class Verne(nn.Module):
     ) -> tuple[list[tuple[Tensor, Tensor]], Tensor]:
         # latent [B, Z, 16, 32] (normalised), state [B, 16] (previous, now), instruction [B, 8] -> each
         # video layer's keys and values. Tokens: the 128 patches; words and state enter by cross-attention
-        patches = rearrange(frame, 'b c (h p) (w q) -> b (h w) (p q c)', p=P, q=P)
         # -> each layer's keys and values, and the tokens entering the last layer [B, 128, D_VIDEO]
-        x = self.patch_in(patches)
+        if frame.shape[1] == 3:  # vae.INPUT 'pixels': the canvas [B, 3, 128, 256] in [-1, 1], 16 x 16 px patches
+            x = self.pixel_in(rearrange(frame, 'b c (h p) (w q) -> b (h w) (p q c)', p=PX, q=PX))
+        else:
+            x = self.patch_in(rearrange(frame, 'b c (h p) (w q) -> b (h w) (p q c)', p=P, q=P))
         rows, rmask = rows_of(self.video_words, self.video_state, ins, state)
         kvs = []
         for i, block in enumerate(self.video):

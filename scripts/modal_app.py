@@ -107,8 +107,9 @@ def check():
     env.close()
 
 
-# cpu=8: the default container had 1 CPU (nproc) for the training loop and the rollout workers
-@app.function(gpu=RENDER_GPUS, volumes=VOLUMES, timeout=4 * 3600, cpu=8)
+# cpu=8: the default container had 1 CPU (nproc) for the training loop and the rollout workers; memory 32 GB:
+# frames='pixels' builds 38k raw T5 canvases in RAM (3.8 GB, ~8 GB while concatenating)
+@app.function(gpu=RENDER_GPUS, volumes=VOLUMES, timeout=4 * 3600, cpu=8, memory=32768)
 def job(
     step: str,
     task: str,
@@ -124,7 +125,10 @@ def job(
     erase: float = 0.0,
     position: float = 0.0,
     readout: str = 'patch',
+    frames: str = 'latent',
 ):
+    # frames: what the policy sees, 'latent' (the VAE's) or 'pixels' (raw canvas; vae.INPUT via VERNE_INPUT,
+    # set before the package is imported; rollout workers inherit it)
     # run.py's job (train, sweeps at n_exec 8 and 16, probe) into the runs Volume; vae: another VAE's
     # weights under the runs Volume for this run only, e.g. '03_vae_latents/vae/weights.pt'; init: a run
     # folder on the runs Volume to start training from, e.g. '15_erase_pretrain/pretrain/seed0'
@@ -133,6 +137,7 @@ def job(
 
     if vae:
         os.environ['VERNE_VAE_WEIGHTS'] = f'{R}/experiments/verne/runs/{vae}'
+    os.environ['VERNE_INPUT'] = frames
 
     sys.path.insert(0, R)
     os.chdir(R)
@@ -194,12 +199,15 @@ def pretrain(step: str, seed: int = 0):
         runs.commit()
 
 
-@app.function(gpu=GPUS, volumes=VOLUMES, timeout=4 * 3600)
-def position(step: str, seed: int = 0, readout: str = 'patch', steps: int = 5000):
-    # run.py's position_job (step 22 stage 1: the named cube's centre per camera; probes, position.png)
+@app.function(gpu=GPUS, volumes=VOLUMES, timeout=4 * 3600, memory=32768)
+def position(step: str, seed: int = 0, readout: str = 'patch', steps: int = 5000, frames: str = 'latent'):
+    # run.py's position_job (step 22 stage 1: the named cube's centre per camera; probes, position.png). frames
+    # 'pixels': raw canvases in (VERNE_INPUT, before the import); the pixel reset scenes are rendered once into the
+    # data Volume (data/robosuite/t5_scenes/*_pixels_colours.npz), labels still from the latent erase renders
     import os
     import sys
 
+    os.environ['VERNE_INPUT'] = frames
     sys.path.insert(0, R)
     os.chdir(R)
     from dream_robot.policies.verne import run
@@ -208,6 +216,7 @@ def position(step: str, seed: int = 0, readout: str = 'patch', steps: int = 5000
         run.position_job(step, seed, readout, steps)
     finally:
         runs.commit()
+        data.commit()  # the scene renders it cached
 
 
 # cpu=8: the default container had 1 CPU (nproc) for the training loop and the rollout workers
