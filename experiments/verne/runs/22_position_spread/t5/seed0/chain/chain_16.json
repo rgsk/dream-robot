@@ -1,0 +1,1102 @@
+{
+ "1000": {
+  "prompts": [
+   "put the yellow cube in the right box",
+   "put the green cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    244
+   ],
+   [
+    "stop",
+    290
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1001": {
+  "prompts": [
+   "put the green cube in the left box",
+   "put the blue cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    264
+   ],
+   [
+    "stop",
+    264
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1002": {
+  "prompts": [
+   "put the yellow cube in the right box",
+   "put the red cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "cap",
+    600
+   ],
+   [
+    "stop",
+    296
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1003": {
+  "prompts": [
+   "put the yellow cube in the right box",
+   "put the red cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    255
+   ],
+   [
+    "stop",
+    326
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1004": {
+  "prompts": [
+   "put the blue cube in the left box",
+   "put the yellow cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    260
+   ],
+   [
+    "stop",
+    268
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1005": {
+  "prompts": [
+   "put the yellow cube in the right box",
+   "put the red cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    288
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1006": {
+  "prompts": [
+   "put the red cube in the left box",
+   "put the yellow cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    276
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1007": {
+  "prompts": [
+   "put the yellow cube in the right box",
+   "put the red cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   false
+  ],
+  "ends": [
+   [
+    "stop",
+    274
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1008": {
+  "prompts": [
+   "put the blue cube in the right box",
+   "put the green cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    285
+   ],
+   [
+    "stop",
+    241
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1009": {
+  "prompts": [
+   "put the red cube in the right box",
+   "put the green cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    310
+   ],
+   [
+    "stop",
+    243
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1010": {
+  "prompts": [
+   "put the blue cube in the left box",
+   "put the red cube in the right box"
+  ],
+  "move1_after_move1": false,
+  "done": [
+   false,
+   true
+  ],
+  "ends": [
+   [
+    "cap",
+    600
+   ],
+   [
+    "stop",
+    265
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1011": {
+  "prompts": [
+   "put the red cube in the right box",
+   "put the yellow cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "cap",
+    600
+   ],
+   [
+    "stop",
+    423
+   ]
+  ],
+  "held_out_2": true
+ },
+ "1012": {
+  "prompts": [
+   "put the blue cube in the right box",
+   "put the green cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    240
+   ],
+   [
+    "stop",
+    306
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1013": {
+  "prompts": [
+   "put the red cube in the right box",
+   "put the blue cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    257
+   ],
+   [
+    "stop",
+    282
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1014": {
+  "prompts": [
+   "put the yellow cube in the right box",
+   "put the blue cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    248
+   ],
+   [
+    "stop",
+    267
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1015": {
+  "prompts": [
+   "put the green cube in the left box",
+   "put the yellow cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    309
+   ],
+   [
+    "stop",
+    279
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1016": {
+  "prompts": [
+   "put the green cube in the left box",
+   "put the yellow cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "cap",
+    600
+   ],
+   [
+    "stop",
+    295
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1017": {
+  "prompts": [
+   "put the green cube in the left box",
+   "put the yellow cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    264
+   ],
+   [
+    "stop",
+    287
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1018": {
+  "prompts": [
+   "put the red cube in the left box",
+   "put the yellow cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    288
+   ],
+   [
+    "stop",
+    277
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1019": {
+  "prompts": [
+   "put the red cube in the right box",
+   "put the green cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    273
+   ],
+   [
+    "stop",
+    288
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1020": {
+  "prompts": [
+   "put the red cube in the right box",
+   "put the green cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "cap",
+    600
+   ],
+   [
+    "stop",
+    229
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1021": {
+  "prompts": [
+   "put the red cube in the left box",
+   "put the yellow cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    302
+   ],
+   [
+    "stop",
+    273
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1022": {
+  "prompts": [
+   "put the red cube in the right box",
+   "put the green cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    288
+   ],
+   [
+    "stop",
+    263
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1023": {
+  "prompts": [
+   "put the red cube in the right box",
+   "put the green cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    316
+   ],
+   [
+    "stop",
+    259
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1024": {
+  "prompts": [
+   "put the red cube in the left box",
+   "put the green cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   false
+  ],
+  "ends": [
+   [
+    "stop",
+    261
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": true
+ },
+ "1025": {
+  "prompts": [
+   "put the yellow cube in the right box",
+   "put the red cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   false
+  ],
+  "ends": [
+   [
+    "stop",
+    301
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1026": {
+  "prompts": [
+   "put the blue cube in the right box",
+   "put the red cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    285
+   ],
+   [
+    "stop",
+    266
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1027": {
+  "prompts": [
+   "put the red cube in the right box",
+   "put the yellow cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    261
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": true
+ },
+ "1028": {
+  "prompts": [
+   "put the red cube in the left box",
+   "put the green cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "cap",
+    600
+   ],
+   [
+    "stop",
+    349
+   ]
+  ],
+  "held_out_2": true
+ },
+ "1029": {
+  "prompts": [
+   "put the red cube in the right box",
+   "put the yellow cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   false
+  ],
+  "ends": [
+   [
+    "stop",
+    242
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": true
+ },
+ "1030": {
+  "prompts": [
+   "put the red cube in the left box",
+   "put the blue cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    243
+   ],
+   [
+    "stop",
+    255
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1031": {
+  "prompts": [
+   "put the yellow cube in the right box",
+   "put the blue cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    277
+   ],
+   [
+    "stop",
+    288
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1032": {
+  "prompts": [
+   "put the yellow cube in the right box",
+   "put the blue cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    326
+   ],
+   [
+    "stop",
+    273
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1033": {
+  "prompts": [
+   "put the green cube in the left box",
+   "put the blue cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "cap",
+    600
+   ],
+   [
+    "stop",
+    295
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1034": {
+  "prompts": [
+   "put the blue cube in the left box",
+   "put the red cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    287
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1035": {
+  "prompts": [
+   "put the green cube in the left box",
+   "put the red cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "cap",
+    600
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1036": {
+  "prompts": [
+   "put the blue cube in the left box",
+   "put the red cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    304
+   ],
+   [
+    "stop",
+    297
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1037": {
+  "prompts": [
+   "put the green cube in the left box",
+   "put the blue cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   false
+  ],
+  "ends": [
+   [
+    "stop",
+    287
+   ],
+   [
+    "stop",
+    301
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1038": {
+  "prompts": [
+   "put the red cube in the left box",
+   "put the green cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   false
+  ],
+  "ends": [
+   [
+    "stop",
+    268
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": true
+ },
+ "1039": {
+  "prompts": [
+   "put the green cube in the left box",
+   "put the blue cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    288
+   ],
+   [
+    "stop",
+    249
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1040": {
+  "prompts": [
+   "put the red cube in the left box",
+   "put the green cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   false
+  ],
+  "ends": [
+   [
+    "stop",
+    271
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": true
+ },
+ "1041": {
+  "prompts": [
+   "put the red cube in the left box",
+   "put the green cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   false
+  ],
+  "ends": [
+   [
+    "stop",
+    248
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": true
+ },
+ "1042": {
+  "prompts": [
+   "put the blue cube in the right box",
+   "put the yellow cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    280
+   ],
+   [
+    "stop",
+    332
+   ]
+  ],
+  "held_out_2": true
+ },
+ "1043": {
+  "prompts": [
+   "put the green cube in the left box",
+   "put the blue cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    281
+   ],
+   [
+    "stop",
+    244
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1044": {
+  "prompts": [
+   "put the green cube in the left box",
+   "put the blue cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    255
+   ],
+   [
+    "stop",
+    271
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1045": {
+  "prompts": [
+   "put the yellow cube in the right box",
+   "put the blue cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   false
+  ],
+  "ends": [
+   [
+    "cap",
+    600
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1046": {
+  "prompts": [
+   "put the yellow cube in the right box",
+   "put the red cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   false
+  ],
+  "ends": [
+   [
+    "stop",
+    264
+   ],
+   [
+    "cap",
+    600
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1047": {
+  "prompts": [
+   "put the green cube in the left box",
+   "put the red cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    267
+   ],
+   [
+    "stop",
+    231
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1048": {
+  "prompts": [
+   "put the blue cube in the right box",
+   "put the red cube in the left box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    278
+   ],
+   [
+    "stop",
+    249
+   ]
+  ],
+  "held_out_2": false
+ },
+ "1049": {
+  "prompts": [
+   "put the red cube in the left box",
+   "put the yellow cube in the right box"
+  ],
+  "move1_after_move1": true,
+  "done": [
+   true,
+   true
+  ],
+  "ends": [
+   [
+    "stop",
+    249
+   ],
+   [
+    "stop",
+    275
+   ]
+  ],
+  "held_out_2": false
+ }
+}

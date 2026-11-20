@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "verne": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "dream_robot.agent.verne_server"],
+      "env": {"MUJOCO_GL": "egl", "PYTHONUNBUFFERED": "1"}
+    }
+  }
+}

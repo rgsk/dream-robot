@@ -631,3 +631,37 @@ Rule: the frame's path (self-attention) must start at least as open as the words
   sweeps 33-47, wrong 0 of 500, one weak-grasp seed (s4). Erase (21a) 379/400 (95%). 10k = 20k for spread.
 - Read: spread is the pick: as good as erase, from a 4-number label (where the named cube is, per camera). Free picks
   the right cube just as well but grasps less reliably.
+
+## LLM-loop check · the second move, one clause at a time (2026-11-20), runs/22_position_spread/t5/seed0/second_move
+- Question: for "red left, blue right" driven by an LLM (one clause per call, scripted home between), does the
+  T5 policy do move 2? Scene = each eval seed's reset, the unnamed cube put into the bin NOT named and settled
+  (50/50 inside), arm at home; usual one-clause prompt. No training. scripts/second_move_check.py.
+- Spread seed 0: **43/50 (n_exec 8), 45/50 (16)** vs normal T5 on the same seeds 47 / 49. Wrong cube **0**, wrong
+  bin 0: it never touched the boxed cube; losses are no_grasp 5/3, dropped 2/2. Left / right even.
+- Read: a cube already in a box barely matters (−4 on 50, grasp-quality misses, one seed). The LLM loop needs
+  only scripted home + a stop rule; no new demos for the mid-task scene.
+
+## LLM-loop chain without the LLM (2026-11-20), runs/22_position_spread/t5/seed0/chain
+- Per eval seed: move 1 = the reset's clause; scripted home (joint interpolation, 1.5 s); move 2 = the other cube
+  to the other bin. Each move: policy until a sensor stop rule (opened once, then closed + hand > 6 cm for 10 steps,
+  then opened > 6 cm, +20 steps) or 600 steps. No retry. Scored from the sim at the end. n_exec 16, spread seed 0.
+  scripts/chain_check.py; films scratch/verne_chain/.
+- **Both moves 39/50**, one 11, none 0. Move 1 49/50 (1010: no_grasp, as in normal T5), move 2 40/50.
+- Move 2 by pair: seen 36/41 (= the second-move check, 45/50); **held-out pairs 4/9**: green right 1/5,
+  yellow left 3/4. The chain asks for colour/side pairs training never had: a separate gap.
+- Failures seen in films (1007, 1010): missed grasp -> carries nothing to the box -> hovers till 600. No retry.
+- Stop rule: fired on 41 / 36 moves; ~12 successful moves hit the cap instead (stop missed, cost time only).
+- Read: the chain works at ~ the product of its moves (seen pairs 35/41). What's left: retry on a missed grasp
+  (the LLM's job), the held-out pairs, a tighter stop rule.
+
+## LLM driving: claude -p + Verne policy as a tool (2026-11-20)
+- dream_robot/agent/verne_server.py: 4 tools: reset(seed) -> two-clause instruction; look(scene|top|wrist);
+  home() scripted joint move; put(colour, side) = the T5 policy (spread seed 0, n_exec 16) for 3 s, returns the
+  scene image. Images only, no gripper / success signal. Referee json + film per episode in
+  scratch/verne_llm/episodes/ (rewritten each call: claude -p kills the server at the end). Run:
+  `MCP_CONFIG=experiments/verne/mcp_verne.json SERVER=verne experiments/agent/scripts/headless_drive.sh SEED TAG`
+- 1001 (green left, blue right): **2/2**, 15 turns, 33 s. Blue missed once -> LLM saw "empty gripper over the box",
+  home, retry -> placed.
+- 1007 (yellow right, red left; the chain check's 1-of-2): **2/2**, 24 turns, 55 s. Red missed 3 times; each time
+  the LLM called it from the image, home, retry; 4th try placed. Verdicts matched the referee both times.
+- Read: the retry the chain lacked comes free from the LLM looking at frames. Next: more seeds (the chain's 11).
