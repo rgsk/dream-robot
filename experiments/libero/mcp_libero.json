@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "libero": {
+      "command": "envs/libero/.venv/bin/python",
+      "args": ["-m", "dream_robot.agent.libero_server"],
+      "env": {"MUJOCO_GL": "egl", "PYTHONUNBUFFERED": "1"}
+    },
+    "libero-moka": {
+      "command": "envs/libero/.venv/bin/python",
+      "args": ["-m", "dream_robot.agent.libero_server", "--suite", "libero_10",
+               "--task", "KITCHEN_SCENE3_turn_on_the_stove_and_put_the_moka_pot_on_it"],
+      "env": {"MUJOCO_GL": "egl", "PYTHONUNBUFFERED": "1"}
+    }
+  }
+}

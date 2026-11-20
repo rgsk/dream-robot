@@ -398,3 +398,78 @@ def stage2_job(out: Path, init: Path, steps: int = 10000, seed: int = 0, readout
     (out / 'log.json').write_text(json.dumps(run['log']))
     torch.save(run['weights'], out / 'weights.pt')
     print(f'done: {out}\n------ FINISHED ------', flush=True)
+
+
+# --- run time (the LIBERO venv): a trained stage 2 driving LIBERO's arm ---------------------------------------------
+
+# a skill call -> to_npz's tokens (verb, object, target), the words the policy was trained with. The LLM-facing
+# 'stove' of turn_on / turn_off is the knob
+SKILLS = {
+    ('turn_on', 'stove'): (0, 1, 0),
+    ('turn_off', 'stove'): (1, 1, 0),
+    ('put', 'moka_pot', 'stove'): (2, 3, 2),
+    ('put', 'frying_pan', 'stove'): (2, 4, 2),
+}
+POS_MAX, ROT_MAX = 0.05, 0.5  # OSC_POSE output_max (the demos' controller)
+
+
+class Runner:
+    # a stage-2 Verne in LIBERO's sim. Every N_EXEC steps (or when the skill changes) it samples a chunk: cameras
+    # (rows flipped upright, as to_npz) + [previous, now] joints and fingers + the skill words -> 16 aiming poses
+    # relative to the hand now -> world poses. Every step the driver (experiments/libero/scripts/hand_check.py)
+    # turns that step's pose into an OSC delta from the LIVE hand; gripper by sign
+    N_EXEC = 8
+
+    def __init__(self, run_dir: Path, weights: str = 'weights.pt', readout: str | None = None):
+        self.st = {k: v.cuda() for k, v in torch.load(run_dir / 'stats.pt').items()}
+        self.net = Verne(n_words=len(WORDS), state_dim=STATE, frames='pixels').cuda().eval()
+        self.net.load_state_dict(torch.load(run_dir / weights))
+        self.reset()
+
+    def reset(self) -> None:
+        self.plan, self.prev, self.tokens = [], None, None
+
+    @staticmethod
+    def hand(env) -> tuple[np.ndarray, np.ndarray]:
+        c = env.env.robots[0].controller
+        c.update(force=True)
+        return np.array(c.ee_pos), np.array(c.ee_ori_mat)
+
+    @staticmethod
+    def observe(obs) -> tuple[np.ndarray, np.ndarray]:
+        # -> canvas [3, 128, 256] uint8 (agentview | wrist, upright), state [9]
+        top, wrist = obs['agentview_image'][::-1], obs['robot0_eye_in_hand_image'][::-1]
+        canvas = np.concatenate([top, wrist], 1).transpose(2, 0, 1)
+        return canvas, np.concatenate([obs['robot0_joint_pos'], obs['robot0_gripper_qpos']]).astype(np.float32)
+
+    @staticmethod
+    def command(p_now, r_now, p, r, grip) -> np.ndarray:
+        from scipy.spatial.transform import Rotation
+
+        a = np.empty(7)
+        a[:3] = np.clip((p - p_now) / POS_MAX, -1, 1)
+        a[3:6] = np.clip(Rotation.from_matrix(r @ r_now.T).as_rotvec() / ROT_MAX, -1, 1)
+        a[6] = 1.0 if grip > 0 else -1.0
+        return a
+
+    @torch.no_grad()
+    def act(self, env, obs, tokens: tuple[int, int, int]) -> np.ndarray:
+        # one control step's OSC command for skill `tokens`, given the latest observation
+        from .model import sample
+
+        canvas, state = self.observe(obs)
+        prev = state if self.prev is None else self.prev
+        if not self.plan or tokens != self.tokens:
+            frame = torch.from_numpy(canvas)[None].cuda().float() / 127.5 - 1
+            s = (torch.from_numpy(np.concatenate([prev, state]))[None].cuda() - self.st['s_mean'].repeat(2)) / self.st[
+                's_std'
+            ].repeat(2)
+            ins = skill_words(tokens)[None].cuda()
+            raw = (sample(self.net, frame, s, ins) * self.st['a_std'] + self.st['a_mean'])[0].cpu().numpy()
+            p0, r0 = self.hand(env)
+            pos, rot = hand_mod.absolute(p0[None], r0[None], raw[:, :9])
+            self.plan = [(pos[k], rot[k], raw[k, 9]) for k in range(self.N_EXEC)]
+            self.tokens = tokens
+        p, r, g = self.plan.pop(0)
+        self.prev = state
+        return self.command(*self.hand(env), p, r, g)

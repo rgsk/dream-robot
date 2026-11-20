@@ -136,3 +136,13 @@ test tasks); ours is a different protocol: skills -> chained long tasks, small m
 - LIBERO's eval init states are NOT the demos' starts (checked moka / turn_on / pan): robot joints differ, the
   gripper starts less open (0.021 vs 0.034), objects in a narrower spread (only a few object entries vary). So
   the rollout scores are on fresh starts.
+
+## Step 8 · LLM-facing MCP server (dream_robot/agent/libero_server.py, experiments/libero/mcp_libero.json)
+- Tools: reset(episode) -> the long task's instruction; look(scene | agentview | wrist); home() (driver back to the
+  reset hand pose, 40 steps); turn_on(stove), turn_off(stove), put(moka_pot | frying_pan, stove): 3 s of policy each,
+  agentview image back. Referee (task's own check) + film to scratch_nov/libero_llm/episodes after every call.
+  Policy runtime moved into libero.Runner. Default: LIBERO-90 "turn on the stove and put the frying pan on it"
+  (libero-moka server: LIBERO-10's moka version); weights skills_free 20k.
+- Scripted smoke (no LLM): turn_on x4 then put(pan) x8 without home: stove on, but the pan skill never starts
+  (arm parked at the knob, stove glowing: a start no pan demo has). With home() between: **episodes 0 and 1 both
+  succeed** (9 / 8 calls, 520 / 460 steps). Skills trained alone chain into the LIBERO-90 long task.
